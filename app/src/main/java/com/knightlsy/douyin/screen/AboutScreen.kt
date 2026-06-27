@@ -1,6 +1,9 @@
 package com.knightlsy.douyin.screen
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -16,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -25,6 +29,8 @@ import com.knightlsy.douyin.ui.theme.DouyinPink
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AboutScreen(onBack: () -> Unit) {
+    val context = LocalContext.current
+    val githubUrl = "https://github.com/knightlsy/DouyinDownloader"
     Scaffold(
         topBar = {
             TopAppBar(
@@ -142,6 +148,40 @@ fun AboutScreen(onBack: () -> Unit) {
                     FeatureItem("实时下载进度通知")
                     FeatureItem("下载历史记录管理")
                     FeatureItem("深色模式支持")
+                }
+            }
+
+            Card(
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Icon(Icons.Outlined.Code, null, tint = Color(0xFF333333), modifier = Modifier.size(20.dp))
+                        Text("开源信息", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    AboutItem(label = "开源协议", value = "MIT License")
+                    AboutItem(label = "仓库地址", value = "github.com/knightlsy/DouyinDownloader")
+                    Spacer(Modifier.height(8.dp))
+                    Button(
+                        onClick = {
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(githubUrl))
+                            context.startActivity(intent)
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF333333)),
+                        contentPadding = PaddingValues(vertical = 12.dp)
+                    ) {
+                        Icon(Icons.Outlined.OpenInNew, null, Modifier.size(18.dp), tint = Color.White)
+                        Spacer(Modifier.width(8.dp))
+                        Text("访问 GitHub 仓库", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 14.sp)
+                    }
                 }
             }
 
