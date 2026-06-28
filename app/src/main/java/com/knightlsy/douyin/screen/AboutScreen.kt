@@ -1,6 +1,7 @@
 package com.knightlsy.douyin.screen
 
 import android.content.Intent
+import com.knightlsy.douyin.BuildConfig
 import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -94,7 +95,7 @@ fun AboutScreen(onBack: () -> Unit) {
                     Spacer(Modifier.height(4.dp))
                     AboutItem(label = "软件名称", value = "抖音视频无水印下载器")
                     AboutItem(label = "软件作者", value = "Knightlsy")
-                    AboutItem(label = "版本号", value = "v1.1.0")
+                    AboutItem(label = "版本号", value = "v${BuildConfig.VERSION_NAME}")
                     AboutItem(label = "开源协议", value = "MIT License")
                 }
             }
