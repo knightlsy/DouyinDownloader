@@ -32,7 +32,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val themePreferences = ThemePreferences(application)
     private val notificationHelper = DownloadNotificationHelper(application)
     private val activeJobs = ConcurrentHashMap<String, Job>()
-    private val downloadSemaphore = Semaphore(3)
+    private val downloadSemaphore = Semaphore(5)
 
     private val _uiState = MutableStateFlow(MainUiState())
     val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()

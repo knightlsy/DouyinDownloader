@@ -77,7 +77,9 @@ fun MainScreen(
     val isDarkMode by viewModel.isDarkMode.collectAsState()
     val context = LocalContext.current
 
-    val activeTaskCount = remember(downloadTasks) { downloadTasks.count { it.status == DownloadStatus.DOWNLOADING } }
+    val activeTaskCount by remember(downloadTasks) {
+        derivedStateOf { downloadTasks.count { it.status == DownloadStatus.DOWNLOADING } }
+    }
 
     LaunchedEffect(Unit) { viewModel.autoPasteFromClipboard() }
     LaunchedEffect(uiState.successMessage) { uiState.successMessage?.let { Toast.makeText(context, it, Toast.LENGTH_SHORT).show(); viewModel.clearSuccessMessage() } }
@@ -112,9 +114,6 @@ fun MainScreen(
                     titleContentColor = Color.White
                 ),
                 actions = {
-                    IconButton(onClick = { viewModel.pasteFromClipboard() }) {
-                        Icon(painterResource(R.drawable.ic_paste), "粘贴链接", tint = Color.White)
-                    }
                     IconButton(onClick = { viewModel.toggleDarkMode() }) {
                         Icon(
                             if (isDarkMode) Icons.Outlined.LightMode else Icons.Outlined.DarkMode,
@@ -150,6 +149,7 @@ fun MainScreen(
                     url = uiState.inputUrl,
                     onUrlChange = viewModel::onUrlChanged,
                     onParse = viewModel::parseAndPreview,
+                    onPaste = { viewModel.pasteFromClipboard() },
                     isLoading = uiState.isLoading
                 )
             }
@@ -261,7 +261,7 @@ fun TipItem(number: String, text: String) {
 }
 
 @Composable
-fun InputCard(url: String, onUrlChange: (String) -> Unit, onParse: () -> Unit, isLoading: Boolean) {
+fun InputCard(url: String, onUrlChange: (String) -> Unit, onParse: () -> Unit, onPaste: () -> Unit, isLoading: Boolean) {
     var pasteCount by remember { mutableStateOf(0) }
     val previousUrl = remember { mutableStateOf(url) }
 
@@ -312,6 +312,16 @@ fun InputCard(url: String, onUrlChange: (String) -> Unit, onParse: () -> Unit, i
             )
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedButton(
+                    onClick = onPaste,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Gray)
+                ) {
+                    Icon(painterResource(R.drawable.ic_paste), null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("粘贴", fontSize = 13.sp)
+                }
+                OutlinedButton(
                     onClick = { onUrlChange("") },
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(12.dp),
@@ -321,23 +331,23 @@ fun InputCard(url: String, onUrlChange: (String) -> Unit, onParse: () -> Unit, i
                     Spacer(Modifier.width(6.dp))
                     Text("清空", fontSize = 13.sp)
                 }
-                Button(
-                    onClick = onParse,
-                    modifier = Modifier.weight(2f),
-                    enabled = url.isNotBlank() && !isLoading,
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = DouyinPink),
-                    contentPadding = PaddingValues(vertical = 12.dp)
-                ) {
-                    if (isLoading) {
-                        CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
-                        Spacer(Modifier.width(6.dp))
-                    } else {
-                        Icon(Icons.Outlined.Search, null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                    }
-                    Text(if (isLoading) "解析中..." else "解析链接", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            }
+            Button(
+                onClick = onParse,
+                modifier = Modifier.fillMaxWidth(),
+                enabled = url.isNotBlank() && !isLoading,
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = DouyinPink),
+                contentPadding = PaddingValues(vertical = 12.dp)
+            ) {
+                if (isLoading) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                    Spacer(Modifier.width(6.dp))
+                } else {
+                    Icon(Icons.Outlined.Search, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
                 }
+                Text(if (isLoading) "解析中..." else "解析链接", fontWeight = FontWeight.Bold, fontSize = 14.sp)
             }
         }
     }
@@ -347,7 +357,7 @@ fun InputCard(url: String, onUrlChange: (String) -> Unit, onParse: () -> Unit, i
 fun VideoPreviewCard(videoInfo: ContentInfo.Video, onDownload: (String) -> Unit) {
     var showPlayer by remember { mutableStateOf(false) }
     var expanded by remember { mutableStateOf(false) }
-    var selectedQuality by remember { mutableStateOf(videoInfo.qualities.firstOrNull()) }
+    var selectedQuality by remember(videoInfo.qualities) { mutableStateOf(videoInfo.qualities.firstOrNull()) }
 
     if (showPlayer) {
         VideoPlayerDialog(videoUrl = videoInfo.videoUrl, onDismiss = { showPlayer = false })
@@ -528,6 +538,7 @@ fun ImageCollectionPreviewCard(
     val pagerState = rememberPagerState(pageCount = { imageCollection.imageUrls.size })
     var showImageViewer by remember { mutableStateOf(false) }
     var viewerIndex by remember { mutableStateOf(0) }
+    val selectedCount by remember { derivedStateOf { selectedUrls.size } }
 
     if (showImageViewer) {
         ImageViewerDialog(
@@ -584,7 +595,7 @@ fun ImageCollectionPreviewCard(
                     }
                 }
                 Surface(Modifier.align(Alignment.TopEnd).padding(10.dp), shape = RoundedCornerShape(6.dp), color = DouyinPink) {
-                    Text("已选${selectedUrls.size}张", Modifier.padding(horizontal = 8.dp, vertical = 4.dp), color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    Text("已选${selectedCount}张", Modifier.padding(horizontal = 8.dp, vertical = 4.dp), color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 }
                 Row(Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                     imageCollection.imageUrls.forEachIndexed { index, _ ->
@@ -598,23 +609,23 @@ fun ImageCollectionPreviewCard(
             }
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(imageCollection.title, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Text("${selectedUrls.size}/${imageCollection.imageUrls.size} 张图片已选择", fontSize = 13.sp, color = Color.Gray)
+                Text("${selectedCount}/${imageCollection.imageUrls.size} 张图片已选择", fontSize = 13.sp, color = Color.Gray)
                 Button(
                     onClick = {
-                        if (selectedUrls.size == imageCollection.imageUrls.size) onDownloadAll()
+                        if (selectedCount == imageCollection.imageUrls.size) onDownloadAll()
                         else onDownloadSelected(selectedUrls.toList())
                     },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = DouyinCyan),
                     contentPadding = PaddingValues(vertical = 12.dp),
-                    enabled = selectedUrls.isNotEmpty()
+                    enabled = selectedCount > 0
                 ) {
                     Icon(painterResource(R.drawable.ic_cloud_download), null, Modifier.size(18.dp), tint = Color.Black)
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        if (selectedUrls.size == imageCollection.imageUrls.size) "下载全部 ${imageCollection.imageUrls.size} 张图片"
-                        else "下载选择 ${selectedUrls.size} 张图片",
+                        if (selectedCount == imageCollection.imageUrls.size) "下载全部 ${imageCollection.imageUrls.size} 张图片"
+                        else "下载选择 ${selectedCount} 张图片",
                         fontWeight = FontWeight.Bold, color = Color.Black, fontSize = 14.sp
                     )
                 }

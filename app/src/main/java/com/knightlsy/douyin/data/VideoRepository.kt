@@ -27,16 +27,16 @@ class VideoRepository {
         private const val TAG = "VideoRepo"
         private const val MAX_RETRY = 3
         private const val RETRY_DELAY = 1000L
-        private const val BUFFER_SIZE = 16384
+        private const val BUFFER_SIZE = 65536
     }
 
     private val client = OkHttpClient.Builder()
-        .connectTimeout(30, TimeUnit.SECONDS)
+        .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
         .writeTimeout(60, TimeUnit.SECONDS)
         .followRedirects(true)
         .followSslRedirects(true)
-        .connectionPool(ConnectionPool(5, 5, TimeUnit.MINUTES))
+        .connectionPool(ConnectionPool(8, 5, TimeUnit.MINUTES))
         .retryOnConnectionFailure(true)
         .build()
 
