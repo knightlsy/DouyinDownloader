@@ -6,6 +6,7 @@ import android.content.Context
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.knightlsy.douyin.data.CloudSyncRepository
 import com.knightlsy.douyin.data.ContentInfo
 import com.knightlsy.douyin.data.ContentType
 import com.knightlsy.douyin.data.DownloadHistoryItem
@@ -13,6 +14,7 @@ import com.knightlsy.douyin.data.DownloadNotificationHelper
 import com.knightlsy.douyin.data.DownloadStatus
 import com.knightlsy.douyin.data.DownloadTask
 import com.knightlsy.douyin.data.HistoryRepository
+import com.knightlsy.douyin.data.ParseRecord
 import com.knightlsy.douyin.data.ThemePreferences
 import com.knightlsy.douyin.data.VideoRepository
 import kotlinx.coroutines.Dispatchers
@@ -31,6 +33,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val historyRepository = HistoryRepository(application)
     private val themePreferences = ThemePreferences(application)
     private val notificationHelper = DownloadNotificationHelper(application)
+    private val cloudSyncRepository = CloudSyncRepository(application)
     private val activeJobs = ConcurrentHashMap<String, Job>()
     private val downloadSemaphore = Semaphore(5)
 
@@ -121,6 +124,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     is ContentInfo.Video -> ContentType.VIDEO; is ContentInfo.ImageCollection -> ContentType.IMAGE_COLLECTION
                 }
                 _uiState.value = _uiState.value.copy(isLoading = false, contentInfo = contentInfo, contentType = contentType)
+
+                // 云端同步记录
+                launch(Dispatchers.IO) {
+                    try {
+                        cloudSyncRepository.saveRecord(
+                            ParseRecord(
+                                deviceId = cloudSyncRepository.getDeviceId(),
+                                deviceModel = cloudSyncRepository.getDeviceModel(),
+                                originalUrl = url,
+                                contentId = contentInfo.id,
+                                contentType = contentType.name,
+                                title = contentInfo.title,
+                                author = contentInfo.author,
+                                coverUrl = contentInfo.coverUrl
+                            )
+                        )
+                    } catch (e: Exception) {
+                        Log.w("MainVM", "Cloud sync failed: ${e.message}")
+                    }
+                }
             } catch (e: Exception) { _uiState.value = _uiState.value.copy(isLoading = false, error = "解析失败: ${e.message}") }
         }
     }
