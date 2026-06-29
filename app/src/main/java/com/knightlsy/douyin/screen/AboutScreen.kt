@@ -14,7 +14,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -26,12 +26,58 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.knightlsy.douyin.ui.theme.DouyinCyan
 import com.knightlsy.douyin.ui.theme.DouyinPink
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.net.URL
+
+private data class UpdateInfo(
+    val hasUpdate: Boolean,
+    val version: String = "",
+    val downloadUrl: String = "",
+    val releaseNotes: String = ""
+)
+
+private suspend fun checkUpdate(): UpdateInfo = withContext(Dispatchers.IO) {
+    try {
+        val url = URL("https://api.github.com/repos/knightlsy/DouyinDownloader/releases/latest")
+        val conn = url.openConnection()
+        conn.setRequestProperty("Accept", "application/vnd.github.v3+json")
+        conn.setRequestProperty("User-Agent", "DouyinDownloader-Android")
+        val json = conn.getInputStream().bufferedReader().readText()
+
+        val tagMatch = Regex(""""tag_name"\s*:\s*"(v[^"]+)"""").find(json)
+        val version = tagMatch?.groupValues?.get(1)?.replace("v", "") ?: return@withContext UpdateInfo(false)
+
+        val downloadMatch = Regex(""""browser_download_url"\s*:\s*"([^"]*\.apk)"""").find(json)
+        val downloadUrl = downloadMatch?.groupValues?.get(1) ?: ""
+
+        val bodyMatch = Regex(""""body"\s*:\s*"((?:[^"\\]|\\.)*)"\s*[,}]""").find(json)
+        val notes = bodyMatch?.groupValues?.get(1)?.replace("\\n", "\n")?.replace("\\\"", "\"") ?: ""
+
+        val currentVersion = BuildConfig.VERSION_NAME
+        UpdateInfo(
+            hasUpdate = version != currentVersion,
+            version = version,
+            downloadUrl = downloadUrl,
+            releaseNotes = notes
+        )
+    } catch (e: Exception) {
+        UpdateInfo(false)
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AboutScreen(onBack: () -> Unit) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val githubUrl = "https://github.com/knightlsy/DouyinDownloader"
+
+    var showUpdateDialog by remember { mutableStateOf(false) }
+    var updateInfo by remember { mutableStateOf<UpdateInfo?>(null) }
+    var isChecking by remember { mutableStateOf(false) }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -75,7 +121,7 @@ fun AboutScreen(onBack: () -> Unit) {
                     }
                     Text("抖音下载器", fontWeight = FontWeight.Bold, fontSize = 20.sp)
                     Text("无水印 · 图集下载", fontSize = 13.sp, color = Color.Gray)
-                    Text("v1.1.0", fontSize = 12.sp, color = Color.Gray)
+                    Text("v${BuildConfig.VERSION_NAME}", fontSize = 12.sp, color = Color.Gray)
                 }
             }
 
@@ -148,6 +194,7 @@ fun AboutScreen(onBack: () -> Unit) {
                     FeatureItem("断点续传与自动重试")
                     FeatureItem("实时下载进度通知")
                     FeatureItem("下载历史记录管理")
+                    FeatureItem("云端记录同步")
                     FeatureItem("深色模式支持")
                 }
             }
@@ -159,7 +206,7 @@ fun AboutScreen(onBack: () -> Unit) {
             ) {
                 Column(
                     modifier = Modifier.fillMaxWidth().padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Icon(Icons.Outlined.Code, null, tint = Color(0xFF333333), modifier = Modifier.size(20.dp))
@@ -169,6 +216,31 @@ fun AboutScreen(onBack: () -> Unit) {
                     AboutItem(label = "开源协议", value = "MIT License")
                     AboutItem(label = "仓库地址", value = "github.com/knightlsy/DouyinDownloader")
                     Spacer(Modifier.height(8.dp))
+
+                    Button(
+                        onClick = {
+                            isChecking = true
+                            scope.launch {
+                                updateInfo = checkUpdate()
+                                isChecking = false
+                                showUpdateDialog = true
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = DouyinCyan),
+                        contentPadding = PaddingValues(vertical = 12.dp),
+                        enabled = !isChecking
+                    ) {
+                        if (isChecking) {
+                            CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
+                        } else {
+                            Icon(Icons.Outlined.SystemUpdate, null, Modifier.size(18.dp), tint = Color.White)
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        Text(if (isChecking) "检查中..." else "检查更新", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 14.sp)
+                    }
+
                     Button(
                         onClick = {
                             val intent = Intent(Intent.ACTION_VIEW, Uri.parse(githubUrl))
@@ -188,6 +260,69 @@ fun AboutScreen(onBack: () -> Unit) {
 
             Spacer(Modifier.height(16.dp))
         }
+    }
+
+    if (showUpdateDialog && updateInfo != null) {
+        AlertDialog(
+            onDismissRequest = { showUpdateDialog = false },
+            icon = {
+                Icon(
+                    if (updateInfo!!.hasUpdate) Icons.Outlined.SystemUpdate else Icons.Outlined.CheckCircle,
+                    null,
+                    tint = if (updateInfo!!.hasUpdate) DouyinCyan else Color(0xFF4CAF50),
+                    modifier = Modifier.size(48.dp)
+                )
+            },
+            title = {
+                Text(
+                    if (updateInfo!!.hasUpdate) "发现新版本" else "已是最新版本",
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column {
+                    if (updateInfo!!.hasUpdate) {
+                        Text("当前版本: v${BuildConfig.VERSION_NAME}", fontSize = 13.sp, color = Color.Gray)
+                        Text("最新版本: v${updateInfo!!.version}", fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                        if (updateInfo!!.releaseNotes.isNotEmpty()) {
+                            Spacer(Modifier.height(12.dp))
+                            Text("更新内容:", fontSize = 12.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
+                            Text(updateInfo!!.releaseNotes, fontSize = 13.sp, lineHeight = 20.sp)
+                        }
+                    } else {
+                        Text("当前已是最新版本 v${BuildConfig.VERSION_NAME}", fontSize = 14.sp)
+                    }
+                }
+            },
+            confirmButton = {
+                if (updateInfo!!.hasUpdate) {
+                    Button(
+                        onClick = {
+                            showUpdateDialog = false
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(updateInfo!!.downloadUrl))
+                            context.startActivity(intent)
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = DouyinCyan)
+                    ) {
+                        Text("下载更新")
+                    }
+                } else {
+                    Button(
+                        onClick = { showUpdateDialog = false },
+                        colors = ButtonDefaults.buttonColors(containerColor = DouyinCyan)
+                    ) {
+                        Text("确定")
+                    }
+                }
+            },
+            dismissButton = {
+                if (updateInfo!!.hasUpdate) {
+                    TextButton(onClick = { showUpdateDialog = false }) {
+                        Text("稍后")
+                    }
+                }
+            }
+        )
     }
 }
 
