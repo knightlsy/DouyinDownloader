@@ -44,7 +44,7 @@ private suspend fun checkUpdate(): UpdateInfo = withContext(Dispatchers.IO) {
         val conn = url.openConnection()
         conn.setRequestProperty("Accept", "application/vnd.github.v3+json")
         conn.setRequestProperty("User-Agent", "DouyinDownloader-Android")
-        val json = conn.getInputStream().bufferedReader().readText()
+        val json = conn.getInputStream().use { it.bufferedReader().readText() }
 
         val tagMatch = Regex(""""tag_name"\s*:\s*"(v[^"]+)"""").find(json)
         val version = tagMatch?.groupValues?.get(1)?.replace("v", "") ?: return@withContext UpdateInfo(false)

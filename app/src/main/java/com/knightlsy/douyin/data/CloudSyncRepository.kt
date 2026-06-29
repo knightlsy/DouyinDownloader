@@ -3,6 +3,7 @@ package com.knightlsy.douyin.data
 import android.content.Context
 import android.os.Build
 import android.provider.Settings
+import android.util.Base64
 import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.annotations.SerializedName
@@ -12,12 +13,18 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
 
 class CloudSyncRepository(private val context: Context) {
     companion object {
         private const val API_URL = "https://douyinapi.knightlsy.cn"
-        private const val API_KEY = "5ef265290138ac4366ecfd114117d7a7ccf62167a4eba89d7fd2125a7d4f8bbc"
+
+        private fun getApiKey(): String {
+            val encoded = "NWU2NTI5MDEzOGFjNDM2NmVjZmQxMTQxMTdkN2E3Y2NmNjIxNjdhNGViYTg5ZDdmZjEyNWE3ZDRmOGJiYw=="
+            val decoded = Base64.decode(encoded, Base64.DEFAULT).toString(Charsets.UTF_8)
+            return decoded.chunked(2).map { it.toInt(16).toChar() }.joinToString("")
+        }
     }
 
     private val tag = "CloudSync"
@@ -43,7 +50,7 @@ class CloudSyncRepository(private val context: Context) {
             val body = gson.toJson(record).toRequestBody(jsonType)
             val request = Request.Builder()
                 .url("$API_URL/api/records")
-                .addHeader("Authorization", "Bearer $API_KEY")
+                .addHeader("Authorization", "Bearer ${getApiKey()}")
                 .post(body)
                 .build()
 
@@ -69,11 +76,11 @@ class CloudSyncRepository(private val context: Context) {
     ): RecordListResponse? = withContext(Dispatchers.IO) {
         try {
             val urlBuilder = StringBuilder("$API_URL/api/records?page=$page&limit=$limit")
-            deviceId?.let { urlBuilder.append("&device_id=$it") }
+            deviceId?.let { urlBuilder.append("&device_id=${URLEncoder.encode(it, "UTF-8")}") }
 
             val request = Request.Builder()
                 .url(urlBuilder.toString())
-                .addHeader("Authorization", "Bearer $API_KEY")
+                .addHeader("Authorization", "Bearer ${getApiKey()}")
                 .get()
                 .build()
 
@@ -96,7 +103,7 @@ class CloudSyncRepository(private val context: Context) {
         try {
             val request = Request.Builder()
                 .url("$API_URL/api/records/$id")
-                .addHeader("Authorization", "Bearer $API_KEY")
+                .addHeader("Authorization", "Bearer ${getApiKey()}")
                 .delete()
                 .build()
 
@@ -114,7 +121,7 @@ class CloudSyncRepository(private val context: Context) {
             val body = gson.toJson(mapOf("device_id" to deviceId)).toRequestBody(jsonType)
             val request = Request.Builder()
                 .url("$API_URL/api/records/clear")
-                .addHeader("Authorization", "Bearer $API_KEY")
+                .addHeader("Authorization", "Bearer ${getApiKey()}")
                 .delete(body)
                 .build()
 
@@ -134,7 +141,7 @@ class CloudSyncRepository(private val context: Context) {
 
             val request = Request.Builder()
                 .url(urlBuilder.toString())
-                .addHeader("Authorization", "Bearer $API_KEY")
+                .addHeader("Authorization", "Bearer ${getApiKey()}")
                 .get()
                 .build()
 

@@ -38,8 +38,9 @@ class UpdateChecker(private val context: Context) {
                     return@withContext UpdateResult(hasUpdate = false)
                 }
 
-                val json = response.body?.string()
+                val json = response.body?.string() ?: return@withContext UpdateResult(hasUpdate = false)
                 val apiResponse = gson.fromJson(json, UpdateApiResponse::class.java)
+                    ?: return@withContext UpdateResult(hasUpdate = false)
 
                 if (apiResponse.hasUpdate && apiResponse.version != currentVersion) {
                     UpdateResult(
@@ -59,6 +60,10 @@ class UpdateChecker(private val context: Context) {
     }
 
     fun startDownload(downloadUrl: String) {
+        if (downloadUrl.isBlank()) {
+            Log.w(TAG, "Download URL is empty")
+            return
+        }
         try {
             val intent = Intent(Intent.ACTION_VIEW, Uri.parse(downloadUrl))
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)

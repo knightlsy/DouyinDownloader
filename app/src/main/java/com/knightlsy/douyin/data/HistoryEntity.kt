@@ -22,7 +22,7 @@ data class HistoryEntity(
             title = title,
             author = author,
             coverUrl = coverUrl,
-            contentType = ContentType.valueOf(contentType),
+            contentType = try { ContentType.valueOf(contentType) } catch (e: Exception) { ContentType.VIDEO },
             originalUrl = originalUrl,
             downloadTime = downloadTime,
             downloadedFiles = if (downloadedFiles.isEmpty()) emptyList()

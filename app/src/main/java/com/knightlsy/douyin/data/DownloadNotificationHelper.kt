@@ -8,6 +8,7 @@ import android.os.Handler
 import android.os.Looper
 import androidx.core.app.NotificationCompat
 import com.knightlsy.douyin.R
+import java.util.concurrent.ConcurrentHashMap
 
 class DownloadNotificationHelper(private val context: Context) {
     companion object {
@@ -18,7 +19,7 @@ class DownloadNotificationHelper(private val context: Context) {
 
     private val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
     private val mainHandler = Handler(Looper.getMainLooper())
-    private val lastUpdateTime = HashMap<String, Long>()
+    private val lastUpdateTime = ConcurrentHashMap<String, Long>()
 
     init {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

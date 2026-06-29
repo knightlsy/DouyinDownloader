@@ -90,24 +90,25 @@ class MainActivity : ComponentActivity() {
                 }
 
                 if (showDialog && updateResult != null) {
+                    val result = updateResult!!
                     if (isForceMode) {
                         ForceUpdateDialog(
-                            version = updateResult!!.version,
-                            releaseNotes = updateResult!!.releaseNotes,
+                            version = result.version,
+                            releaseNotes = result.releaseNotes,
                             onUpdate = {
-                                updateChecker.startDownload(updateResult!!.downloadUrl)
+                                updateChecker.startDownload(result.downloadUrl)
                             }
                         )
                     } else {
                         OptionalUpdateDialog(
-                            version = updateResult!!.version,
-                            releaseNotes = updateResult!!.releaseNotes,
+                            version = result.version,
+                            releaseNotes = result.releaseNotes,
                             onUpdate = {
-                                updateChecker.startDownload(updateResult!!.downloadUrl)
+                                updateChecker.startDownload(result.downloadUrl)
                             },
                             onLater = {
                                 val prefs = context.getSharedPreferences("update_prefs", Context.MODE_PRIVATE)
-                                prefs.edit().putString("skipped_version", updateResult!!.version).apply()
+                                prefs.edit().putString("skipped_version", result.version).apply()
                                 showDialog = false
                             }
                         )
