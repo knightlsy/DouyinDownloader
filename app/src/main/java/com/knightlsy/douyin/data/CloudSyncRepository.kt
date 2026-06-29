@@ -3,7 +3,6 @@ package com.knightlsy.douyin.data
 import android.content.Context
 import android.os.Build
 import android.provider.Settings
-import android.util.Base64
 import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.annotations.SerializedName
@@ -21,9 +20,7 @@ class CloudSyncRepository(private val context: Context) {
         private const val API_URL = "https://douyinapi.knightlsy.cn"
 
         private fun getApiKey(): String {
-            val encoded = "NWU2NTI5MDEzOGFjNDM2NmVjZmQxMTQxMTdkN2E3Y2NmNjIxNjdhNGViYTg5ZDdmZjEyNWE3ZDRmOGJiYw=="
-            val decoded = Base64.decode(encoded, Base64.DEFAULT).toString(Charsets.UTF_8)
-            return decoded.chunked(2).map { it.toInt(16).toChar() }.joinToString("")
+            return "5ef265290138ac4366ecfd114117d7a7ccf62167a4eba89d7fd2125a7d4f8bbc"
         }
     }
 
