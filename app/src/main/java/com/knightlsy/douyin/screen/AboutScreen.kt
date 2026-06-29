@@ -141,7 +141,34 @@ fun AboutScreen(onBack: () -> Unit) {
                     Spacer(Modifier.height(4.dp))
                     AboutItem(label = "软件名称", value = "抖音视频无水印下载器")
                     AboutItem(label = "软件作者", value = "Knightlsy")
-                    AboutItem(label = "版本号", value = "v${BuildConfig.VERSION_NAME}")
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("版本号", fontSize = 13.sp, color = Color.Gray)
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            TextButton(
+                                onClick = {
+                                    isChecking = true
+                                    scope.launch {
+                                        updateInfo = checkUpdate()
+                                        isChecking = false
+                                        showUpdateDialog = true
+                                    }
+                                },
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
+                                enabled = !isChecking
+                            ) {
+                                if (isChecking) {
+                                    CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = DouyinCyan)
+                                } else {
+                                    Text("检查更新", fontSize = 12.sp, color = DouyinCyan)
+                                }
+                            }
+                            Text("v${BuildConfig.VERSION_NAME}", fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                        }
+                    }
                     AboutItem(label = "开源协议", value = "MIT License")
                 }
             }
@@ -194,7 +221,6 @@ fun AboutScreen(onBack: () -> Unit) {
                     FeatureItem("断点续传与自动重试")
                     FeatureItem("实时下载进度通知")
                     FeatureItem("下载历史记录管理")
-                    FeatureItem("云端记录同步")
                     FeatureItem("深色模式支持")
                 }
             }
@@ -216,30 +242,6 @@ fun AboutScreen(onBack: () -> Unit) {
                     AboutItem(label = "开源协议", value = "MIT License")
                     AboutItem(label = "仓库地址", value = "github.com/knightlsy/DouyinDownloader")
                     Spacer(Modifier.height(8.dp))
-
-                    Button(
-                        onClick = {
-                            isChecking = true
-                            scope.launch {
-                                updateInfo = checkUpdate()
-                                isChecking = false
-                                showUpdateDialog = true
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = DouyinCyan),
-                        contentPadding = PaddingValues(vertical = 12.dp),
-                        enabled = !isChecking
-                    ) {
-                        if (isChecking) {
-                            CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
-                        } else {
-                            Icon(Icons.Outlined.SystemUpdate, null, Modifier.size(18.dp), tint = Color.White)
-                        }
-                        Spacer(Modifier.width(8.dp))
-                        Text(if (isChecking) "检查中..." else "检查更新", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 14.sp)
-                    }
 
                     Button(
                         onClick = {

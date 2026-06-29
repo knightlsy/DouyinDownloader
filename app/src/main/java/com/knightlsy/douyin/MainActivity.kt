@@ -1,6 +1,7 @@
 package com.knightlsy.douyin
 
 import android.Manifest
+import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -18,11 +19,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -47,7 +47,6 @@ import com.knightlsy.douyin.ui.theme.DouyinCyan
 import com.knightlsy.douyin.ui.theme.DouyinDownloaderTheme
 import com.knightlsy.douyin.viewmodel.HistoryViewModel
 import com.knightlsy.douyin.viewmodel.MainViewModel
-import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -58,16 +57,27 @@ class MainActivity : ComponentActivity() {
             val isDarkMode by mainViewModel.isDarkMode.collectAsState()
             val context = this@MainActivity
 
-            var showForceUpdate by remember { mutableStateOf(false) }
+            var showDialog by remember { mutableStateOf(false) }
+            var isForceMode by remember { mutableStateOf(false) }
             var updateResult by remember { mutableStateOf<UpdateResult?>(null) }
             val updateChecker = remember { UpdateChecker(context) }
 
             LaunchedEffect(Unit) {
+                val prefs = context.getSharedPreferences("update_prefs", Context.MODE_PRIVATE)
                 val currentVersion = BuildConfig.VERSION_NAME
                 val result = updateChecker.checkForUpdate(currentVersion)
+
                 if (result.hasUpdate) {
                     updateResult = result
-                    showForceUpdate = true
+                    val skippedVersion = prefs.getString("skipped_version", "")
+
+                    if (skippedVersion == result.version) {
+                        isForceMode = true
+                        showDialog = true
+                    } else {
+                        isForceMode = false
+                        showDialog = true
+                    }
                 }
             }
 
@@ -79,14 +89,29 @@ class MainActivity : ComponentActivity() {
                     AppNavigation(mainViewModel)
                 }
 
-                if (showForceUpdate && updateResult != null) {
-                    ForceUpdateDialog(
-                        version = updateResult!!.version,
-                        releaseNotes = updateResult!!.releaseNotes,
-                        onUpdate = {
-                            updateChecker.startDownload(updateResult!!.downloadUrl)
-                        }
-                    )
+                if (showDialog && updateResult != null) {
+                    if (isForceMode) {
+                        ForceUpdateDialog(
+                            version = updateResult!!.version,
+                            releaseNotes = updateResult!!.releaseNotes,
+                            onUpdate = {
+                                updateChecker.startDownload(updateResult!!.downloadUrl)
+                            }
+                        )
+                    } else {
+                        OptionalUpdateDialog(
+                            version = updateResult!!.version,
+                            releaseNotes = updateResult!!.releaseNotes,
+                            onUpdate = {
+                                updateChecker.startDownload(updateResult!!.downloadUrl)
+                            },
+                            onLater = {
+                                val prefs = context.getSharedPreferences("update_prefs", Context.MODE_PRIVATE)
+                                prefs.edit().putString("skipped_version", updateResult!!.version).apply()
+                                showDialog = false
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -102,20 +127,21 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun ForceUpdateDialog(
+fun OptionalUpdateDialog(
     version: String,
     releaseNotes: String,
-    onUpdate: () -> Unit
+    onUpdate: () -> Unit,
+    onLater: () -> Unit
 ) {
     AlertDialog(
         onDismissRequest = { },
         icon = null,
         title = {
-            Text("发现新版本", fontWeight = FontWeight.Bold)
+            Text("发现新版本 v$version", fontWeight = FontWeight.Bold)
         },
         text = {
             Text(
-                "新版本 v$version 已发布，请更新后继续使用。\n\n$releaseNotes",
+                releaseNotes.ifEmpty { "新版本已发布，是否立即更新？" },
                 fontSize = 14.sp,
                 lineHeight = 22.sp
             )
@@ -125,7 +151,42 @@ fun ForceUpdateDialog(
                 onClick = onUpdate,
                 colors = ButtonDefaults.buttonColors(containerColor = DouyinCyan)
             ) {
-                Text("立即更新", fontWeight = FontWeight.Bold)
+                Text("立即升级", fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            OutlinedButton(onClick = onLater) {
+                Text("下次升级")
+            }
+        }
+    )
+}
+
+@Composable
+fun ForceUpdateDialog(
+    version: String,
+    releaseNotes: String,
+    onUpdate: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = { },
+        icon = null,
+        title = {
+            Text("请更新到 v$version", fontWeight = FontWeight.Bold)
+        },
+        text = {
+            Text(
+                releaseNotes.ifEmpty { "新版本已发布，请更新后继续使用。" },
+                fontSize = 14.sp,
+                lineHeight = 22.sp
+            )
+        },
+        confirmButton = {
+            Button(
+                onClick = onUpdate,
+                colors = ButtonDefaults.buttonColors(containerColor = DouyinCyan)
+            ) {
+                Text("立即升级", fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = null
