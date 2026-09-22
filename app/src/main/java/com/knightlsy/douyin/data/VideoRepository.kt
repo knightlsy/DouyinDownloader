@@ -13,8 +13,10 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import okhttp3.ConnectionPool
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
@@ -51,6 +53,45 @@ class VideoRepository {
         "Sec-Fetch-Site" to "none",
         "Upgrade-Insecure-Requests" to "1"
     )
+
+    // ttwid 是抖音分享页必需的 Cookie，缺失时服务端返回空的 item_list（伪装成视频不存在）
+    @Volatile private var cachedTtwid: String? = null
+
+    private val ttwidClient = OkHttpClient.Builder()
+        .connectTimeout(10, TimeUnit.SECONDS)
+        .readTimeout(10, TimeUnit.SECONDS)
+        .build()
+
+    private suspend fun fetchTtwid(forceRefresh: Boolean = false): String? = withContext(Dispatchers.IO) {
+        if (!forceRefresh) cachedTtwid?.let { return@withContext it }
+        try {
+            val body = """
+                {"region":"cn","aid":1768,"needFid":false,"service":"www.ixigua.com",
+                 "migrate_info":{"ticket":"","source":"node"},"cbUrlProtocol":"https","union":true}
+            """.trimIndent().toRequestBody("application/json".toMediaType())
+            val request = Request.Builder()
+                .url("https://ttwid.bytedance.com/ttwid/union/register/")
+                .post(body)
+                .header("User-Agent", baseHeaders["User-Agent"] ?: "Mozilla/5.0")
+                .build()
+            ttwidClient.newCall(request).execute().use { resp ->
+                val ck = resp.headers("Set-Cookie")
+                    .firstOrNull { it.startsWith("ttwid=") }
+                    ?.substringBefore(";")
+                    ?.takeIf { it.length > "ttwid=".length }
+                if (ck != null) {
+                    cachedTtwid = ck
+                    Log.d(TAG, "ttwid registered: ${ck.take(24)}...")
+                } else {
+                    Log.w(TAG, "ttwid register: no Set-Cookie, code=${resp.code}")
+                }
+                ck
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "ttwid fetch failed", e)
+            null
+        }
+    }
 
     private val videoIdPatterns = listOf(
         Pattern.compile("/video/(\\d+)"),
@@ -117,41 +158,57 @@ class VideoRepository {
             "https://www.iesdouyin.com/share/slides/$contentId/"
         )
 
-        for (sharePageUrl in tryUrls) {
-            try {
-                Log.d(TAG, "Fetching: $sharePageUrl")
-                val request = Request.Builder().url(sharePageUrl)
-                    .apply { baseHeaders.forEach { (k, v) -> addHeader(k, v) } }
-                    .build()
-                val response = client.newCall(request).execute()
-                val html = response.use { it.body?.string() }
+        // 最多两轮：第一轮用现有 ttwid，全部失败可能是 ttwid 过期，强制刷新后重试
+        repeat(2) { attempt ->
+            val ttwid = fetchTtwid(forceRefresh = attempt > 0)
+            for (sharePageUrl in tryUrls) {
+                try {
+                    Log.d(TAG, "Fetching: $sharePageUrl (attempt $attempt)")
+                    val request = Request.Builder().url(sharePageUrl)
+                        .apply { baseHeaders.forEach { (k, v) -> addHeader(k, v) } }
+                        .apply {
+                            ttwid?.let {
+                                addHeader("Cookie", it)
+                                addHeader("Referer", "https://www.douyin.com/")
+                            }
+                        }
+                        .build()
+                    val response = client.newCall(request).execute()
+                    val html = response.use { it.body?.string() }
 
-                if (html.isNullOrEmpty() || html.length < 10000) {
-                    Log.d(TAG, "HTML too short, skip")
-                    continue
-                }
-
-                val routerData = extractRouterData(html)
-                if (routerData != null) {
-                    val result = parseRouterData(routerData)
-                    if (result != null) {
-                        Log.d(TAG, "SUCCESS from $sharePageUrl")
-                        return@withContext result
+                    if (html.isNullOrEmpty() || html.length < 10000) {
+                        Log.d(TAG, "HTML too short, skip")
+                        continue
                     }
-                }
 
-                val itemData = extractItemList(html)
-                if (itemData != null) {
-                    val result = parseItemList(itemData)
-                    if (result != null) {
-                        Log.d(TAG, "SUCCESS (itemList) from $sharePageUrl")
-                        return@withContext result
+                    val routerData = extractRouterData(html)
+                    if (routerData != null) {
+                        val result = parseRouterData(routerData)
+                        if (result != null) {
+                            Log.d(TAG, "SUCCESS from $sharePageUrl")
+                            return@withContext result
+                        }
                     }
-                }
 
-                Log.d(TAG, "No parseable data in this page")
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed: $sharePageUrl - ${e.message}")
+                    val itemData = extractItemList(html)
+                    if (itemData != null) {
+                        val result = parseItemList(itemData)
+                        if (result != null) {
+                            Log.d(TAG, "SUCCESS (itemList) from $sharePageUrl")
+                            return@withContext result
+                        }
+                    }
+
+                    // 数据被挖空的典型特征：Cookie 失效/缺失，直接换下一轮刷新的 ttwid
+                    if (html.contains("SYSTEM_ITEM_NOT_EXIST")) {
+                        Log.w(TAG, "Empty item_list (SYSTEM_ITEM_NOT_EXIST) - ttwid invalid")
+                        break
+                    }
+
+                    Log.d(TAG, "No parseable data in this page")
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed: $sharePageUrl - ${e.message}")
+                }
             }
         }
 
@@ -320,9 +377,13 @@ class VideoRepository {
 
     private suspend fun downloadVideoWithRetry(context: Context, url: String, fileName: String, onProgress: (Float) -> Unit): String? {
         var lastError: Exception? = null
+        val ttwid = fetchTtwid()
         repeat(MAX_RETRY) { attempt ->
             try {
-                val request = Request.Builder().url(url).apply { baseHeaders.forEach { (k, v) -> addHeader(k, v) } }.build()
+                val request = Request.Builder().url(url).apply {
+                    baseHeaders.forEach { (k, v) -> addHeader(k, v) }
+                    ttwid?.let { addHeader("Cookie", it) }
+                }.build()
                 val result = client.newCall(request).execute().use { response ->
                     if (!response.isSuccessful) return@use null
                     val body = response.body ?: return@use null
@@ -391,9 +452,13 @@ class VideoRepository {
 
     private fun downloadSingleImage(context: Context, url: String, fileName: String): String? {
         var lastError: Exception? = null
+        val ttwid = runCatching { kotlinx.coroutines.runBlocking { fetchTtwid() } }.getOrNull()
         repeat(MAX_RETRY) { attempt ->
             try {
-                val request = Request.Builder().url(url).apply { baseHeaders.forEach { (k, v) -> addHeader(k, v) } }.build()
+                val request = Request.Builder().url(url).apply {
+                    baseHeaders.forEach { (k, v) -> addHeader(k, v) }
+                    ttwid?.let { addHeader("Cookie", it) }
+                }.build()
                 return client.newCall(request).execute().use { response ->
                     if (!response.isSuccessful) return null
                     val body = response.body ?: return null
