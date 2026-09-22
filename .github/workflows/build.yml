@@ -40,6 +40,14 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
           tail -60 build_output.log >> "$GITHUB_STEP_SUMMARY"
+          # 把完整日志推到 error-report 分支供远程诊断
+          git config user.name "ci-bot"
+          git config user.email "ci@local"
+          git checkout --orphan error-report
+          git rm -rf --cached . -q || true
+          git add -f build_output.log
+          git commit -m "build log"
+          git push -f origin error-report || true
 
       - name: Rename APK
         run: |
