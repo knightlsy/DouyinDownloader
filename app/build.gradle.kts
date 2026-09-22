@@ -22,18 +22,25 @@ android {
     }
 
     signingConfigs {
-        create("release") {
-            storeFile = file("${rootProject.projectDir}/release-key.jks")
-            storePassword = "douyin123"
-            keyAlias = "douyin-release"
-            keyPassword = "douyin123"
+        // 签名文件被 .gitignore 排除，本地存在时才启用正式签名；CI 上自动回退到 debug 签名
+        if (file("${rootProject.projectDir}/release-key.jks").exists()) {
+            create("release") {
+                storeFile = file("${rootProject.projectDir}/release-key.jks")
+                storePassword = "douyin123"
+                keyAlias = "douyin-release"
+                keyPassword = "douyin123"
+            }
         }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("release")
+            signingConfig = if (signingConfigs.findByName("release") != null) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
             applicationIdSuffix = ".release"
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
