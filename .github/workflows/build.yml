@@ -51,10 +51,8 @@ jobs:
 
       - name: Rename APK
         run: |
-          cp app/build/outputs/apk/release/app-release-unsigned.apk \
-             app-release-v${GITHUB_REF_NAME#v}.apk || \
-          cp app/build/outputs/apk/release/app-release-unsigned.apk \
-             app-release.apk
+          APK=$(ls app/build/outputs/apk/release/*.apk | head -1)
+          cp "$APK" app-release-v${GITHUB_REF_NAME#v}.apk || cp "$APK" app-release.apk
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
