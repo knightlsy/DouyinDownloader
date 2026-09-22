@@ -26,7 +26,20 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build release APK
-        run: ./gradlew assembleRelease --stacktrace
+        run: |
+          set -o pipefail
+          ./gradlew assembleRelease --stacktrace 2>&1 | tee build_output.log
+
+      - name: Show compile errors
+        if: failure()
+        run: |
+          {
+            echo "## Build errors"
+            echo '```'
+            grep -E "(^e: |error:|FAILURE|What went wrong)" -A 3 build_output.log | head -120
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          tail -60 build_output.log >> "$GITHUB_STEP_SUMMARY"
 
       - name: Rename APK
         run: |
