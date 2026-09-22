@@ -1,7 +1,10 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("com.google.devtools.ksp")
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 android {
@@ -12,8 +15,8 @@ android {
         applicationId = "com.knightlsy.douyin"
         minSdk = 26
         targetSdk = 34
-        versionCode = 14
-        versionName = "1.3.9"
+        versionCode = 15
+        versionName = "1.4.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -22,20 +25,35 @@ android {
     }
 
     signingConfigs {
-        // 签名文件被 .gitignore 排除，本地存在时才启用正式签名；CI 上自动回退到 debug 签名
-        if (file("${rootProject.projectDir}/release-key.jks").exists()) {
+        // 签名文件与密码都不入库：密钥本地放置，密码从 local.properties 或环境变量读取
+        val keystoreFile = file("${rootProject.projectDir}/release-key.jks")
+        val localProps = Properties()
+        val localPropsFile = rootProject.file("local.properties")
+        if (localPropsFile.exists()) {
+            localPropsFile.inputStream().use { stream -> localProps.load(stream) }
+        }
+        val storePass = System.getenv("DOUYIN_STORE_PASSWORD")
+            ?: localProps.getProperty("douyin.storePassword") ?: ""
+        val keyPass = System.getenv("DOUYIN_KEY_PASSWORD")
+            ?: localProps.getProperty("douyin.keyPassword") ?: ""
+        if (keystoreFile.exists() && storePass.isNotEmpty() && keyPass.isNotEmpty()) {
             create("release") {
-                storeFile = file("${rootProject.projectDir}/release-key.jks")
-                storePassword = "douyin123"
+                storeFile = keystoreFile
+                storePassword = storePass
                 keyAlias = "douyin-release"
-                keyPassword = "douyin123"
+                keyPassword = keyPass
             }
         }
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
             signingConfig = if (signingConfigs.findByName("release") != null) {
                 signingConfigs.getByName("release")
             } else {
@@ -59,9 +77,6 @@ android {
         compose = true
         buildConfig = true
     }
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.5"
-    }
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -73,7 +88,7 @@ dependencies {
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.6.2")
     implementation("androidx.activity:activity-compose:1.8.1")
-    implementation(platform("androidx.compose:compose-bom:2023.10.01"))
+    implementation(platform("androidx.compose:compose-bom:2024.12.01"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")

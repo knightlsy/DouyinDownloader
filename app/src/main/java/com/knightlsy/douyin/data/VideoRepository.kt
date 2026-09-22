@@ -12,6 +12,8 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import okhttp3.ConnectionPool
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -56,6 +58,7 @@ class VideoRepository {
 
     // ttwid 是抖音分享页必需的 Cookie，缺失时服务端返回空的 item_list（伪装成视频不存在）
     @Volatile private var cachedTtwid: String? = null
+    private val ttwidMutex = kotlinx.coroutines.sync.Mutex()
 
     private val ttwidClient = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
@@ -64,7 +67,10 @@ class VideoRepository {
 
     private suspend fun fetchTtwid(forceRefresh: Boolean = false): String? = withContext(Dispatchers.IO) {
         if (!forceRefresh) cachedTtwid?.let { return@withContext it }
-        try {
+        // Mutex 防止并发场景下重复注册 ttwid
+        ttwidMutex.withLock {
+            if (!forceRefresh) cachedTtwid?.let { return@withContext it }
+            try {
             val body = """
                 {"region":"cn","aid":1768,"needFid":false,"service":"www.ixigua.com",
                  "migrate_info":{"ticket":"","source":"node"},"cbUrlProtocol":"https","union":true}
@@ -90,6 +96,7 @@ class VideoRepository {
         } catch (e: Exception) {
             Log.w(TAG, "ttwid fetch failed", e)
             null
+        }
         }
     }
 
@@ -124,28 +131,17 @@ class VideoRepository {
     }
 
     suspend fun resolveShortUrl(shortUrl: String): String = withContext(Dispatchers.IO) {
-        var currentUrl = shortUrl
-        var redirectCount = 0
-        while (redirectCount < 10) {
-            try {
-                val request = Request.Builder().url(currentUrl)
-                    .apply { baseHeaders.forEach { (k, v) -> addHeader(k, v) } }
-                    .method("GET", null)
-                    .build()
-                client.newCall(request).execute().use { response ->
-                    if (response.code in 300..399) {
-                        currentUrl = response.header("Location") ?: currentUrl
-                        Log.d(TAG, "Redirect $redirectCount -> $currentUrl")
-                        redirectCount++
-                    } else {
-                        return@withContext response.request.url.toString()
-                    }
-                }
-            } catch (_: Exception) {
-                return@withContext shortUrl
+        try {
+            // client 已开 followRedirects，一次 GET 后 request.url 即为最终地址
+            val request = Request.Builder().url(shortUrl.trim())
+                .apply { baseHeaders.forEach { (k, v) -> addHeader(k, v) } }
+                .build()
+            client.newCall(request).execute().use { response ->
+                response.request.url.toString()
             }
+        } catch (_: Exception) {
+            shortUrl
         }
-        currentUrl
     }
 
     suspend fun getContentInfo(contentId: String): ContentInfo? = withContext(Dispatchers.IO) {
@@ -439,10 +435,12 @@ class VideoRepository {
 
     private suspend fun downloadImages(context: Context, imageUrls: List<String>, baseName: String, onProgress: (Float) -> Unit, onFileSaved: (String) -> Unit): List<String> = coroutineScope {
         val results = mutableListOf<String>()
+        // ttwid 下载前统一取一次，避免每张图重复请求
+        val ttwid = fetchTtwid()
         imageUrls.mapIndexed { index, url ->
             async(Dispatchers.IO) {
                 try {
-                    val r = downloadSingleImage(context, url, "${baseName}_${index + 1}")
+                    val r = downloadSingleImage(context, url, "${baseName}_${index + 1}", ttwid)
                     r?.let { synchronized(results) { results.add(it) }; onFileSaved(it) }
                     onProgress((index + 1).toFloat() / imageUrls.size); r
                 } catch (_: Exception) { null }
@@ -450,9 +448,8 @@ class VideoRepository {
         }.awaitAll(); results.toList()
     }
 
-    private fun downloadSingleImage(context: Context, url: String, fileName: String): String? {
+    private suspend fun downloadSingleImage(context: Context, url: String, fileName: String, ttwid: String?): String? {
         var lastError: Exception? = null
-        val ttwid = runCatching { kotlinx.coroutines.runBlocking { fetchTtwid() } }.getOrNull()
         repeat(MAX_RETRY) { attempt ->
             try {
                 val request = Request.Builder().url(url).apply {
@@ -465,7 +462,7 @@ class VideoRepository {
                     val ext = when { response.header("Content-Type")?.contains("png") == true -> "png"; response.header("Content-Type")?.contains("webp") == true -> "webp"; else -> "jpg" }
                     saveImageFile(context, body.byteStream(), fileName, ext)
                 }
-            } catch (e: Exception) { lastError = e; if (attempt < MAX_RETRY - 1) Thread.sleep(RETRY_DELAY) }
+            } catch (e: Exception) { lastError = e; if (attempt < MAX_RETRY - 1) delay(RETRY_DELAY) }
         }
         throw lastError ?: Exception("Image download failed")
     }

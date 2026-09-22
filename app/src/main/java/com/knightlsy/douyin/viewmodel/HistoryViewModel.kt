@@ -3,7 +3,6 @@ package com.knightlsy.douyin.viewmodel
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.knightlsy.douyin.data.ContentType
 import com.knightlsy.douyin.data.DownloadHistoryItem
 import com.knightlsy.douyin.data.HistoryRepository
 import kotlinx.coroutines.Dispatchers
@@ -12,7 +11,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.util.UUID
 
 class HistoryViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = HistoryRepository(application)
@@ -59,29 +57,6 @@ class HistoryViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch {
             withContext(Dispatchers.IO) { repository.clear() }
             loadHistory()
-        }
-    }
-
-    fun createHistoryItem(
-        contentId: String, title: String, author: String, coverUrl: String,
-        contentType: ContentType, originalUrl: String, downloadedFiles: List<String> = emptyList()
-    ): DownloadHistoryItem {
-        return DownloadHistoryItem(
-            id = UUID.randomUUID().toString(),
-            contentId = contentId,
-            title = title,
-            author = author,
-            coverUrl = coverUrl,
-            contentType = contentType,
-            originalUrl = originalUrl,
-            downloadTime = System.currentTimeMillis(),
-            downloadedFiles = downloadedFiles
-        )
-    }
-
-    fun saveHistory(item: DownloadHistoryItem) {
-        viewModelScope.launch {
-            withContext(Dispatchers.IO) { repository.add(item) }
         }
     }
 }

@@ -70,14 +70,9 @@ class MainActivity : ComponentActivity() {
                 if (result.hasUpdate) {
                     updateResult = result
                     val skippedVersion = prefs.getString("skipped_version", "")
-
-                    if (skippedVersion == result.version) {
-                        isForceMode = true
-                        showDialog = true
-                    } else {
-                        isForceMode = false
-                        showDialog = true
-                    }
+                    // 用户点过"稍后"的版本只弹可选更新；新版本弹可选更新（本应用无强制更新场景）
+                    isForceMode = false
+                    showDialog = true
                 }
             }
 

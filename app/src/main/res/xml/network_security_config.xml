@@ -1,8 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- 默认全站禁明文；仅抖音 CDN 个别 http 地址需要放行 -->
 <network-security-config>
-    <base-config cleartextTrafficPermitted="true">
+    <base-config cleartextTrafficPermitted="false">
         <trust-anchors>
             <certificates src="system" />
         </trust-anchors>
     </base-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">douyinpic.com</domain>
+        <domain includeSubdomains="true">snssdk.com</domain>
+        <domain includeSubdomains="true">amemv.com</domain>
+        <domain includeSubdomains="true">ixigua.com</domain>
+    </domain-config>
 </network-security-config>

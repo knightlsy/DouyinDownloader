@@ -114,8 +114,6 @@ DouyinDownloader/
 | READ_MEDIA_IMAGES | 读取图片（Android 13+） |
 | READ_MEDIA_VIDEO | 读取视频（Android 13+） |
 | POST_NOTIFICATIONS | 显示下载通知（Android 13+） |
-| FOREGROUND_SERVICE | 后台下载支持 |
-| WAKE_LOCK | 保持下载时屏幕常亮 |
 
 ## 下载位置
 
@@ -137,6 +135,18 @@ A: 在下载任务列表中点击关闭按钮
 A: 目前支持批量下载全部，后续版本会添加单张下载
 
 ## 更新日志
+
+### v1.4.0 (2026-06-30)
+- 更新检测优先级调整：自有服务器优先，CDN 加速镜像次之，GitHub 直连兜底
+- 修复更新弹窗逻辑错误（跳过的版本不再误报为强制更新）
+- 版本比较改为数值比较，过滤 pre-release
+- 签名密码移出仓库（改为环境变量/local.properties 读取）
+- 开启 R8 代码与资源压缩，APK 体积减少约 27%
+- 依赖升级：Kotlin 2.1.0 / AGP 8.7.3 / Compose BOM 2024.12.01
+- 网络安全加固：默认禁明文流量，仅对抖音 CDN 相关域名放行
+- 修复图集下载重复获取 ttwid、取消下载通知残留、重试后历史记录原始链接丢失等问题
+- 清理死代码与冗余同步块，简化短链解析逻辑
+- README 权限表与实际声明对齐
 
 ### v1.3.9 (2026-06-30)
 - 检查更新改为直接查询 GitHub 最新 Release

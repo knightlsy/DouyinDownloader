@@ -197,9 +197,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         }, onFileSaved = { addDownloadedFile(taskId, it) })
                     if (result.success) {
                         updateTaskStatus(taskId, DownloadStatus.COMPLETED, progress = 1f)
-                        synchronized(_stats) {
-                            _stats.value = _stats.value.copy(totalDownloads = _stats.value.totalDownloads + 1, successDownloads = _stats.value.successDownloads + 1)
-                        }
+                        _stats.value = _stats.value.copy(totalDownloads = _stats.value.totalDownloads + 1, successDownloads = _stats.value.successDownloads + 1)
                         _uiState.value = _uiState.value.copy(successMessage = "下载完成！已保存到相册")
                         notificationHelper.showCompleted(taskId, contentInfo.title, result.filePaths.size)
                         val contentType = when (contentInfo) {
@@ -218,16 +216,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         }
                     } else {
                         updateTaskStatus(taskId, DownloadStatus.FAILED, error = result.error)
-                        synchronized(_stats) {
-                            _stats.value = _stats.value.copy(totalDownloads = _stats.value.totalDownloads + 1, failedDownloads = _stats.value.failedDownloads + 1)
-                        }
+                        _stats.value = _stats.value.copy(totalDownloads = _stats.value.totalDownloads + 1, failedDownloads = _stats.value.failedDownloads + 1)
                         notificationHelper.showError(taskId, result.error ?: "下载失败")
                     }
                 } catch (e: Exception) {
                     updateTaskStatus(taskId, DownloadStatus.FAILED, error = e.message ?: "下载出错")
-                    synchronized(_stats) {
-                        _stats.value = _stats.value.copy(totalDownloads = _stats.value.totalDownloads + 1, failedDownloads = _stats.value.failedDownloads + 1)
-                    }
+                    _stats.value = _stats.value.copy(totalDownloads = _stats.value.totalDownloads + 1, failedDownloads = _stats.value.failedDownloads + 1)
                     notificationHelper.showError(taskId, e.message ?: "下载出错")
                 } finally { activeJobs.remove(taskId) }
             }
@@ -238,13 +232,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun retryDownload(taskId: String) {
         val task = _downloadTasks.value.find { it.id == taskId } ?: return
         updateTask(taskId) { it.copy(status = DownloadStatus.PENDING, retryCount = it.retryCount + 1, errorMessage = null) }
-        performDownload(taskId, task.contentInfo)
+        // 用历史记录里的原始链接还原 originalUrl，避免重试后记录退化
+        val originalUrl = _uiState.value.inputUrl.ifEmpty { task.contentInfo.id }
+        performDownload(taskId, task.contentInfo, originalUrl)
     }
 
     fun cancelDownload(taskId: String) {
         activeJobs[taskId]?.cancel()
         activeJobs.remove(taskId)
         updateTaskStatus(taskId, DownloadStatus.FAILED, error = "已取消")
+        notificationHelper.cancel(taskId)
     }
 
     fun removeTask(taskId: String) {
