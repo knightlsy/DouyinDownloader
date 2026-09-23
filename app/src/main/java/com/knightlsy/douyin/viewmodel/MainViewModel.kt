@@ -1,6 +1,7 @@
 package com.knightlsy.douyin.viewmodel
 
 import android.app.Application
+import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.util.Log
@@ -121,9 +122,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 if (contentId == null) { _uiState.value = _uiState.value.copy(isLoading = false, error = "无法识别链接"); return@launch }
                 val contentInfo = repository.getContentInfo(getApplication<Application>(), contentId)
                 if (contentInfo == null) {
-                    // 失败时附带诊断信息（各环节耗时/结果），便于用户反馈定位
+                    // 失败时附带诊断信息（各环节耗时/结果），并自动复制到剪贴板，便于直接粘贴反馈
                     val diag = ParseDiag.dump()
-                    val msg = if (diag != null) "无法获取内容信息\n$diag" else "无法获取内容信息"
+                    val msg = if (diag != null) "无法获取内容信息（诊断已复制到剪贴板）\n$diag" else "无法获取内容信息"
+                    if (diag != null) {
+                        val cm = getApplication<Application>().getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        cm.setPrimaryClip(ClipData.newPlainText("parse_diag", "无法获取内容信息\n$diag"))
+                    }
                     _uiState.value = _uiState.value.copy(isLoading = false, error = msg)
                     return@launch
                 }
