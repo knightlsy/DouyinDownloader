@@ -83,7 +83,7 @@ fun MainScreen(
 
     LaunchedEffect(Unit) { viewModel.autoPasteFromClipboard() }
     LaunchedEffect(uiState.successMessage) { uiState.successMessage?.let { Toast.makeText(context, it, Toast.LENGTH_SHORT).show(); viewModel.clearSuccessMessage() } }
-    LaunchedEffect(uiState.error) { uiState.error?.let { Toast.makeText(context, it, Toast.LENGTH_SHORT).show(); viewModel.clearError() } }
+    LaunchedEffect(uiState.error) { uiState.error?.let { Toast.makeText(context, it, Toast.LENGTH_LONG).show(); viewModel.clearError() } }
 
     Scaffold(
         topBar = {

@@ -14,6 +14,7 @@ import com.knightlsy.douyin.data.DownloadNotificationHelper
 import com.knightlsy.douyin.data.DownloadStatus
 import com.knightlsy.douyin.data.DownloadTask
 import com.knightlsy.douyin.data.HistoryRepository
+import com.knightlsy.douyin.data.ParseDiag
 import com.knightlsy.douyin.data.ParseRecord
 import com.knightlsy.douyin.data.ThemePreferences
 import com.knightlsy.douyin.data.VideoRepository
@@ -119,7 +120,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val contentId = repository.extractVideoId(url)
                 if (contentId == null) { _uiState.value = _uiState.value.copy(isLoading = false, error = "无法识别链接"); return@launch }
                 val contentInfo = repository.getContentInfo(getApplication<Application>(), contentId)
-                if (contentInfo == null) { _uiState.value = _uiState.value.copy(isLoading = false, error = "无法获取内容信息"); return@launch }
+                if (contentInfo == null) {
+                    // 失败时附带诊断信息（各环节耗时/结果），便于用户反馈定位
+                    val diag = ParseDiag.dump()
+                    val msg = if (diag != null) "无法获取内容信息\n$diag" else "无法获取内容信息"
+                    _uiState.value = _uiState.value.copy(isLoading = false, error = msg)
+                    return@launch
+                }
                 val contentType = when (contentInfo) {
                     is ContentInfo.Video -> ContentType.VIDEO; is ContentInfo.ImageCollection -> ContentType.IMAGE_COLLECTION
                 }

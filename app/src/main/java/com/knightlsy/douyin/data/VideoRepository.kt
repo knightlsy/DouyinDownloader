@@ -145,6 +145,7 @@ class VideoRepository {
     }
 
     suspend fun getContentInfo(context: Context, contentId: String): ContentInfo? = withContext(Dispatchers.IO) {
+        ParseDiag.startSession()
         // 其它路由（slides 等）解析不了时由末尾的 WebView 解析通道兜底
         val tryUrls = listOf(
             "https://m.douyin.com/share/video/$contentId/",
@@ -154,6 +155,7 @@ class VideoRepository {
         // 最多两轮：第一轮用现有 ttwid，全部失败可能是 ttwid 过期，强制刷新后重试
         repeat(2) { attempt ->
             val ttwid = fetchTtwid(forceRefresh = attempt > 0)
+            ParseDiag.log("HTML轮${attempt + 1} ttwid=${if (ttwid != null) "ok" else "无"}")
             for (sharePageUrl in tryUrls) {
                 try {
                     Log.d(TAG, "Fetching: $sharePageUrl (attempt $attempt)")
@@ -171,11 +173,13 @@ class VideoRepository {
 
                     if (html.isNullOrEmpty() || html.length < 10000) {
                         Log.d(TAG, "HTML too short, skip")
+                        ParseDiag.log("HTML过短(${html?.length ?: 0}B)")
                         continue
                     }
 
                     val routerData = extractRouterData(html)
                     if (routerData != null) {
+                        ParseDiag.log("ROUTER_DATA ${routerData.length}B")
                         val result = parseRouterData(routerData)
                         if (result != null) {
                             Log.d(TAG, "SUCCESS from $sharePageUrl")
@@ -185,6 +189,7 @@ class VideoRepository {
 
                     val itemData = extractItemList(html)
                     if (itemData != null) {
+                        ParseDiag.log("item_list ${itemData.length}B")
                         val result = parseItemList(itemData)
                         if (result != null) {
                             Log.d(TAG, "SUCCESS (itemList) from $sharePageUrl")
@@ -195,22 +200,27 @@ class VideoRepository {
                     // 数据被挖空的典型特征：Cookie 失效/缺失，直接换下一轮刷新的 ttwid
                     if (html.contains("SYSTEM_ITEM_NOT_EXIST")) {
                         Log.w(TAG, "Empty item_list (SYSTEM_ITEM_NOT_EXIST) - ttwid invalid")
+                        ParseDiag.log("item_list被挖空(NOT_EXIST)")
                         break
                     }
 
                     Log.d(TAG, "No parseable data in this page")
+                    ParseDiag.log("HTML无可解析数据(${html.length}B)")
                 } catch (e: Exception) {
                     Log.w(TAG, "Failed: $sharePageUrl - ${e.message}")
+                    ParseDiag.log("HTML异常: ${e.message?.take(40)}")
                 }
             }
         }
 
         Log.w(TAG, "ALL URLS FAILED for $contentId")
         // HTML 静态解析两轮都失败（接口变更/数据被挖空），兜底走 WebView 解析通道
+        ParseDiag.log("转WebView通道")
         try {
             Log.d(TAG, "Falling back to WebViewParser for $contentId")
             val json = WebViewParser(context).parse(contentId)
             if (json != null) {
+                ParseDiag.log("WebView返回${json.length}B")
                 parseRouterData(json)?.let {
                     Log.d(TAG, "SUCCESS from WebView (routerData)")
                     return@withContext it
@@ -220,11 +230,14 @@ class VideoRepository {
                     return@withContext it
                 }
                 Log.w(TAG, "WebView returned JSON but nothing parseable")
+                ParseDiag.log("WebView JSON无法解析: ${json.take(60)}")
             } else {
                 Log.w(TAG, "WebView parse returned null")
+                ParseDiag.log("WebView返回空(超时/未命中接口)")
             }
         } catch (e: Exception) {
             Log.w(TAG, "WebView fallback failed: ${e.message}")
+            ParseDiag.log("WebView异常: ${e.message?.take(40)}")
         }
 
         Log.w(TAG, "getContentInfo ALL FAILED for $contentId")
