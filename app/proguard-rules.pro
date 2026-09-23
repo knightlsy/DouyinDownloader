@@ -6,6 +6,7 @@
 -keepattributes Signature
 -keepattributes *Annotation*
 -keep class com.douyin.downloader.data.** { *; }
+-keep class com.knightlsy.douyin.data.** { *; }
 
 # OkHttp
 -dontwarn okhttp3.**
@@ -55,6 +56,7 @@
 
 # Keep Application
 -keep class com.douyin.downloader.** { *; }
+-keep class com.knightlsy.douyin.** { *; }
 
 # General
 -keepattributes SourceFile,LineNumberTable
