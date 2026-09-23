@@ -118,7 +118,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val contentId = repository.extractVideoId(url)
                 if (contentId == null) { _uiState.value = _uiState.value.copy(isLoading = false, error = "无法识别链接"); return@launch }
-                val contentInfo = repository.getContentInfo(contentId)
+                val contentInfo = repository.getContentInfo(getApplication<Application>(), contentId)
                 if (contentInfo == null) { _uiState.value = _uiState.value.copy(isLoading = false, error = "无法获取内容信息"); return@launch }
                 val contentType = when (contentInfo) {
                     is ContentInfo.Video -> ContentType.VIDEO; is ContentInfo.ImageCollection -> ContentType.IMAGE_COLLECTION

@@ -144,14 +144,11 @@ class VideoRepository {
         }
     }
 
-    suspend fun getContentInfo(contentId: String): ContentInfo? = withContext(Dispatchers.IO) {
+    suspend fun getContentInfo(context: Context, contentId: String): ContentInfo? = withContext(Dispatchers.IO) {
+        // 其它路由（slides 等）解析不了时由末尾的 WebView 解析通道兜底
         val tryUrls = listOf(
             "https://m.douyin.com/share/video/$contentId/",
-            "https://m.douyin.com/share/note/$contentId/",
-            "https://m.douyin.com/share/slides/$contentId/",
-            "https://www.iesdouyin.com/share/video/$contentId/",
-            "https://www.iesdouyin.com/share/note/$contentId/",
-            "https://www.iesdouyin.com/share/slides/$contentId/"
+            "https://m.douyin.com/share/note/$contentId/"
         )
 
         // 最多两轮：第一轮用现有 ttwid，全部失败可能是 ttwid 过期，强制刷新后重试
@@ -209,6 +206,28 @@ class VideoRepository {
         }
 
         Log.w(TAG, "ALL URLS FAILED for $contentId")
+        // HTML 静态解析两轮都失败（接口变更/数据被挖空），兜底走 WebView 解析通道
+        try {
+            Log.d(TAG, "Falling back to WebViewParser for $contentId")
+            val json = WebViewParser(context).parse(contentId)
+            if (json != null) {
+                parseRouterData(json)?.let {
+                    Log.d(TAG, "SUCCESS from WebView (routerData)")
+                    return@withContext it
+                }
+                parseItemList(json)?.let {
+                    Log.d(TAG, "SUCCESS from WebView (itemList/detail)")
+                    return@withContext it
+                }
+                Log.w(TAG, "WebView returned JSON but nothing parseable")
+            } else {
+                Log.w(TAG, "WebView parse returned null")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "WebView fallback failed: ${e.message}")
+        }
+
+        Log.w(TAG, "getContentInfo ALL FAILED for $contentId")
         null
     }
 
