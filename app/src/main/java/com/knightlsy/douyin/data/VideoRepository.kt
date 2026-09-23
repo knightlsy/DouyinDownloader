@@ -299,11 +299,24 @@ class VideoRepository {
     private fun parseRouterData(json: String, contentId: String): ContentInfo? {
         val m = itemListPattern.matcher(json)
         if (m.find()) {
-            val arr = extractJsonArray(json, m.end() - 1) ?: return null
-            val items = try { gson.fromJson(arr, Array<ItemObj>::class.java) } catch (_: Exception) { return null }
-            if (items.isEmpty()) return null
-            Log.d(TAG, "Router item: id=${items[0].aweme_id}, images=${items[0].images?.size}, video=${items[0].video != null}")
-            return items[0].toContentInfo()
+            val arr = extractJsonArray(json, m.end() - 1)
+            val items = arr?.let {
+                try { gson.fromJson(it, Array<ItemObj>::class.java) } catch (_: Exception) { null }
+            }
+            if (!items.isNullOrEmpty()) {
+                // 优先取 aweme_id 等于目标 contentId 的 item（推荐流会混入其他视频）
+                val target = items.firstOrNull { it.aweme_id == contentId }
+                val firstValid = items.firstOrNull { obj ->
+                    (!obj.video?.play_addr?.url_list.isNullOrEmpty()) ||
+                        (!obj.images.isNullOrEmpty() && obj.images!!.any { it.url_list.isNotEmpty() })
+                }
+                val chosen = target ?: firstValid ?: items[0]
+                Log.d(TAG, "Router item: chosen=${chosen.aweme_id} target=${target != null} total=${items.size}")
+                val info = chosen.toContentInfo()
+                if (info != null) return info
+                // 继续落树兜底
+                ParseDiag.log("正则分支item无效(${chosen.aweme_id == contentId}), 走树解析")
+            }
         }
         // 正则没命中 item_list（结构变化/嵌套转义），退化为 gson 整体解析后递归找数据块。
         // 2026-09 实测 App 端 routerData 可达 47KB 且正则不命中，此兜底能直接定位 item_list /
@@ -357,9 +370,12 @@ class VideoRepository {
                     val item = gson.fromJson(obj, ItemObj::class.java)
                     Log.d(TAG, "Tree item (fallback): id=${item.aweme_id}")
                     item.toContentInfo()
-                }
+                } ?: run { ParseDiag.log("树解析: 无任何有效url的item"); null }
             }
-    } catch (_: Exception) { null }
+    } catch (e: Exception) {
+        ParseDiag.log("树解析异常: ${e.message?.take(50)}")
+        null
+    }
 
     /** 找第一个能转出有效内容的 item（url_list 非空） */
     private fun findAnyValidItem(el: com.google.gson.JsonElement?): com.google.gson.JsonObject? {
@@ -390,8 +406,15 @@ class VideoRepository {
         try {
             val arr = gson.fromJson(json, Array<ItemObj>::class.java)
             if (arr.isNotEmpty()) {
-                Log.d(TAG, "Array item: id=${arr[0].aweme_id}")
-                return arr[0].toContentInfo()
+                // 优先目标 id，其次第一个带有效 url 的 item
+                val target = arr.firstOrNull { it.aweme_id == contentId }
+                val firstValid = arr.firstOrNull { obj ->
+                    (!obj.video?.play_addr?.url_list.isNullOrEmpty()) ||
+                        (!obj.images.isNullOrEmpty() && obj.images!!.any { it.url_list.isNotEmpty() })
+                }
+                val chosen = target ?: firstValid ?: arr[0]
+                Log.d(TAG, "Array item: chosen=${chosen.aweme_id} target=${target != null} total=${arr.size}")
+                chosen.toContentInfo()?.let { return it }
             }
         } catch (_: Exception) {}
         try {
