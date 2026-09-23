@@ -450,7 +450,9 @@ class VideoRepository {
     data class AuthorObj(val nickname: String = "")
     data class VideoObj(val play_addr: UrlObj? = null, val download_addr: UrlObj? = null, val cover: UrlObj? = null, val duration: Long = 0, val width: Int = 0, val height: Int = 0, val bit_rate: List<BitRateObj>? = null)
     data class UrlObj(val url_list: List<String> = emptyList())
-    data class ImageObj(val url_list: List<String> = emptyList())
+    /** 实况图(Live Photo)的视频部分: images[i].videos.play_addr.url_list */
+    data class ImageVideoObj(val play_addr: UrlObj? = null, val duration: Long = 0, val width: Int = 0, val height: Int = 0)
+    data class ImageObj(val url_list: List<String> = emptyList(), val videos: ImageVideoObj? = null)
     data class BitRateObj(val gear_name: String = "", val bit_rate: Int = 0, val play_addr: UrlObj? = null)
     data class StatisticsObj(val digg_count: Long = 0, val comment_count: Long = 0, val share_count: Long = 0)
 
@@ -466,8 +468,13 @@ class VideoRepository {
         if (!this.images.isNullOrEmpty()) {
             val imageUrls = this.images.mapNotNull { it.url_list.firstOrNull() }.filter { it.isNotEmpty() }
             if (imageUrls.isNotEmpty()) {
-                Log.d(TAG, "ImageCollection: ${imageUrls.size} images")
-                return ContentInfo.ImageCollection(this.aweme_id, title, authorName, imageUrls.first(), imageUrls, this.create_time)
+                // 实况图(Live Photo): images[i].videos.play_addr 存在时该图有动态视频版本
+                val animatedUrls = this.images.map { img ->
+                    img.videos?.play_addr?.url_list?.firstOrNull()?.takeIf { it.isNotEmpty() }
+                }
+                val liveCount = animatedUrls.count { it != null }
+                Log.d(TAG, "ImageCollection: ${imageUrls.size} images, live=$liveCount")
+                return ContentInfo.ImageCollection(this.aweme_id, title, authorName, imageUrls.first(), imageUrls, this.create_time, animatedUrls)
             }
         }
 
@@ -516,7 +523,7 @@ class VideoRepository {
                     if (r != null) { onFileSaved(r); DownloadResult(true, listOf(r)) } else DownloadResult(false, error = "下载视频失败")
                 }
                 is ContentInfo.ImageCollection -> {
-                    val r = downloadImages(context, contentInfo.imageUrls, "Douyin_${contentInfo.id}", onProgress, onFileSaved)
+                    val r = downloadImages(context, contentInfo.imageUrls, "Douyin_${contentInfo.id}", contentInfo.animatedUrls, onProgress, onFileSaved)
                     DownloadResult(r.isNotEmpty(), r, if (r.isEmpty()) "下载图片失败" else null)
                 }
             }
@@ -585,7 +592,15 @@ class VideoRepository {
         outputStream.flush(); onProgress(1f)
     }
 
-    private suspend fun downloadImages(context: Context, imageUrls: List<String>, baseName: String, onProgress: (Float) -> Unit, onFileSaved: (String) -> Unit): List<String> = coroutineScope {
+    /**
+     * 批量下载图集。animatedUrls 与 imageUrls 一一对应：非 null 表示该图是实况图(Live Photo)，
+     * 同时下载其动态视频版本（MP4，存 Movies/Douyin），小米等支持动态照片的相册可辨识。
+     */
+    private suspend fun downloadImages(
+        context: Context, imageUrls: List<String>, baseName: String,
+        animatedUrls: List<String?> = List(imageUrls.size) { null },
+        onProgress: (Float) -> Unit, onFileSaved: (String) -> Unit
+    ): List<String> = coroutineScope {
         val results = mutableListOf<String>()
         // ttwid 下载前统一取一次，避免每张图重复请求
         val ttwid = fetchTtwid()
@@ -594,6 +609,23 @@ class VideoRepository {
                 try {
                     val r = downloadSingleImage(context, url, "${baseName}_${index + 1}", ttwid)
                     r?.let { synchronized(results) { results.add(it) }; onFileSaved(it) }
+                    // 实况图: 追加下载动态视频部分
+                    animatedUrls.getOrNull(index)?.let { liveUrl ->
+                        try {
+                            val request = Request.Builder().url(liveUrl).apply {
+                                baseHeaders.forEach { (k, v) -> addHeader(k, v) }
+                                ttwid?.let { addHeader("Cookie", it) }
+                            }.build()
+                            client.newCall(request).execute().use { response ->
+                                if (response.isSuccessful) {
+                                    val body = response.body ?: return@use
+                                    // 命名对齐图片序号，便于配对查看
+                                    val vr = saveVideoFile(context, body.byteStream(), body.contentLength(), "${baseName}_${index + 1}_live", onProgress)
+                                    vr?.let { synchronized(results) { results.add(it) }; onFileSaved(it) }
+                                }
+                            }
+                        } catch (_: Exception) { /* 动图下载失败不影响静图结果 */ }
+                    }
                     onProgress((index + 1).toFloat() / imageUrls.size); r
                 } catch (_: Exception) { null }
             }

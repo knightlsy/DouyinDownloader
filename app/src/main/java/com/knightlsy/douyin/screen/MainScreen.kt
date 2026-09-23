@@ -591,7 +591,8 @@ fun ImageCollectionPreviewCard(
                 Surface(Modifier.align(Alignment.TopStart).padding(10.dp), shape = RoundedCornerShape(6.dp), color = Color.Black.copy(alpha = 0.55f)) {
                     Row(Modifier.padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         Icon(Icons.Filled.PhotoLibrary, null, Modifier.size(12.dp), tint = Color.White)
-                        Text("图集", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                        val liveCount = imageCollection.animatedUrls.count { it != null }
+                        Text(if (liveCount > 0) "图集 · ${liveCount}张实况" else "图集", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Medium)
                     }
                 }
                 Surface(Modifier.align(Alignment.TopEnd).padding(10.dp), shape = RoundedCornerShape(6.dp), color = DouyinPink) {

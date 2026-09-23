@@ -21,7 +21,9 @@ sealed class ContentInfo {
     data class ImageCollection(
         override val id: String, override val title: String, override val author: String,
         override val coverUrl: String, val imageUrls: List<String>,
-        override val createTime: Long = 0
+        override val createTime: Long = 0,
+        /** 与 imageUrls 一一对应: 实况图(Live Photo)的视频地址, null=纯静图 */
+        val animatedUrls: List<String?> = List(imageUrls.size) { null }
     ) : ContentInfo()
 }
 

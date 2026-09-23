@@ -188,7 +188,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun startDownloadSelected(selectedUrls: List<String>) {
         val contentInfo = _uiState.value.contentInfo as? ContentInfo.ImageCollection ?: return
         val originalUrl = _uiState.value.inputUrl
-        val selected = contentInfo.copy(imageUrls = selectedUrls)
+        // 选择性下载: 裁剪 imageUrls 的同时按索引对齐裁剪 animatedUrls, 保持实况对应关系
+        val selectedAnim = selectedUrls.map { url ->
+            val idx = contentInfo.imageUrls.indexOf(url)
+            if (idx >= 0) contentInfo.animatedUrls.getOrNull(idx) else null
+        }
+        val selected = contentInfo.copy(imageUrls = selectedUrls, animatedUrls = selectedAnim)
         val taskId = UUID.randomUUID().toString()
         addTask(DownloadTask(id = taskId, contentInfo = selected, type = ContentType.IMAGE_COLLECTION, status = DownloadStatus.DOWNLOADING, totalFiles = selectedUrls.size))
         _uiState.value = _uiState.value.copy(inputUrl = "", contentInfo = null, contentType = null)
