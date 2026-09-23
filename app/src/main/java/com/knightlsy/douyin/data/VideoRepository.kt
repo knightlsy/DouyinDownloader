@@ -185,7 +185,7 @@ class VideoRepository {
                         val hasDetail = routerData.contains("aweme_detail")
                         val hasEmpty = routerData.contains("\"item_list\":[]") || routerData.contains("\"item_list\": []")
                         ParseDiag.log("ROUTER_DATA ${routerData.length}B item_list=$hasItemList videoInfoRes=$hasVideoInfo detail=$hasDetail 空数组=$hasEmpty")
-                        val result = parseRouterData(routerData)
+                        val result = parseRouterData(routerData, contentId)
                         if (result != null) {
                             Log.d(TAG, "SUCCESS from $sharePageUrl")
                             return@withContext result
@@ -196,7 +196,7 @@ class VideoRepository {
                     val itemData = extractItemList(html)
                     if (itemData != null) {
                         ParseDiag.log("item_list ${itemData.length}B")
-                        val result = parseItemList(itemData)
+                        val result = parseItemList(itemData, contentId)
                         if (result != null) {
                             Log.d(TAG, "SUCCESS (itemList) from $sharePageUrl")
                             return@withContext result
@@ -227,11 +227,11 @@ class VideoRepository {
             val json = WebViewParser(context).parse(contentId)
             if (json != null) {
                 ParseDiag.log("WebView返回${json.length}B")
-                parseRouterData(json)?.let {
+                parseRouterData(json, contentId)?.let {
                     Log.d(TAG, "SUCCESS from WebView (routerData)")
                     return@withContext it
                 }
-                parseItemList(json)?.let {
+                parseItemList(json, contentId)?.let {
                     Log.d(TAG, "SUCCESS from WebView (itemList/detail)")
                     return@withContext it
                 }
@@ -296,7 +296,7 @@ class VideoRepository {
     private val gson by lazy { com.google.gson.Gson() }
     private val itemListPattern by lazy { Pattern.compile("\"item_list\"\\s*:\\s*\\[") }
 
-    private fun parseRouterData(json: String): ContentInfo? {
+    private fun parseRouterData(json: String, contentId: String): ContentInfo? {
         val m = itemListPattern.matcher(json)
         if (m.find()) {
             val arr = extractJsonArray(json, m.end() - 1) ?: return null
@@ -308,40 +308,85 @@ class VideoRepository {
         // 正则没命中 item_list（结构变化/嵌套转义），退化为 gson 整体解析后递归找数据块。
         // 2026-09 实测 App 端 routerData 可达 47KB 且正则不命中，此兜底能直接定位 item_list /
         // aweme_detail / videoInfoRes 等任意嵌套层级里的数据。
-        return parseJsonTree(json)
+        return parseJsonTree(json, contentId)
     }
 
-    /** gson 解析整棵 JSON 树，深度优先找第一个可解析成内容的 item 节点 */
-    private fun parseJsonTree(json: String): ContentInfo? = try {
-        val root = gson.fromJson(json, com.google.gson.JsonElement::class.java)
-        findItemInTree(root)?.let { obj ->
-            val item = gson.fromJson(obj, ItemObj::class.java)
-            Log.d(TAG, "Tree item: id=${item.aweme_id}, images=${item.images?.size}, video=${item.video != null}")
-            item.toContentInfo()
-        }
-    } catch (_: Exception) { null }
-
-    /** 深度优先: 找第一个像 aweme item 的 JsonObject（有 aweme_id + (video 或 images)） */
-    private fun findItemInTree(el: com.google.gson.JsonElement?): com.google.gson.JsonObject? {
+    /** 深度优先: 找 aweme_id 匹配 contentId 的 item；找不到再退回第一个有效 item */
+    private fun findItemInTree(el: com.google.gson.JsonElement?, contentId: String): com.google.gson.JsonObject? {
         if (el == null || !el.isJsonObject) {
             if (el != null && el.isJsonArray) {
-                for (e in el.asJsonArray) findItemInTree(e)?.let { return it }
+                for (e in el.asJsonArray) findItemInTree(e, contentId)?.let { return it }
             }
             return null
         }
         val obj = el.asJsonObject
         val id = obj.get("aweme_id")?.takeIf { it.isJsonPrimitive }?.asString ?: ""
-        if (id.isNotEmpty() && (obj.has("video") || obj.has("images"))) return obj
+        if (id.isNotEmpty() && (obj.has("video") || obj.has("images"))) {
+            // 第一优先: 精确匹配目标视频/图集（推荐流里会有大量其他视频的 item）
+            if (id == contentId) return obj
+        }
         // 命中 item_list/aweme_detail 容器时优先进入
         for (key in listOf("item_list", "aweme_detail", "aweme_details", "videoInfoRes", "items")) {
-            obj.get(key)?.let { child -> findItemInTree(child)?.let { return it } }
+            obj.get(key)?.let { child -> findItemInTree(child, contentId)?.let { return it } }
         }
         // 无命中则遍历所有子节点
-        for ((_, v) in obj.entrySet()) findItemInTree(v)?.let { return it }
+        for ((_, v) in obj.entrySet()) findItemInTree(v, contentId)?.let { return it }
         return null
     }
 
-    private fun parseItemList(json: String): ContentInfo? {
+    /**
+     * 两轮查找: 先精确匹配 contentId，失败再放宽到第一个带 url 的 item。
+     * 防止推荐流 item（url 被风控剥空）误匹配导致 toContentInfo 返回 null。
+     */
+    private fun parseJsonTree(json: String, contentId: String): ContentInfo? = try {
+        val root = gson.fromJson(json, com.google.gson.JsonElement::class.java)
+        // 第一轮: 精确 id
+        findItemInTree(root, contentId)?.let { obj ->
+            val item = gson.fromJson(obj, ItemObj::class.java)
+            item.toContentInfo()?.let {
+                Log.d(TAG, "Tree item (exact): id=${item.aweme_id}")
+                return it
+            }
+            // url 被剥空的精确节点: 记录诊断
+            ParseDiag.log("目标item存在但无url(风控剥空?)")
+            null
+        }
+            // 第二轮: 任一有效 item
+            ?: run {
+                findAnyValidItem(root)?.let { obj ->
+                    val item = gson.fromJson(obj, ItemObj::class.java)
+                    Log.d(TAG, "Tree item (fallback): id=${item.aweme_id}")
+                    item.toContentInfo()
+                }
+            }
+    } catch (_: Exception) { null }
+
+    /** 找第一个能转出有效内容的 item（url_list 非空） */
+    private fun findAnyValidItem(el: com.google.gson.JsonElement?): com.google.gson.JsonObject? {
+        if (el == null) return null
+        if (el.isJsonArray) {
+            for (e in el.asJsonArray) findAnyValidItem(e)?.let { return it }
+            return null
+        }
+        if (!el.isJsonObject) return null
+        val obj = el.asJsonObject
+        val id = obj.get("aweme_id")?.takeIf { it.isJsonPrimitive }?.asString ?: ""
+        if (id.isNotEmpty()) {
+            val hasUrlVideo = (obj.getAsJsonObject("video")?.getAsJsonObject("play_addr")
+                ?.getAsJsonArray("url_list")?.size() ?: 0) > 0
+            val hasUrlImages = obj.getAsJsonArray("images")?.any { img ->
+                ((img as? com.google.gson.JsonObject)?.getAsJsonArray("url_list")?.size() ?: 0) > 0
+            } == true
+            if (hasUrlVideo || hasUrlImages) return obj
+        }
+        for (key in listOf("item_list", "aweme_detail", "aweme_details", "videoInfoRes", "items")) {
+            obj.get(key)?.let { child -> findAnyValidItem(child)?.let { return it } }
+        }
+        for ((_, v) in obj.entrySet()) findAnyValidItem(v)?.let { return it }
+        return null
+    }
+
+    private fun parseItemList(json: String, contentId: String): ContentInfo? {
         try {
             val arr = gson.fromJson(json, Array<ItemObj>::class.java)
             if (arr.isNotEmpty()) {
@@ -366,11 +411,11 @@ class VideoRepository {
                     }
                 }
             }
-            val detail = root.getAsJsonObject("aweme_detail") ?: return parseJsonTree(json)
+            val detail = root.getAsJsonObject("aweme_detail") ?: return parseJsonTree(json, contentId)
             val obj = gson.fromJson(detail, ItemObj::class.java)
             return obj.toContentInfo()
         } catch (_: Exception) {}
-        return parseJsonTree(json)
+        return parseJsonTree(json, contentId)
     }
 
     data class ItemObj(
