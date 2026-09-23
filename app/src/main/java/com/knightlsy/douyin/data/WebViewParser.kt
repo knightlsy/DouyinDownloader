@@ -37,10 +37,20 @@ class WebViewParser(private val context: Context) {
 
         private val mainHandler = Handler(Looper.getMainLooper())
 
-        /** 命中这些接口的 XHR 响应体就是我们要的解析数据 */
+        /**
+         * 命中这些接口的 XHR 响应体就是我们要的解析数据。
+         * 2026-09 逆向 m.douyin.com/iesdouyin.com 分享页 JS（6531 chunk）确认页面实际调用：
+         * - /web/api/v2/aweme/iteminfo/   视频详情（旧 web API，仍被分享页使用）
+         * - /web/api/v2/aweme/slidesinfo/ 图集详情（slides 分享页必走）
+         * - /aweme/v1/web/aweme/detail    web 详情接口（部分场景）
+         * - /aweme/v1/web/seo/entity/     SEO 数据（兜底）
+         * 旧版只匹配 detail/item_list 导致 WebView 跑满 15s 超时空手而归。
+         */
         private fun isAwemeJson(url: String): Boolean =
-            url.contains("/aweme/v1/web/aweme/detail") ||
-                url.contains("/aweme/v1/web/aweme/detail/") ||
+            url.contains("/web/api/v2/aweme/iteminfo/") ||
+                url.contains("/web/api/v2/aweme/slidesinfo/") ||
+                url.contains("/aweme/v1/web/aweme/detail") ||
+                url.contains("/aweme/v1/web/seo/entity/") ||
                 url.contains("aweme/v1/web/item_list")
     }
 
@@ -121,7 +131,12 @@ class WebViewParser(private val context: Context) {
                     conn.connectTimeout = 10_000
                     conn.readTimeout = 10_000
                     conn.requestMethod = request.method
-                    // 透传 WebView 的 Cookie（含 ttwid/odin_tt 等风控字段），这是能拿到数据的关键
+                    // 透传页面原始请求头（Agw-Js-Conv 等）+ Cookie（ttwid/odin_tt 等风控字段）
+                    // 旧版只带 Cookie+UA 重发，丢了页面原生头，风控容易判异常
+                    for ((k, v) in request.requestHeaders ?: emptyMap()) {
+                        if (k.equals("Cookie", true) || k.equals("User-Agent", true)) continue
+                        conn.setRequestProperty(k, v)
+                    }
                     val cookie = CookieManager.getInstance().getCookie(url)
                     if (!cookie.isNullOrEmpty()) conn.setRequestProperty("Cookie", cookie)
                     conn.setRequestProperty("User-Agent", view.settings.userAgentString)
@@ -165,8 +180,18 @@ class WebViewParser(private val context: Context) {
                     if (text.length > MIN_JSON_LENGTH) finish(text)
                 }
             }
+
+            override fun doUpdateVisitedHistory(view: WebView, url: String?, isReload: Boolean) {
+                super.doUpdateVisitedHistory(view, url, isReload)
+                // 分享页会 302 跳转（m.douyin.com → www.iesdouyin.com/share/slides|video），
+                // 每次 URL 变化都补一次 JS 注入，避免只注入在跳转前的骨架页上
+                if (!url.isNullOrEmpty() && url.startsWith("http")) injectJs(view)
+            }
         }
 
+        // 2026-09 实测分享链接会 302 到 www.iesdouyin.com/share/slides|video|note，
+        // 直接加载 m.douyin.com 会多一次跳转耗时；但视频/图集路径不同，
+        // 保守起见仍从 m.douyin.com 进，让服务端决定落点。
         val shareUrl = "https://m.douyin.com/share/video/$contentId/"
         Log.d(TAG, "WebView load $shareUrl")
         webView.loadUrl(shareUrl)

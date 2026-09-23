@@ -301,6 +301,17 @@ class VideoRepository {
         } catch (_: Exception) {}
         try {
             val root = gson.fromJson(json, com.google.gson.JsonObject::class.java)
+            // WebView 通道新增来源：iteminfo 的 {item_list:[...]}、slidesinfo 可能的 {aweme_details:[...]}
+            for (key in listOf("item_list", "aweme_details", "aweme_list")) {
+                val arrEl = root.getAsJsonArray(key) ?: continue
+                if (arrEl.size() > 0) {
+                    val obj = gson.fromJson(arrEl[0], ItemObj::class.java)
+                    if (obj.aweme_id.isNotEmpty()) {
+                        Log.d(TAG, "Wrapped item ($key): id=${obj.aweme_id}")
+                        return obj.toContentInfo()
+                    }
+                }
+            }
             val detail = root.getAsJsonObject("aweme_detail") ?: return null
             val obj = gson.fromJson(detail, ItemObj::class.java)
             return obj.toContentInfo()
