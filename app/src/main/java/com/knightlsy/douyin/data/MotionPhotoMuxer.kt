@@ -37,7 +37,7 @@ object MotionPhotoMuxer {
     /**
      * 在 JPEG 里插入/替换 XMP 包(APP1 段)。
      * 简化实现: 先移除已有 XMP APP1 段, 再在 SOI 之后插入带 GCamera/MiCamera 标记的新 XMP APP1 段。
-     * JPEG 结构: FFD8 (SOI) [APP1...] ...FFD9
+     * JPEG 结构: FFD8 (SOI) + APP1 段... + FFD9
      */
     private fun injectXmp(jpeg: ByteArray, mp4Size: Long): ByteArray {
         val xmpPacket = buildXmp(mp4Size)
@@ -55,7 +55,7 @@ object MotionPhotoMuxer {
         out.write(jpeg, 0, 2) // SOI
         var i = 2
         while (i + 1 < jpeg.size) {
-            if (jpeg[i].toInt() and 0xFF != 0xFF) break // 非法结构, 原样写余下
+            if ((jpeg[i].toInt() and 0xFF) != 0xFF) break // 非法结构, 原样写余下
             val marker = jpeg[i + 1].toInt() and 0xFF
             if (marker == 0xDA) { // SOS — 之后是压缩数据, 原样写到底
                 out.write(jpeg, i, jpeg.size - i)
