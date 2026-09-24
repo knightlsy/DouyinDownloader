@@ -450,9 +450,9 @@ class VideoRepository {
     data class AuthorObj(val nickname: String = "")
     data class VideoObj(val play_addr: UrlObj? = null, val download_addr: UrlObj? = null, val cover: UrlObj? = null, val duration: Long = 0, val width: Int = 0, val height: Int = 0, val bit_rate: List<BitRateObj>? = null)
     data class UrlObj(val url_list: List<String> = emptyList())
-    /** 实况图(Live Photo)的视频部分: images[i].videos.play_addr.url_list */
+    /** 实况图(Live Photo)的视频部分: images[i].video.play_addr.url_list(注意是单数 video, 非 videos) */
     data class ImageVideoObj(val play_addr: UrlObj? = null, val duration: Long = 0, val width: Int = 0, val height: Int = 0)
-    data class ImageObj(val url_list: List<String> = emptyList(), val videos: ImageVideoObj? = null)
+    data class ImageObj(val url_list: List<String> = emptyList(), val video: ImageVideoObj? = null)
     data class BitRateObj(val gear_name: String = "", val bit_rate: Int = 0, val play_addr: UrlObj? = null)
     data class StatisticsObj(val digg_count: Long = 0, val comment_count: Long = 0, val share_count: Long = 0)
 
@@ -466,11 +466,14 @@ class VideoRepository {
         val duration = this.video?.duration ?: 0
 
         if (!this.images.isNullOrEmpty()) {
-            val imageUrls = this.images.mapNotNull { it.url_list.firstOrNull() }.filter { it.isNotEmpty() }
+            // 每个 image 的 url_list 含同图的多种编码(webp/jpeg)。取 jpeg:
+            // 1) 同分辨率下码率约 2.3 倍, 画质更好(webp 有损压缩在暗部/细纹理弱于 jpeg)
+            // 2) 实况图(Motion Photo)合成只支持 jpg 主图, webp 会导致合成被跳过而退化成静图
+            val imageUrls = this.images.mapNotNull { img -> pickBestImageUrl(img.url_list) }.filter { it.isNotEmpty() }
             if (imageUrls.isNotEmpty()) {
-                // 实况图(Live Photo): images[i].videos.play_addr 存在时该图有动态视频版本
+                // 实况图(Live Photo): images[i].video.play_addr 存在时该图有动态视频版本
                 val animatedUrls = this.images.map { img ->
-                    img.videos?.play_addr?.url_list?.firstOrNull()?.takeIf { it.isNotEmpty() }
+                    img.video?.play_addr?.url_list?.firstOrNull()?.takeIf { it.isNotEmpty() }
                 }
                 val liveCount = animatedUrls.count { it != null }
                 Log.d(TAG, "ImageCollection: ${imageUrls.size} images, live=$liveCount")
@@ -511,6 +514,25 @@ class VideoRepository {
     private fun cleanUrl(url: String): String = url
         .replace("playwm", "play").replace("play=1", "play=0")
         .replace(Regex("ratio=\\d+"), "ratio=1080p")
+
+    /**
+     * 从同图的多个候选 URL 中挑最合适的。
+     *
+     * 抖音 images[i].url_list 里的条目是**同一张图的不同编码**, 顺序不固定:
+     * 典型为 [webp, webp, jpeg]。webp 走 q75 有损压缩, 码率约为 jpeg 的 43%,
+     * 暗部与细纹理损失更明显; 且 jpg 主图才能合成 Motion Photo(实况图)。
+     * 因此优先 jpeg/jpg, 其次 png(无损), 都没有才回退第一个可用地址。
+     */
+    private fun pickBestImageUrl(urls: List<String>): String? {
+        if (urls.isEmpty()) return null
+        val usable = urls.filter { it.isNotEmpty() }
+        if (usable.isEmpty()) return null
+        fun pathOf(u: String) = u.substringBefore('?').lowercase()
+        return usable.firstOrNull { pathOf(it).endsWith(".jpeg") || pathOf(it).endsWith(".jpg") }
+            ?: usable.firstOrNull { pathOf(it).endsWith(".png") }
+            ?: usable.firstOrNull()
+    }
+
 
     suspend fun downloadContent(
         context: Context, contentInfo: ContentInfo,
@@ -634,7 +656,15 @@ class VideoRepository {
                 return client.newCall(request).execute().use { response ->
                     if (!response.isSuccessful) return null
                     val body = response.body ?: return null
-                    val ext = when { response.header("Content-Type")?.contains("png") == true -> "png"; response.header("Content-Type")?.contains("webp") == true -> "webp"; else -> "jpg" }
+                    // 扩展名判定兼顾 Content-Type 与 URL 后缀: 实况图合成必须拿到真正的 jpg 主图,
+                    // 若这里判成 webp, 合成分支会被跳过而导致"实况变静图"。
+                    val ctype = response.header("Content-Type")?.lowercase() ?: ""
+                    val path = url.substringBefore('?').lowercase()
+                    val ext = when {
+                        ctype.contains("png") || path.endsWith(".png") -> "png"
+                        ctype.contains("webp") || path.endsWith(".webp") -> "webp"
+                        else -> "jpg"
+                    }
                     // 静图字节留一份用于实况合成
                     val imageBytes = body.bytes()
                     if (liveUrl != null && ext == "jpg") {
