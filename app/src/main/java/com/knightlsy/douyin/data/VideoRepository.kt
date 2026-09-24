@@ -607,32 +607,23 @@ class VideoRepository {
         imageUrls.mapIndexed { index, url ->
             async(Dispatchers.IO) {
                 try {
-                    val r = downloadSingleImage(context, url, "${baseName}_${index + 1}", ttwid)
+                    val liveUrl = animatedUrls.getOrNull(index)
+                    val r = downloadSingleImage(context, url, "${baseName}_${index + 1}", ttwid, liveUrl)
                     r?.let { synchronized(results) { results.add(it) }; onFileSaved(it) }
-                    // 实况图: 追加下载动态视频部分
-                    animatedUrls.getOrNull(index)?.let { liveUrl ->
-                        try {
-                            val request = Request.Builder().url(liveUrl).apply {
-                                baseHeaders.forEach { (k, v) -> addHeader(k, v) }
-                                ttwid?.let { addHeader("Cookie", it) }
-                            }.build()
-                            client.newCall(request).execute().use { response ->
-                                if (response.isSuccessful) {
-                                    val body = response.body ?: return@use
-                                    // 命名对齐图片序号，便于配对查看
-                                    val vr = saveVideoFile(context, body.byteStream(), body.contentLength(), "${baseName}_${index + 1}_live", onProgress)
-                                    vr?.let { synchronized(results) { results.add(it) }; onFileSaved(it) }
-                                }
-                            }
-                        } catch (_: Exception) { /* 动图下载失败不影响静图结果 */ }
-                    }
                     onProgress((index + 1).toFloat() / imageUrls.size); r
                 } catch (_: Exception) { null }
             }
         }.awaitAll(); results.toList()
     }
 
-    private suspend fun downloadSingleImage(context: Context, url: String, fileName: String, ttwid: String?): String? {
+    /**
+     * 下载单张图。liveUrl 非空时该图是实况图(Live Photo):
+     * 追加下载动态视频 MP4, 与静图合成为小米/Google 相册可直接识别的 Motion Photo JPEG。
+     * 合成失败则退回只存静图, 不影响整体下载。
+     */
+    private suspend fun downloadSingleImage(
+        context: Context, url: String, fileName: String, ttwid: String?, liveUrl: String? = null
+    ): String? {
         var lastError: Exception? = null
         repeat(MAX_RETRY) { attempt ->
             try {
@@ -644,11 +635,36 @@ class VideoRepository {
                     if (!response.isSuccessful) return null
                     val body = response.body ?: return null
                     val ext = when { response.header("Content-Type")?.contains("png") == true -> "png"; response.header("Content-Type")?.contains("webp") == true -> "webp"; else -> "jpg" }
-                    saveImageFile(context, body.byteStream(), fileName, ext)
+                    // 静图字节留一份用于实况合成
+                    val imageBytes = body.bytes()
+                    if (liveUrl != null && ext == "jpg") {
+                        try {
+                            val liveReq = Request.Builder().url(liveUrl).apply {
+                                baseHeaders.forEach { (k, v) -> addHeader(k, v) }
+                                ttwid?.let { addHeader("Cookie", it) }
+                            }.build()
+                            val mp4Bytes = client.newCall(liveReq).execute().use { resp ->
+                                if (!resp.isSuccessful) null else resp.body?.bytes()
+                            }
+                            if (mp4Bytes != null && mp4Bytes.size > 1024) {
+                                val motionBytes = MotionPhotoMuxer.mux(imageBytes, mp4Bytes)
+                                Log.d(TAG, "Motion Photo 合成: img=${imageBytes.size}B mp4=${mp4Bytes.size}B")
+                                return saveImageBytes(context, motionBytes, "${fileName}_live", "jpg")
+                            }
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Motion Photo 合成失败, 退回静图: ${e.message}")
+                        }
+                    }
+                    saveImageBytes(context, imageBytes, fileName, ext)
                 }
             } catch (e: Exception) { lastError = e; if (attempt < MAX_RETRY - 1) delay(RETRY_DELAY) }
         }
         throw lastError ?: Exception("Image download failed")
+    }
+
+    /** 字节版落盘: 复用 saveImageFile 的 MediaStore 逻辑 */
+    private fun saveImageBytes(context: Context, bytes: ByteArray, fileName: String, extension: String): String? {
+        return saveImageFile(context, bytes.inputStream(), fileName, extension)
     }
 
     private fun saveImageFile(context: Context, inputStream: InputStream, fileName: String, extension: String): String? {
