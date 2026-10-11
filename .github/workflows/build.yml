@@ -74,6 +74,14 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: app-release*.apk
-          generate_release_notes: true
+          # 手写更新日志：不使用自动生成（避免把内部实现细节带进用户可见的说明里）
+          generate_release_notes: false
+          body: |
+            ## 更新内容
+
+            - 图集页新增**列表模式**：网格一览全部图片，左上角可随时切换列表 / 滑动模式
+            - 列表模式点开单图即可整屏查看，支持左右翻页与双指缩放，底部可直接勾选
+            - 原左右滑动模式保持不变
+            - 其他界面细节与稳定性改进
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
