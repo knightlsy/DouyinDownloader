@@ -15,8 +15,23 @@ android {
         applicationId = "com.knightlsy.douyin"
         minSdk = 26
         targetSdk = 34
-        versionCode = 30
-        versionName = "1.6.2"
+        versionCode = 31
+        versionName = "1.6.3"
+
+        // 云端同步记录接口。密钥不写进源码（仓库是公开的）：
+        // 优先环境变量（CI secrets），其次 local.properties（本地构建，已 gitignore）。
+        // 两者都没有 -> SYNC_API_KEY 为空 -> 运行时自动跳过云端同步（本地功能不受影响）。
+        val apiProps = Properties()
+        val apiPropsFile = rootProject.file("local.properties")
+        if (apiPropsFile.exists()) {
+            apiPropsFile.inputStream().use { stream -> apiProps.load(stream) }
+        }
+        val syncApiUrl = System.getenv("DOUYIN_SYNC_API_URL")
+            ?: apiProps.getProperty("douyin.syncApiUrl") ?: "https://douyinapi.knightlsy.cn"
+        val syncApiKey = System.getenv("DOUYIN_SYNC_API_KEY")
+            ?: apiProps.getProperty("douyin.syncApiKey") ?: ""
+        buildConfigField("String", "SYNC_API_URL", "\"$syncApiUrl\"")
+        buildConfigField("String", "SYNC_API_KEY", "\"$syncApiKey\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

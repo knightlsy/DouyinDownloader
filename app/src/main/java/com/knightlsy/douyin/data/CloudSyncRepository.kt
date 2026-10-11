@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Build
 import android.provider.Settings
 import android.util.Log
+import com.knightlsy.douyin.BuildConfig
 import com.google.gson.Gson
 import com.google.gson.annotations.SerializedName
 import kotlinx.coroutines.Dispatchers
@@ -17,11 +18,17 @@ import java.util.concurrent.TimeUnit
 
 class CloudSyncRepository(private val context: Context) {
     companion object {
-        private const val API_URL = "https://douyinapi.knightlsy.cn"
+        /** 接口地址与密钥来自 BuildConfig（构建期注入，见 app/build.gradle.kts）。 */
+        private val API_URL = BuildConfig.SYNC_API_URL
 
-        private fun getApiKey(): String {
-            return "5ef265290138ac4366ecfd114117d7a7ccf62167a4eba89d7fd2125a7d4f8bbc"
-        }
+        /**
+         * 构建时未配置密钥（缺 CI secret / local.properties）则返回空串。
+         * 此时云端同步整个跳过，不影响本地解析与下载功能。
+         */
+        private fun getApiKey(): String = BuildConfig.SYNC_API_KEY
+
+        /** 未配置密钥时不发任何请求 */
+        private fun isConfigured(): Boolean = getApiKey().isNotBlank()
     }
 
     private val tag = "CloudSync"
@@ -42,7 +49,17 @@ class CloudSyncRepository(private val context: Context) {
         return "${Build.MANUFACTURER} ${Build.MODEL}"
     }
 
+    /** 客户端版本名，如 "1.6.3" */
+    fun getAppVersion(): String = BuildConfig.VERSION_NAME
+
+    /** 客户端版本号（versionCode） */
+    fun getAppVersionCode(): Int = BuildConfig.VERSION_CODE
+
+    /** 系统版本，如 "14" */
+    fun getAndroidVersion(): String = Build.VERSION.RELEASE ?: ""
+
     suspend fun saveRecord(record: ParseRecord): Boolean = withContext(Dispatchers.IO) {
+        if (!isConfigured()) return@withContext false
         try {
             val body = gson.toJson(record).toRequestBody(jsonType)
             val request = Request.Builder()
@@ -71,6 +88,7 @@ class CloudSyncRepository(private val context: Context) {
         page: Int = 1,
         limit: Int = 50
     ): RecordListResponse? = withContext(Dispatchers.IO) {
+        if (!isConfigured()) return@withContext null
         try {
             val urlBuilder = StringBuilder("$API_URL/api/records?page=$page&limit=$limit")
             deviceId?.let { urlBuilder.append("&device_id=${URLEncoder.encode(it, "UTF-8")}") }
@@ -97,6 +115,7 @@ class CloudSyncRepository(private val context: Context) {
     }
 
     suspend fun deleteRecord(id: Long): Boolean = withContext(Dispatchers.IO) {
+        if (!isConfigured()) return@withContext false
         try {
             val request = Request.Builder()
                 .url("$API_URL/api/records/$id")
@@ -114,6 +133,7 @@ class CloudSyncRepository(private val context: Context) {
     }
 
     suspend fun clearDeviceRecords(deviceId: String): Boolean = withContext(Dispatchers.IO) {
+        if (!isConfigured()) return@withContext false
         try {
             val body = gson.toJson(mapOf("device_id" to deviceId)).toRequestBody(jsonType)
             val request = Request.Builder()
@@ -132,6 +152,7 @@ class CloudSyncRepository(private val context: Context) {
     }
 
     suspend fun getStats(deviceId: String? = null): StatsResponse? = withContext(Dispatchers.IO) {
+        if (!isConfigured()) return@withContext null
         try {
             val urlBuilder = StringBuilder("$API_URL/api/records/stats")
             deviceId?.let { urlBuilder.append("?device_id=$it") }
@@ -165,7 +186,12 @@ data class ParseRecord(
     @SerializedName("content_type") val contentType: String = "VIDEO",
     val title: String = "",
     val author: String = "",
-    @SerializedName("cover_url") val coverUrl: String = ""
+    @SerializedName("cover_url") val coverUrl: String = "",
+    /** 客户端版本，便于按版本排查问题（老版本不上报时为空） */
+    @SerializedName("app_version") val appVersion: String = "",
+    @SerializedName("app_version_code") val appVersionCode: Int = 0,
+    /** 系统版本，便于定位兼容性问题 */
+    @SerializedName("android_version") val androidVersion: String = ""
 )
 
 data class RecordItem(

@@ -149,7 +149,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                                 contentType = contentType.name,
                                 title = contentInfo.title,
                                 author = contentInfo.author,
-                                coverUrl = contentInfo.coverUrl
+                                coverUrl = contentInfo.coverUrl,
+                                appVersion = cloudSyncRepository.getAppVersion(),
+                                appVersionCode = cloudSyncRepository.getAppVersionCode(),
+                                androidVersion = cloudSyncRepository.getAndroidVersion()
                             )
                         )
                     } catch (e: Exception) {

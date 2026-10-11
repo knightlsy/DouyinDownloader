@@ -28,8 +28,15 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build release APK
+        env:
+          # 云端同步接口密钥：不写进源码，从仓库 Secrets 注入 BuildConfig
+          DOUYIN_SYNC_API_URL: ${{ secrets.DOUYIN_SYNC_API_URL }}
+          DOUYIN_SYNC_API_KEY: ${{ secrets.DOUYIN_SYNC_API_KEY }}
         run: |
           set -o pipefail
+          if [ -z "$DOUYIN_SYNC_API_KEY" ]; then
+            echo "::warning::DOUYIN_SYNC_API_KEY 未配置 —— 本次构建将不含云端同步（本地功能不受影响）"
+          fi
           ./gradlew assembleRelease --stacktrace 2>&1 | tee build_output.log
 
       - name: Show compile errors

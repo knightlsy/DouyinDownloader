@@ -17,6 +17,9 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.itemsIndexed as gridItemsIndexed
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -30,7 +33,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -539,11 +546,23 @@ fun ImageCollectionPreviewCard(
     var showImageViewer by remember { mutableStateOf(false) }
     var viewerIndex by remember { mutableStateOf(0) }
     val selectedCount by remember { derivedStateOf { selectedUrls.size } }
+    // 展示模式：false = 左右滑动（原样），true = 网格列表。整个会话内记住选择。
+    var listMode by remember { mutableStateOf(false) }
+    val imageUrls = imageCollection.imageUrls
+    val liveUrls = imageCollection.animatedUrls
 
     if (showImageViewer) {
-        ImageViewerDialog(
-            images = imageCollection.imageUrls,
-            initialPage = viewerIndex,
+        // 列表模式下点开单图：整屏大图。left/right 翻页 + 双指缩放，避免只能一张张划。
+        FullscreenImageViewer(
+            images = imageUrls,
+            liveFlags = liveUrls.map { it != null },
+            initialIndex = viewerIndex,
+            isSelected = { idx: Int -> imageUrls.getOrNull(idx)?.let { u -> u in selectedUrls } == true },
+            onToggleSelect = { idx: Int ->
+                imageUrls.getOrNull(idx)?.let { u ->
+                    if (u in selectedUrls) selectedUrls.remove(u) else selectedUrls.add(u)
+                }
+            },
             onDismiss = { showImageViewer = false }
         )
     }
@@ -555,14 +574,15 @@ fun ImageCollectionPreviewCard(
     ) {
         Column(Modifier.fillMaxWidth()) {
             Box(Modifier.fillMaxWidth().height(380.dp).background(Color(0xFF0a0a1a))) {
-                HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize(), key = { imageCollection.imageUrls[it] }) { page ->
+                if (!listMode) {
+                HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize(), key = { imageUrls[it] }) { page ->
                     Box(
                         Modifier.fillMaxSize()
                             .clickable { viewerIndex = page; showImageViewer = true }
                     ) {
                         AsyncImage(
                             model = ImageRequest.Builder(LocalContext.current)
-                                .data(imageCollection.imageUrls[page])
+                                .data(imageUrls[page])
                                 .crossfade(true)
                                 .build(),
                             contentDescription = null,
@@ -572,7 +592,7 @@ fun ImageCollectionPreviewCard(
                     }
                 }
                 Box(Modifier.align(Alignment.BottomEnd).padding(14.dp)) {
-                    val currentUrl = imageCollection.imageUrls[pagerState.currentPage]
+                    val currentUrl = imageUrls[pagerState.currentPage]
                     val isSelected = currentUrl in selectedUrls
                     Surface(
                         modifier = Modifier.size(40.dp).clickable {
@@ -588,6 +608,68 @@ fun ImageCollectionPreviewCard(
                         )
                     }
                 }
+                } else {
+                    // 列表模式：网格缩略图，点开单图看大图，右下角直接勾选
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(3),
+                        modifier = Modifier.fillMaxSize().padding(6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        gridItemsIndexed(items = imageUrls, key = { _, url -> url }) { index, url ->
+                            val isSelected = url in selectedUrls
+                            val hasLive = liveUrls.getOrNull(index) != null
+                            Box(
+                                Modifier.aspectRatio(1f)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color.White.copy(alpha = 0.06f))
+                                    .clickable { viewerIndex = index; showImageViewer = true }
+                            ) {
+                                AsyncImage(
+                                    model = ImageRequest.Builder(LocalContext.current)
+                                        .data(url).crossfade(true).build(),
+                                    contentDescription = null,
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Crop
+                                )
+                                // 实况标记
+                                if (hasLive) {
+                                    Surface(
+                                        modifier = Modifier.align(Alignment.BottomStart).padding(4.dp),
+                                        shape = RoundedCornerShape(4.dp),
+                                        color = Color.Black.copy(alpha = 0.55f)
+                                    ) {
+                                        Text("实况", Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
+                                            color = Color.White, fontSize = 9.sp)
+                                    }
+                                }
+                                // 序号
+                                Surface(
+                                    modifier = Modifier.align(Alignment.TopStart).padding(4.dp),
+                                    shape = RoundedCornerShape(4.dp),
+                                    color = Color.Black.copy(alpha = 0.5f)
+                                ) {
+                                    Text("${index + 1}", Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
+                                        color = Color.White, fontSize = 9.sp)
+                                }
+                                // 勾选圈
+                                Surface(
+                                    modifier = Modifier.align(Alignment.TopEnd).padding(4.dp)
+                                        .size(22.dp).clickable {
+                                            if (isSelected) selectedUrls.remove(url) else selectedUrls.add(url)
+                                        },
+                                    shape = CircleShape,
+                                    color = if (isSelected) DouyinPink else Color.Black.copy(alpha = 0.45f)
+                                ) {
+                                    Icon(
+                                        if (isSelected) Icons.Filled.Check else Icons.Filled.Add,
+                                        null, Modifier.padding(3.dp), tint = Color.White
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
                 Surface(Modifier.align(Alignment.TopStart).padding(10.dp), shape = RoundedCornerShape(6.dp), color = Color.Black.copy(alpha = 0.55f)) {
                     Row(Modifier.padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         Icon(Icons.Filled.PhotoLibrary, null, Modifier.size(12.dp), tint = Color.White)
@@ -599,15 +681,15 @@ fun ImageCollectionPreviewCard(
                     Text("已选${selectedCount}张", Modifier.padding(horizontal = 8.dp, vertical = 4.dp), color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 }
                 // 全选 / 取消全选：图集多于一张时才显示
-                if (imageCollection.imageUrls.size > 1) {
-                    val allSelected = selectedCount == imageCollection.imageUrls.size
+                if (imageUrls.size > 1) {
+                    val allSelected = selectedCount == imageUrls.size
                     Surface(
                         modifier = Modifier.align(Alignment.TopEnd).padding(top = 44.dp, end = 10.dp)
                             .clickable {
                                 if (allSelected) selectedUrls.clear()
                                 else {
                                     selectedUrls.clear()
-                                    selectedUrls.addAll(imageCollection.imageUrls)
+                                    selectedUrls.addAll(imageUrls)
                                 }
                             },
                         shape = RoundedCornerShape(6.dp),
@@ -620,12 +702,41 @@ fun ImageCollectionPreviewCard(
                         )
                     }
                 }
-                Row(Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                    imageCollection.imageUrls.forEachIndexed { index, _ ->
-                        Box(
-                            Modifier.size(if (index == pagerState.currentPage) 18.dp else 7.dp, 7.dp)
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(if (index == pagerState.currentPage) Color.White else Color.White.copy(alpha = 0.35f))
+                // 模式切换：滑动 ⇄ 列表
+                Surface(
+                    modifier = Modifier.align(Alignment.BottomStart).padding(12.dp)
+                        .clickable { listMode = !listMode },
+                    shape = RoundedCornerShape(20.dp),
+                    color = Color.Black.copy(alpha = 0.55f)
+                ) {
+                    Row(
+                        Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            if (listMode) Icons.Filled.ViewCarousel else Icons.Filled.GridView,
+                            null, Modifier.size(14.dp), tint = Color.White
+                        )
+                        Text(if (listMode) "滑动模式" else "列表模式", color = Color.White, fontSize = 11.sp)
+                    }
+                }
+                // 页码指示点只在滑动模式下显示（列表模式已有序号）
+                if (!listMode) {
+                    Row(Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                        imageUrls.forEachIndexed { index, _ ->
+                            Box(
+                                Modifier.size(if (index == pagerState.currentPage) 18.dp else 7.dp, 7.dp)
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(if (index == pagerState.currentPage) Color.White else Color.White.copy(alpha = 0.35f))
+                            )
+                        }
+                    }
+                } else {
+                    Row(Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                        Text(
+                            "共 ${imageUrls.size} 张 · 点图看大图",
+                            color = Color.White.copy(alpha = 0.7f), fontSize = 10.sp
                         )
                     }
                 }
@@ -659,6 +770,108 @@ fun ImageCollectionPreviewCard(
                         },
                         fontWeight = FontWeight.Bold, color = Color.Black, fontSize = 14.sp
                     )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 整屏大图查看器：左右滑动翻页 + 双指缩放/拖动。
+ *
+ * 与 [ImageViewerDialog] 的区别：列表模式点开单图后用它，能直接左右翻页看完全部，
+ * 不必退回列表再点下一张；缩放便于查看细节。
+ * 底部显示「N / 总数」并可直接勾选/取消勾选当前图。
+ */
+@Composable
+fun FullscreenImageViewer(
+    images: List<String>,
+    liveFlags: List<Boolean>,
+    initialIndex: Int,
+    isSelected: (Int) -> Boolean,
+    onToggleSelect: (Int) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val pagerState = rememberPagerState(initialPage = initialIndex.coerceIn(0, (images.size - 1).coerceAtLeast(0)), pageCount = { images.size })
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(Modifier.fillMaxSize().background(Color.Black)) {
+            HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize(), key = { images[it] }) { page ->
+                // 每页独立记住缩放状态，翻页后自动复位
+                var scale by remember(page) { mutableStateOf(1f) }
+                var offsetX by remember(page) { mutableStateOf(0f) }
+                var offsetY by remember(page) { mutableStateOf(0f) }
+                Box(
+                    Modifier.fillMaxSize()
+                        .pointerInput(page) {
+                            detectTransformGestures { _, pan, zoom, _ ->
+                                scale = (scale * zoom).coerceIn(1f, 5f)
+                                if (scale <= 1f) { offsetX = 0f; offsetY = 0f }
+                                else {
+                                    offsetX += pan.x
+                                    offsetY += pan.y
+                                }
+                            }
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    AsyncImage(
+                        model = ImageRequest.Builder(LocalContext.current)
+                            .data(images[page]).crossfade(true).build(),
+                        contentDescription = null,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .graphicsLayer {
+                                scaleX = scale; scaleY = scale
+                                translationX = offsetX; translationY = offsetY
+                            },
+                        contentScale = ContentScale.Fit
+                    )
+                    if (liveFlags.getOrNull(page) == true) {
+                        Surface(
+                            modifier = Modifier.align(Alignment.TopEnd).padding(top = 60.dp, end = 14.dp),
+                            shape = RoundedCornerShape(6.dp), color = DouyinPink
+                        ) {
+                            Text("实况", Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+            // 顶部：关闭 + 页码
+            IconButton(
+                onClick = onDismiss,
+                modifier = Modifier.align(Alignment.TopStart).padding(12.dp)
+            ) {
+                Icon(Icons.Outlined.Close, "关闭", tint = Color.White, modifier = Modifier.size(24.dp))
+            }
+            Surface(
+                modifier = Modifier.align(Alignment.TopCenter).padding(top = 16.dp),
+                shape = RoundedCornerShape(20.dp), color = Color.Black.copy(alpha = 0.5f)
+            ) {
+                Text("${pagerState.currentPage + 1} / ${images.size}",
+                    Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                    color = Color.White, fontSize = 13.sp)
+            }
+            // 底部：勾选当前图
+            val cur = pagerState.currentPage
+            val sel = isSelected(cur)
+            Surface(
+                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 28.dp)
+                    .clickable { onToggleSelect(cur) },
+                shape = RoundedCornerShape(24.dp),
+                color = if (sel) DouyinPink else Color.Black.copy(alpha = 0.55f)
+            ) {
+                Row(
+                    Modifier.padding(horizontal = 16.dp, vertical = 9.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(if (sel) Icons.Filled.Check else Icons.Filled.Add, null, Modifier.size(18.dp), tint = Color.White)
+                    Text(if (sel) "已选择（点击取消）" else "选择这张", color = Color.White, fontSize = 13.sp)
                 }
             }
         }
