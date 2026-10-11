@@ -136,15 +136,18 @@ class VideoRepository {
      * 这是实况图与高分辨率图片的唯一来源 —— 分享页接口不返回
      * `images[i].video` 与 `live_photo_type`，主图也只给 1440x1920。
      *
-     * 已知坑：
-     * - `aweme_ids` 必须是 JSON 数组字面量（`["123"]`），用 `aweme_id` 单数会返回 null
-     * - 服务端会按 Accept 头决定返回 jpeg 还是 webp，不指定就拿到 webp
+     * 已知坑（都踩过）：
+     * - `aweme_ids` 必须是 **[数字]** —— 加引号（`["123"]`）服务端会返回空
+     *   （HTTP 200 但 `aweme_details` 为 null），实测 41898B vs 260B
+     * - 用 `aweme_id` 单数同样返回 null
+     * - 下载图片时不带 `Accept: image/jpeg` 会拿到 webp，导致 Motion Photo 合成被跳过
      */
     private fun fetchSlidesInfo(contentId: String, ttwid: String?): String? {
         return try {
-            val idsParam = java.net.URLEncoder.encode("[\"$contentId\"]", "UTF-8")
+            val idsParam = java.net.URLEncoder.encode("[$contentId]", "UTF-8")
             val url = "https://www.douyin.com/web/api/v2/aweme/slidesinfo/" +
-                "?aweme_ids=$idsParam&aid=6383&device_platform=webapp"
+                "?aweme_ids=$idsParam&aid=6383&device_platform=webapp" +
+                "&version_code=190500&version_name=19.5.0"
             val request = Request.Builder().url(url)
                 .apply { baseHeaders.forEach { (k, v) -> addHeader(k, v) } }
                 .apply {

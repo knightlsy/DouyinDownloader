@@ -598,6 +598,28 @@ fun ImageCollectionPreviewCard(
                 Surface(Modifier.align(Alignment.TopEnd).padding(10.dp), shape = RoundedCornerShape(6.dp), color = DouyinPink) {
                     Text("已选${selectedCount}张", Modifier.padding(horizontal = 8.dp, vertical = 4.dp), color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 }
+                // 全选 / 取消全选：图集多于一张时才显示
+                if (imageCollection.imageUrls.size > 1) {
+                    val allSelected = selectedCount == imageCollection.imageUrls.size
+                    Surface(
+                        modifier = Modifier.align(Alignment.TopEnd).padding(top = 44.dp, end = 10.dp)
+                            .clickable {
+                                if (allSelected) selectedUrls.clear()
+                                else {
+                                    selectedUrls.clear()
+                                    selectedUrls.addAll(imageCollection.imageUrls)
+                                }
+                            },
+                        shape = RoundedCornerShape(6.dp),
+                        color = Color.Black.copy(alpha = 0.55f)
+                    ) {
+                        Text(
+                            if (allSelected) "取消全选" else "全选",
+                            Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
                 Row(Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                     imageCollection.imageUrls.forEachIndexed { index, _ ->
                         Box(
@@ -610,23 +632,31 @@ fun ImageCollectionPreviewCard(
             }
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(imageCollection.title, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Text("${selectedCount}/${imageCollection.imageUrls.size} 张图片已选择", fontSize = 13.sp, color = Color.Gray)
+                Text(
+                    if (selectedCount == 0) "未选择（点「全选」可一次选中全部 ${imageCollection.imageUrls.size} 张）"
+                    else "${selectedCount}/${imageCollection.imageUrls.size} 张图片已选择",
+                    fontSize = 13.sp, color = Color.Gray
+                )
                 Button(
                     onClick = {
-                        if (selectedCount == imageCollection.imageUrls.size) onDownloadAll()
+                        // 一张没选 = 下载全部；选了部分 = 只下选中的
+                        if (selectedCount == 0 || selectedCount == imageCollection.imageUrls.size) onDownloadAll()
                         else onDownloadSelected(selectedUrls.toList())
                     },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = DouyinCyan),
                     contentPadding = PaddingValues(vertical = 12.dp),
-                    enabled = selectedCount > 0
+                    enabled = true
                 ) {
                     Icon(painterResource(R.drawable.ic_cloud_download), null, Modifier.size(18.dp), tint = Color.Black)
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        if (selectedCount == imageCollection.imageUrls.size) "下载全部 ${imageCollection.imageUrls.size} 张图片"
-                        else "下载选择 ${selectedCount} 张图片",
+                        when {
+                            selectedCount == 0 -> "下载全部 ${imageCollection.imageUrls.size} 张图片"
+                            selectedCount == imageCollection.imageUrls.size -> "下载全部 ${imageCollection.imageUrls.size} 张图片"
+                            else -> "下载选择 ${selectedCount} 张图片"
+                        },
                         fontWeight = FontWeight.Bold, color = Color.Black, fontSize = 14.sp
                     )
                 }
