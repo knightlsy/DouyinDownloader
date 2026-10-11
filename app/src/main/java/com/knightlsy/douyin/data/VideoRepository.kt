@@ -522,8 +522,8 @@ class VideoRepository {
      * 实况图(Live Photo)的视频部分。
      *
      * 字段名是单数 `video`（不是 `videos`），取自 slidesinfo 接口的 images[i]。
-     * 实况视频地址通常在 `download_addr`（带 data_size，可直接用于进度显示），
-     * `play_addr` 可能为空，所以两个都要试。
+     * 实测 `play_addr` 是**无水印原片**（3.0s），`download_addr` 带 `watermark=1`
+     * 水印且时长翻倍（6.0s）—— 取地址请走 [pickLiveVideoUrl]，不要直接用 download_addr。
      */
     data class ImageVideoObj(
         val play_addr: UrlObj? = null,
@@ -577,14 +577,20 @@ class VideoRepository {
             }.filter { it.isNotEmpty() }
             if (imageUrls.isNotEmpty()) {
                 // 实况图(Live Photo): images[i].video 存在时该图有动态视频版本。
-                // 视频地址优先 download_addr（带 data_size，可用于进度），play_addr 常为空。
-                val animatedUrls = this.images.map { img ->
-                    val v = img.video ?: return@map null
-                    (v.download_addr?.url_list?.firstOrNull() ?: v.play_addr?.url_list?.firstOrNull())
-                        ?.takeIf { it.isNotEmpty() }
-                }
+                //
+                // ★ 必须优先 play_addr，它才无水印。2026-10 实测同一条实况（slidessinfo）：
+                //   play_addr     -> 337508 B, 720x960, 3.0s/90帧   【无水印】raw 原片
+                //   download_addr -> 640306 B, 720x960, 6.0s/180帧  【带水印】
+                //                    水印 = 抖音logo + 「抖音号: xxx」+ 搜索图标，固定在左上角
+                //                    且 6s 版是 3s 动作重复两遍，每帧都有水印
+                // download_addr 的 official play 接口 URL 里明确带 `watermark=1`：
+                //   .../aweme/v1/play/?video_id=xxx&ratio=720p&watermark=1&media_type=2
+                // 把该参数去掉就回到 337508 B 的无水印版 —— 但既然 play_addr 直接给了
+                // 无水印地址，就没有必要自己拼参数（拼参数还依赖 video_id，易随接口变动失效）。
+                // download_addr 仅作兜底：play_addr 为空时才用，用前尽量去掉 watermark 参数。
+                val animatedUrls = this.images.map { img -> img.video?.let { pickLiveVideoUrl(it) } }
                 val liveCount = animatedUrls.count { it != null }
-                Log.d(TAG, "ImageCollection: ${imageUrls.size} images, live=$liveCount")
+                if (liveCount > 0) Log.d(TAG, "ImageCollection: ${imageUrls.size} images, live=$liveCount (play_addr/无水印优先)")
                 return ContentInfo.ImageCollection(this.aweme_id, title, authorName, imageUrls.first(), imageUrls, this.create_time, animatedUrls)
             }
         }
@@ -619,9 +625,51 @@ class VideoRepository {
         return null
     }
 
+    /**
+     * 挑实况视频(MP4)的下载地址 —— 目标是**无水印**。
+     *
+     * 2026-10 实测同一条实况（slidesinfo 的 images[i].video）：
+     *
+     * | 来源           | 大小     | 时长/帧数    | 水印           |
+     * |----------------|----------|--------------|----------------|
+     * | `play_addr`    | 337508 B | 3.0s / 90f   | 无（原片）      |
+     * | `download_addr`| 640306 B | 6.0s / 180f  | 有（每帧左上角） |
+     *
+     * `download_addr` 那条 `douyin.com/aweme/v1/play/` 地址显式带 `watermark=1`，
+     * 返回的 MP4 左上角有「抖音 logo + 抖音号: xxx + 搜索图标」，而且时长翻倍
+     * （同一段 3s 素材放两遍）。把 `watermark=1` 参数删掉就回到 337508 B 的无水印原片；
+     * 但 `douyinvod.com` 那条路径本身带水印，删参数无效，所以只对 play 接口生效。
+     *
+     * 因此顺序是：play_addr[0] → download_addr 里能去水印的那条 → download_addr[0] 兜底。
+     */
+    private fun pickLiveVideoUrl(v: ImageVideoObj): String? {
+        v.play_addr?.url_list?.firstOrNull()?.takeIf { it.isNotEmpty() }?.let { return it }
+        val dl = v.download_addr?.url_list?.filter { it.isNotEmpty() }.orEmpty()
+        dl.firstOrNull { it.contains("/aweme/v1/play/") }?.let { return stripWatermarkParam(it) }
+        return dl.firstOrNull()
+    }
+
     private fun cleanUrl(url: String): String = url
         .replace("playwm", "play").replace("play=1", "play=0")
         .replace(Regex("ratio=\\d+"), "ratio=1080p")
+
+    /**
+     * 去掉抖音播放地址里的水印开关参数。
+     *
+     * `download_addr` 那条 `www.douyin.com/aweme/v1/play/` 地址带 `watermark=1`，
+     * 拿到的 MP4 左上角会有「抖音logo + 抖音号: xxx」水印，且时长被拉长到两倍
+     * （同段 3s 素材重复两遍）。实测把 `watermark=1` 删掉即回到无水印原片：
+     *   watermark=1  -> 640306 B  带水印
+     *   （删除）      -> 337508 B  无水印
+     *
+     * 只在 play_addr 没有地址、退回 download_addr 兜底时才需要调用。
+     */
+    private fun stripWatermarkParam(url: String): String {
+        var u = url.replace(Regex("[?&]watermark=1(?=&|$)"), "").replace(Regex("[?&]watermark=0(?=&|$)"), "")
+        // 去掉参数后可能出现 "?&" 或末尾多余的 "?"/"&"
+        u = u.replace("?&", "?").replace(Regex("[?&]$"), "")
+        return u
+    }
 
     /**
      * 从同图的多个候选 URL 中挑最合适的。
