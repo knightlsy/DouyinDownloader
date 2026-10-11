@@ -45,9 +45,11 @@ class CloudSyncRepository(private val context: Context) {
         return Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID) ?: "unknown"
     }
 
-    fun getDeviceModel(): String {
-        return "${Build.MANUFACTURER} ${Build.MODEL}"
-    }
+    /** 用户可读的机型名（如 "Xiaomi 14"），不再是机型代码 */
+    fun getDeviceModel(): String = DeviceNaming.displayName()
+
+    /** 原始机型代码（如 "23127PN0CC"），用于精确排查同一机型的不同版本 */
+    fun getDeviceModelCode(): String = DeviceNaming.modelCode()
 
     /** 客户端版本名，如 "1.6.3" */
     fun getAppVersion(): String = BuildConfig.VERSION_NAME
@@ -191,13 +193,16 @@ data class ParseRecord(
     @SerializedName("app_version") val appVersion: String = "",
     @SerializedName("app_version_code") val appVersionCode: Int = 0,
     /** 系统版本，便于定位兼容性问题 */
-    @SerializedName("android_version") val androidVersion: String = ""
+    @SerializedName("android_version") val androidVersion: String = "",
+    /** 原始机型代码（device_model 为可读机型名，这里保留代码便于排查） */
+    @SerializedName("device_model_code") val deviceModelCode: String = ""
 )
 
 data class RecordItem(
     val id: Long,
     @SerializedName("device_id") val deviceId: String,
     @SerializedName("device_model") val deviceModel: String = "",
+    @SerializedName("device_model_code") val deviceModelCode: String = "",
     @SerializedName("original_url") val originalUrl: String,
     @SerializedName("content_id") val contentId: String,
     @SerializedName("content_type") val contentType: String,

@@ -597,28 +597,18 @@ class VideoRepository {
 
         if (!videoUrl.isNullOrEmpty()) {
             Log.d(TAG, "Video: ${videoUrl.take(80)}")
-            val qualities = mutableListOf<ContentInfo.QualityOption>()
-            this.video?.bit_rate?.forEach { br ->
-                val url = br.play_addr?.url_list?.firstOrNull()
-                if (!url.isNullOrEmpty()) {
-                    val label = when {
-                        br.gear_name.isNotEmpty() -> br.gear_name
-                        br.bit_rate >= 2000 -> "${br.bit_rate / 1000}k"
-                        else -> "${br.bit_rate}"
-                    }
-                    qualities.add(ContentInfo.QualityOption(label, cleanUrl(url), br.bit_rate))
-                }
-            }
-            if (qualities.isEmpty() && !videoUrl.isNullOrEmpty()) {
-                qualities.add(ContentInfo.QualityOption("默认", cleanUrl(videoUrl)))
-            }
-            return ContentInfo.Video(this.aweme_id, title, authorName, cover, cleanUrl(videoUrl), duration, this.create_time,
+            // 清晰度由 URL 的 ratio 参数决定，web 接口最高 1080p（实测 1440p/2160p
+            // 返回的是同一个 1080p 文件）。这里直接生成候选地址，用户无需选择。
+            val best = VideoQuality.rewrite(videoUrl, VideoQuality.LADDER.first())
+            val candidates = VideoQuality.candidates(videoUrl).ifEmpty { listOf(best) }
+            Log.d(TAG, "清晰度候选: ${candidates.size} 档, 最高 ${VideoQuality.BEST_LABEL}")
+            return ContentInfo.Video(this.aweme_id, title, authorName, cover, best, duration, this.create_time,
                 diggCount = this.statistics?.digg_count ?: 0,
                 commentCount = this.statistics?.comment_count ?: 0,
                 shareCount = this.statistics?.share_count ?: 0,
                 width = this.video?.width ?: 0,
                 height = this.video?.height ?: 0,
-                qualities = qualities
+                candidateUrls = candidates
             )
         }
 
@@ -649,9 +639,8 @@ class VideoRepository {
         return dl.firstOrNull()
     }
 
-    private fun cleanUrl(url: String): String = url
-        .replace("playwm", "play").replace("play=1", "play=0")
-        .replace(Regex("ratio=\\d+"), "ratio=1080p")
+    // 清晰度与水印处理已统一收敛到 VideoQuality（见 VideoQuality.kt）。
+    // 原先的 cleanUrl 正则不含 p 后缀，会把 ratio=1440p 改成 ratio=1080pp，故移除。
 
     /**
      * 去掉抖音播放地址里的水印开关参数。
@@ -697,8 +686,21 @@ class VideoRepository {
         try {
             when (contentInfo) {
                 is ContentInfo.Video -> {
-                    val r = downloadVideoWithRetry(context, contentInfo.videoUrl, "Douyin_Video_${contentInfo.id}", onProgress)
-                    if (r != null) { onFileSaved(r); DownloadResult(true, listOf(r)) } else DownloadResult(false, error = "下载视频失败")
+                    // 依次尝试候选清晰度（1080p → 720p → 540p），首个成功的即采用。
+                    // 某个档位不可用时自动降到下一档，不再直接报「下载失败」。
+                    val candidates = contentInfo.candidateUrls.ifEmpty { listOf(contentInfo.videoUrl) }
+                    var saved: String? = null
+                    var lastErr: String? = null
+                    for ((i, u) in candidates.withIndex()) {
+                        if (u.isBlank()) continue
+                        try {
+                            val r = downloadVideoWithRetry(context, u, "Douyin_Video_${contentInfo.id}", onProgress)
+                            if (r != null) { saved = r; break }
+                        } catch (e: Exception) { lastErr = e.message }
+                        if (i < candidates.size - 1) Log.w(TAG, "清晰度降级: ${u.take(60)} 失败，尝试下一档")
+                    }
+                    if (saved != null) { onFileSaved(saved); DownloadResult(true, listOf(saved)) }
+                    else DownloadResult(false, error = lastErr ?: "下载视频失败")
                 }
                 is ContentInfo.ImageCollection -> {
                     val r = downloadImages(context, contentInfo.imageUrls, "Douyin_${contentInfo.id}", contentInfo.animatedUrls, onProgress, onFileSaved)

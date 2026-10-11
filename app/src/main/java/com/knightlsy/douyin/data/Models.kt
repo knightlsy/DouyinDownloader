@@ -13,10 +13,15 @@ sealed class ContentInfo {
         override val createTime: Long = 0,
         val diggCount: Long = 0, val commentCount: Long = 0, val shareCount: Long = 0,
         val width: Int = 0, val height: Int = 0,
-        val qualities: List<QualityOption> = emptyList()
+        /**
+         * 候选播放地址，清晰度从高到低。
+         *
+         * 抖音 web 接口的清晰度由 URL 里的 ratio 参数决定，且最高只到 1080p；
+         * 用户不再选择画质，下载时按此列表依次尝试，首个成功的即采用
+         * （避免某个档位不可用导致下载直接失败）。
+         */
+        val candidateUrls: List<String> = emptyList()
     ) : ContentInfo()
-
-    data class QualityOption(val label: String, val url: String, val bitrate: Int = 0)
 
     data class ImageCollection(
         override val id: String, override val title: String, override val author: String,

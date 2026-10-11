@@ -59,6 +59,7 @@ import com.knightlsy.douyin.data.ContentInfo
 import com.knightlsy.douyin.data.ContentType
 import com.knightlsy.douyin.data.DownloadStatus
 import com.knightlsy.douyin.data.DownloadTask
+import com.knightlsy.douyin.data.VideoQuality
 import com.knightlsy.douyin.ui.theme.DouyinCyan
 import com.knightlsy.douyin.ui.theme.DouyinPink
 import com.knightlsy.douyin.viewmodel.MainViewModel
@@ -363,8 +364,6 @@ fun InputCard(url: String, onUrlChange: (String) -> Unit, onParse: () -> Unit, o
 @Composable
 fun VideoPreviewCard(videoInfo: ContentInfo.Video, onDownload: (String) -> Unit) {
     var showPlayer by remember { mutableStateOf(false) }
-    var expanded by remember { mutableStateOf(false) }
-    var selectedQuality by remember(videoInfo.qualities) { mutableStateOf(videoInfo.qualities.firstOrNull()) }
 
     if (showPlayer) {
         VideoPlayerDialog(videoUrl = videoInfo.videoUrl, onDismiss = { showPlayer = false })
@@ -436,32 +435,20 @@ fun VideoPreviewCard(videoInfo: ContentInfo.Video, onDownload: (String) -> Unit)
                         Text("${videoInfo.width}x${videoInfo.height}", fontSize = 12.sp, color = Color.Gray)
                     }
                 }
-                if (videoInfo.qualities.size > 1) {
-                    Box {
-                        OutlinedButton(
-                            onClick = { expanded = true },
-                            shape = RoundedCornerShape(10.dp),
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
-                        ) {
-                            Icon(Icons.Outlined.VideoSettings, null, Modifier.size(16.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text(selectedQuality?.label ?: "选择画质", fontSize = 13.sp)
-                            Spacer(Modifier.width(4.dp))
-                            Icon(Icons.Outlined.ArrowDropDown, null, Modifier.size(16.dp))
-                        }
-                        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                            videoInfo.qualities.forEach { q ->
-                                DropdownMenuItem(
-                                    text = { Text(q.label) },
-                                    onClick = { selectedQuality = q; expanded = false },
-                                    leadingIcon = { if (q == selectedQuality) Icon(Icons.Outlined.Check, null, tint = DouyinPink) }
-                                )
-                            }
-                        }
+                // 不再提供画质选择：统一取最高可用清晰度（1080p），
+                // 下载时自动在 1080p → 720p → 540p 间降级，避免选到不可用档位而失败。
+                Surface(shape = RoundedCornerShape(8.dp), color = DouyinCyan.copy(alpha = 0.15f)) {
+                    Row(
+                        Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    ) {
+                        Icon(Icons.Outlined.HighQuality, null, Modifier.size(14.dp), tint = DouyinCyan)
+                        Text("${VideoQuality.BEST_LABEL} 清晰度 · 无水印", fontSize = 12.sp, color = DouyinCyan)
                     }
                 }
                 Button(
-                    onClick = { onDownload(selectedQuality?.url ?: videoInfo.videoUrl) },
+                    onClick = { onDownload(videoInfo.videoUrl) },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = DouyinCyan),

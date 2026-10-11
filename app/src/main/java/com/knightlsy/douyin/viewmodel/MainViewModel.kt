@@ -144,6 +144,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             ParseRecord(
                                 deviceId = cloudSyncRepository.getDeviceId(),
                                 deviceModel = cloudSyncRepository.getDeviceModel(),
+                                deviceModelCode = cloudSyncRepository.getDeviceModelCode(),
                                 originalUrl = url,
                                 contentId = contentInfo.id,
                                 contentType = contentType.name,
@@ -181,6 +182,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val contentInfo = _uiState.value.contentInfo ?: return
         if (contentInfo !is ContentInfo.Video) { startDownload(); return }
         val originalUrl = _uiState.value.inputUrl
+        // 只换起点地址，候选列表（降级链）保持不变：若该档位不可用会自动降级。
         val replaced = contentInfo.copy(videoUrl = videoUrl)
         val taskId = UUID.randomUUID().toString()
         addTask(DownloadTask(id = taskId, contentInfo = replaced, type = ContentType.VIDEO, status = DownloadStatus.DOWNLOADING, totalFiles = 1))
