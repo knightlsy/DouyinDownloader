@@ -35,8 +35,17 @@ private data class UpdateInfo(
     val hasUpdate: Boolean,
     val version: String = "",
     val downloadUrl: String = "",
-    val releaseNotes: String = ""
+    val releaseNotes: String = "",
+    /** 最后一次完成打包的日期（yyyy-MM-dd），取自 Release 的发布时间 */
+    val packagedAt: String = ""
 )
+
+/** 把 GitHub 的 ISO 时间（2026-10-11T12:34:56Z）转成 2026-10-11 */
+private fun formatPackagedAt(iso: String): String = try {
+    java.time.OffsetDateTime.parse(iso).toLocalDate().toString()
+} catch (_: Exception) {
+    iso.take(10)
+}
 
 private suspend fun checkUpdate(): UpdateInfo = withContext(Dispatchers.IO) {
     try {
@@ -55,12 +64,17 @@ private suspend fun checkUpdate(): UpdateInfo = withContext(Dispatchers.IO) {
         val bodyMatch = Regex(""""body"\s*:\s*"((?:[^"\\]|\\.)*)"\s*[,}]""").find(json)
         val notes = bodyMatch?.groupValues?.get(1)?.replace("\\n", "\n")?.replace("\\\"", "\"") ?: ""
 
+        // 打包时间：Release 的发布时间即最后一次打包成功的时刻
+        val publishedMatch = Regex(""""published_at"\s*:\s*"([^"]+)"""").find(json)
+        val packagedAt = publishedMatch?.groupValues?.get(1)?.let { formatPackagedAt(it) } ?: ""
+
         val currentVersion = BuildConfig.VERSION_NAME
         UpdateInfo(
             hasUpdate = version != currentVersion,
             version = version,
             downloadUrl = downloadUrl,
-            releaseNotes = notes
+            releaseNotes = notes,
+            packagedAt = packagedAt
         )
     } catch (e: Exception) {
         UpdateInfo(false)
@@ -286,13 +300,14 @@ fun AboutScreen(onBack: () -> Unit) {
                     if (updateInfo!!.hasUpdate) {
                         Text("当前版本: v${BuildConfig.VERSION_NAME}", fontSize = 13.sp, color = Color.Gray)
                         Text("最新版本: v${updateInfo!!.version}", fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                        if (updateInfo!!.releaseNotes.isNotEmpty()) {
-                            Spacer(Modifier.height(12.dp))
-                            Text("更新内容:", fontSize = 12.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
-                            Text(updateInfo!!.releaseNotes, fontSize = 13.sp, lineHeight = 20.sp)
-                        }
-                    } else {
-                        Text("当前已是最新版本 v${BuildConfig.VERSION_NAME}", fontSize = 14.sp)
+                    } else if (updateInfo!!.packagedAt.isNotEmpty()) {
+                        // 已是最新版：不重复版本号，只说明最后一次打包时间
+                        Text("最后更新：${updateInfo!!.packagedAt}", fontSize = 13.sp, color = Color.Gray)
+                    }
+                    if (updateInfo!!.releaseNotes.isNotEmpty()) {
+                        Spacer(Modifier.height(12.dp))
+                        Text("更新内容：", fontSize = 12.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
+                        Text(updateInfo!!.releaseNotes, fontSize = 13.sp, lineHeight = 20.sp)
                     }
                 }
             },
