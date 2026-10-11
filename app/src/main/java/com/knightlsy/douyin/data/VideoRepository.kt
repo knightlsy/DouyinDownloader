@@ -130,6 +130,49 @@ class VideoRepository {
         }
     }
 
+    /**
+     * 拉取 slidesinfo 接口（App 端数据源），返回原始 JSON 文本。
+     *
+     * 这是实况图与高分辨率图片的唯一来源 —— 分享页接口不返回
+     * `images[i].video` 与 `live_photo_type`，主图也只给 1440x1920。
+     *
+     * 已知坑：
+     * - `aweme_ids` 必须是 JSON 数组字面量（`["123"]`），用 `aweme_id` 单数会返回 null
+     * - 服务端会按 Accept 头决定返回 jpeg 还是 webp，不指定就拿到 webp
+     */
+    private fun fetchSlidesInfo(contentId: String, ttwid: String?): String? {
+        return try {
+            val idsParam = java.net.URLEncoder.encode("[\"$contentId\"]", "UTF-8")
+            val url = "https://www.douyin.com/web/api/v2/aweme/slidesinfo/" +
+                "?aweme_ids=$idsParam&aid=6383&device_platform=webapp"
+            val request = Request.Builder().url(url)
+                .apply { baseHeaders.forEach { (k, v) -> addHeader(k, v) } }
+                .apply {
+                    ttwid?.let {
+                        addHeader("Cookie", it)
+                        addHeader("Referer", "https://www.douyin.com/")
+                    }
+                }
+                .build()
+            client.newCall(request).execute().use { resp ->
+                val body = resp.body?.string()
+                if (resp.code != 200 || body.isNullOrEmpty()) {
+                    Log.w(TAG, "slidesinfo HTTP ${resp.code} len=${body?.length ?: 0}")
+                    null
+                } else if (!body.contains("aweme_details")) {
+                    Log.w(TAG, "slidesinfo no aweme_details: ${body.take(80)}")
+                    null
+                } else {
+                    body
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "slidesinfo failed: ${e.message}")
+            ParseDiag.log("slidesinfo 异常: ${e.message?.take(40)}")
+            null
+        }
+    }
+
     suspend fun resolveShortUrl(shortUrl: String): String = withContext(Dispatchers.IO) {
         try {
             // client 已开 followRedirects，一次 GET 后 request.url 即为最终地址
@@ -146,6 +189,27 @@ class VideoRepository {
 
     suspend fun getContentInfo(context: Context, contentId: String): ContentInfo? = withContext(Dispatchers.IO) {
         ParseDiag.startSession()
+
+        // 首选：slidesinfo 接口（App 端数据源）
+        //
+        // 相比分享页接口，它多给两样东西，直接决定实况图能否下载与画质高低：
+        //   1. images[i].video            → 实况图的动态视频（分享页完全没有）
+        //   2. images[i].live_photo_type  → 是否实况(1=是)
+        //   3. 主图 2160x2880（分享页只有 1440x1920，小 50%）
+        // 失败则继续走下面的分享页链路，行为与之前完全一致。
+        run {
+            val ttwid = fetchTtwid()
+            ParseDiag.log("slidesinfo ttwid=${if (ttwid != null) "ok" else "无"}")
+            fetchSlidesInfo(contentId, ttwid)?.let { json ->
+                ParseDiag.log("slidesinfo 返回 ${json.length}B")
+                parseItemList(json, contentId)?.let {
+                    Log.d(TAG, "SUCCESS from slidesinfo")
+                    return@withContext it
+                }
+                ParseDiag.log("slidesinfo 解析失败")
+            }
+        }
+
         // 其它路由（slides 等）解析不了时由末尾的 WebView 解析通道兜底
         val tryUrls = listOf(
             "https://m.douyin.com/share/video/$contentId/",
@@ -449,10 +513,39 @@ class VideoRepository {
     )
     data class AuthorObj(val nickname: String = "")
     data class VideoObj(val play_addr: UrlObj? = null, val download_addr: UrlObj? = null, val cover: UrlObj? = null, val duration: Long = 0, val width: Int = 0, val height: Int = 0, val bit_rate: List<BitRateObj>? = null)
-    data class UrlObj(val url_list: List<String> = emptyList())
-    /** 实况图(Live Photo)的视频部分: images[i].video.play_addr.url_list(注意是单数 video, 非 videos) */
-    data class ImageVideoObj(val play_addr: UrlObj? = null, val duration: Long = 0, val width: Int = 0, val height: Int = 0)
-    data class ImageObj(val url_list: List<String> = emptyList(), val video: ImageVideoObj? = null)
+    data class UrlObj(val url_list: List<String> = emptyList(), val data_size: Long = 0)
+
+    /**
+     * 实况图(Live Photo)的视频部分。
+     *
+     * 字段名是单数 `video`（不是 `videos`），取自 slidesinfo 接口的 images[i]。
+     * 实况视频地址通常在 `download_addr`（带 data_size，可直接用于进度显示），
+     * `play_addr` 可能为空，所以两个都要试。
+     */
+    data class ImageVideoObj(
+        val play_addr: UrlObj? = null,
+        val download_addr: UrlObj? = null,
+        val duration: Long = 0, val width: Int = 0, val height: Int = 0,
+        val bit_rate: List<BitRateObj>? = null
+    )
+
+    /**
+     * 图集里的单张图。
+     *
+     * url_list / download_url_list 是同一张图的两组地址：
+     * - `url_list`          → 无水印(tplv-dy-aweme-images / tplv-dy-lqen-new)
+     * - `download_url_list` → 带水印(tplv-dy-water-v2 / lqen-new-water)，但分辨率更高
+     *
+     * slidesinfo 接口会额外给出 `live_photo_type`(1=实况) 与 `video`(实况视频)，
+     * 分享页接口这两项都没有 —— 这就是改走 slidesinfo 的原因。
+     */
+    data class ImageObj(
+        val url_list: List<String> = emptyList(),
+        val download_url_list: List<String> = emptyList(),
+        val video: ImageVideoObj? = null,
+        val live_photo_type: Int = 0,
+        val width: Int = 0, val height: Int = 0
+    )
     data class BitRateObj(val gear_name: String = "", val bit_rate: Int = 0, val play_addr: UrlObj? = null)
     data class StatisticsObj(val digg_count: Long = 0, val comment_count: Long = 0, val share_count: Long = 0)
 
@@ -466,14 +559,26 @@ class VideoRepository {
         val duration = this.video?.duration ?: 0
 
         if (!this.images.isNullOrEmpty()) {
-            // 每个 image 的 url_list 含同图的多种编码(webp/jpeg)。取 jpeg:
-            // 1) 同分辨率下码率约 2.3 倍, 画质更好(webp 有损压缩在暗部/细纹理弱于 jpeg)
-            // 2) 实况图(Motion Photo)合成只支持 jpg 主图, webp 会导致合成被跳过而退化成静图
-            val imageUrls = this.images.mapNotNull { img -> pickBestImageUrl(img.url_list) }.filter { it.isNotEmpty() }
+            // 每张图挑最优地址。
+            //
+            // 背景（2026-10 实测，slidesinfo 接口）：
+            //   url_list          → 2160x2880，tplv-dy-aweme-images:q75  【无水印】
+            //   download_url_list → 2160x2880，tplv-dy-water-v2          【带水印】
+            //   分享页接口只给 1440x1920 —— 这就是改走 slidesinfo 的原因。
+            //
+            // 所以优先 url_list（同分辨率且无水印），只有它为空才退回 download_url_list。
+            // jpeg 优先于 webp：同分辨率下码率约 2.3 倍，暗部/细纹理更好；
+            // 且 Motion Photo 合成只接受 jpg 主图，webp 会让合成被跳过退化成静图。
+            val imageUrls = this.images.mapNotNull { img ->
+                pickBestImageUrl(img.url_list) ?: pickBestImageUrl(img.download_url_list)
+            }.filter { it.isNotEmpty() }
             if (imageUrls.isNotEmpty()) {
-                // 实况图(Live Photo): images[i].video.play_addr 存在时该图有动态视频版本
+                // 实况图(Live Photo): images[i].video 存在时该图有动态视频版本。
+                // 视频地址优先 download_addr（带 data_size，可用于进度），play_addr 常为空。
                 val animatedUrls = this.images.map { img ->
-                    img.video?.play_addr?.url_list?.firstOrNull()?.takeIf { it.isNotEmpty() }
+                    val v = img.video ?: return@map null
+                    (v.download_addr?.url_list?.firstOrNull() ?: v.play_addr?.url_list?.firstOrNull())
+                        ?.takeIf { it.isNotEmpty() }
                 }
                 val liveCount = animatedUrls.count { it != null }
                 Log.d(TAG, "ImageCollection: ${imageUrls.size} images, live=$liveCount")
@@ -560,6 +665,9 @@ class VideoRepository {
                 val request = Request.Builder().url(url).apply {
                     baseHeaders.forEach { (k, v) -> addHeader(k, v) }
                     ttwid?.let { addHeader("Cookie", it) }
+                    // 关键：抖音 CDN 按 Accept 决定返回格式 —— URL 后缀写着 .jpeg，
+                    // 不带这个头时服务端实际回 webp，会让 Motion Photo 合成被跳过（实况变静图）。
+                    addHeader("Accept", "image/jpeg,image/*;q=0.9,*/*;q=0.8")
                 }.build()
                 val result = client.newCall(request).execute().use { response ->
                     if (!response.isSuccessful) return@use null
@@ -652,6 +760,9 @@ class VideoRepository {
                 val request = Request.Builder().url(url).apply {
                     baseHeaders.forEach { (k, v) -> addHeader(k, v) }
                     ttwid?.let { addHeader("Cookie", it) }
+                    // 关键：抖音 CDN 按 Accept 决定返回格式 —— URL 后缀写着 .jpeg，
+                    // 不带这个头时服务端实际回 webp，会让 Motion Photo 合成被跳过（实况变静图）。
+                    addHeader("Accept", "image/jpeg,image/*;q=0.9,*/*;q=0.8")
                 }.build()
                 return client.newCall(request).execute().use { response ->
                     if (!response.isSuccessful) return null
