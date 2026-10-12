@@ -1,24 +1,45 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  应用图标前景层（方案 C：播放三角 + 下载箭头）
+  · 主体：白色播放三角（圆角）—— 表明下载对象是「视频」
+  · 右下：下载箭头（箭身 + 箭尖）—— 落在三角右下方的留白处
+
+  为什么不用「三角挖洞 + 箭头嵌入」：
+    SVG 用 <mask> 挖洞，但 Android VectorDrawable 不支持 mask；改用 <clip-path>
+    的 nonzero 环绕规则可以挖洞，但实测 48px 以下缺口糊掉、三角与箭头融成一团白块，
+    反而更差。因此改为「缩小三角 + 箭头独立放置」，两者靠构图呼应而非物理咬合，
+    在 32px 下依然两个形状可辨。
+
+  构图：三角占左中（x 34~68），箭头占右下（x 69~88, y 60~82），
+  两者留 1px 视觉间隙；整体落在自适应图标安全区内（中心约 66dp），
+  圆/方/水滴遮罩下都不会被裁切。
+-->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
 
+    <!-- 播放三角（圆角） -->
     <path
-        android:pathData="M0,0 L108,0 L108,108 L0,108 Z"
-        android:fillColor="#161823"/>
+        android:pathData="M34,28 L68,50 L34,72 Z"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="7"
+        android:strokeLineJoin="round"
+        android:fillColor="#FFFFFFFF"/>
 
+    <!-- 下载箭身 -->
     <path
-        android:pathData="M54,28 L54,72"
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="6"
+        android:pathData="M78,62 L78,80"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="7"
         android:strokeLineCap="round"/>
 
+    <!-- 下载箭尖 -->
     <path
-        android:pathData="M34,54 L54,74 L74,54"
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="6"
+        android:pathData="M69,72 L78,82 L87,72"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="7"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
 </vector>

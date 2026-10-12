@@ -10,6 +10,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -34,7 +35,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
@@ -60,8 +63,23 @@ import com.knightlsy.douyin.data.ContentType
 import com.knightlsy.douyin.data.DownloadStatus
 import com.knightlsy.douyin.data.DownloadTask
 import com.knightlsy.douyin.data.VideoQuality
+import com.knightlsy.douyin.ui.theme.AppBarDarkEnd
+import com.knightlsy.douyin.ui.theme.AppBarDarkMid
+import com.knightlsy.douyin.ui.theme.AppBarDarkStart
+import com.knightlsy.douyin.ui.theme.AppBarLightEnd
+import com.knightlsy.douyin.ui.theme.AppBarLightMid
+import com.knightlsy.douyin.ui.theme.AppBarLightStart
+import com.knightlsy.douyin.ui.theme.AppBarLightTint
 import com.knightlsy.douyin.ui.theme.DouyinCyan
 import com.knightlsy.douyin.ui.theme.DouyinPink
+import com.knightlsy.douyin.ui.theme.DouyinPinkSoft
+import com.knightlsy.douyin.ui.theme.StatAmber
+import com.knightlsy.douyin.ui.theme.StatGreen
+import com.knightlsy.douyin.ui.theme.StatPink
+import com.knightlsy.douyin.ui.theme.StatRed
+import com.knightlsy.douyin.ui.theme.StatusFailed
+import com.knightlsy.douyin.ui.theme.StatusRunning
+import com.knightlsy.douyin.ui.theme.StatusSuccess
 import com.knightlsy.douyin.viewmodel.MainViewModel
 
 private val inputUrlPatterns = listOf(
@@ -95,47 +113,92 @@ fun MainScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Row(
-                        modifier = Modifier.combinedClickable(
-                            onDoubleClick = {
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://daohang.knightlsy.cn"))
-                                context.startActivity(intent)
-                            },
-                            onClick = {}
-                        ),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Surface(shape = RoundedCornerShape(10.dp), color = Color.White, modifier = Modifier.size(38.dp)) {
-                            Icon(painterResource(R.drawable.ic_douyin_download), null, Modifier.padding(5.dp), tint = Color.Unspecified)
+            // 顶栏：深色用「深紫底 + 粉/青双色光晕」保留品牌感；
+            // 浅色用「浅粉 → 浅紫 → 内容区底色」渐变收尾，末端与背景同色，消除分界线。
+            // 浅色下刻意不加投影 —— 有投影就会在顶栏底部重新画出一条分界线。
+            val appBarBrush = if (isDarkMode) {
+                Brush.linearGradient(
+                    colors = listOf(AppBarDarkStart, AppBarDarkMid, AppBarDarkEnd)
+                )
+            } else {
+                Brush.verticalGradient(
+                    colors = listOf(AppBarLightStart, AppBarLightMid, AppBarLightTint, AppBarLightEnd)
+                )
+            }
+            val appBarOnColor = if (isDarkMode) Color.White else Color(0xFF1A1024)
+            val appBarSubColor = if (isDarkMode) Color.White.copy(alpha = 0.62f) else Color(0xFF1A1024).copy(alpha = 0.55f)
+            Column(modifier = Modifier.background(appBarBrush)) {
+                TopAppBar(
+                    title = {
+                        Row(
+                            modifier = Modifier.combinedClickable(
+                                onDoubleClick = {
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://daohang.knightlsy.cn"))
+                                    context.startActivity(intent)
+                                },
+                                onClick = {}
+                            ),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(11.dp)
+                        ) {
+                            // 应用图标：品牌渐变圆角方块（与 launcher 图标同一视觉语言）
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = Color.Transparent,
+                                modifier = Modifier
+                                    .size(38.dp)
+                                    .shadow(6.dp, RoundedCornerShape(12.dp))
+                            ) {
+                                Box(
+                                    modifier = Modifier.background(
+                                        Brush.linearGradient(listOf(DouyinPink, DouyinPinkSoft))
+                                    ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        painterResource(R.drawable.ic_douyin_download),
+                                        null,
+                                        Modifier.size(22.dp),
+                                        tint = Color.White
+                                    )
+                                }
+                            }
+                            Column {
+                                Text(
+                                    "抖音下载器",
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 17.sp,
+                                    color = appBarOnColor,
+                                    letterSpacing = (-0.2).sp
+                                )
+                                Text(
+                                    "无水印 · 图集 · 实况",
+                                    fontSize = 10.sp,
+                                    color = appBarSubColor
+                                )
+                            }
                         }
-                        Column {
-                            Text("抖音下载器", fontWeight = FontWeight.Bold, fontSize = 17.sp)
-                            Text("无水印 · 图集下载", fontSize = 10.sp, color = Color.White.copy(alpha = 0.75f))
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent,
+                        titleContentColor = appBarOnColor
+                    ),
+                    actions = {
+                        IconButton(onClick = { viewModel.toggleDarkMode() }) {
+                            Icon(
+                                if (isDarkMode) Icons.Outlined.LightMode else Icons.Outlined.DarkMode,
+                                "切换主题", tint = appBarOnColor
+                            )
+                        }
+                        IconButton(onClick = onNavigateToHistory) {
+                            Icon(painterResource(R.drawable.ic_history), "历史记录", tint = appBarOnColor)
+                        }
+                        IconButton(onClick = onNavigateToAbout) {
+                            Icon(Icons.Outlined.Info, "关于", tint = appBarOnColor)
                         }
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = if (isDarkMode) Color(0xFF1C1B1F) else DouyinPink,
-                    titleContentColor = Color.White
-                ),
-                actions = {
-                    IconButton(onClick = { viewModel.toggleDarkMode() }) {
-                        Icon(
-                            if (isDarkMode) Icons.Outlined.LightMode else Icons.Outlined.DarkMode,
-                            "切换主题", tint = Color.White
-                        )
-                    }
-                    IconButton(onClick = onNavigateToHistory) {
-                        Icon(painterResource(R.drawable.ic_history), "历史记录", tint = Color.White)
-                    }
-                    IconButton(onClick = onNavigateToAbout) {
-                        Icon(Icons.Outlined.Info, "关于", tint = Color.White)
-                    }
-                }
-            )
+                )
+            }
         }
     ) { paddingValues ->
         LazyColumn(
@@ -206,38 +269,113 @@ fun MainScreen(
 
 @Composable
 fun StatsRow(totalDownloads: Int, successDownloads: Int, failedDownloads: Int, activeTasks: Int) {
-    Card(
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 14.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly
-        ) {
-            StatItem("总下载", totalDownloads.toString(), DouyinPink, Icons.Outlined.ListAlt)
-            StatItem("成功", successDownloads.toString(), Color(0xFF4CAF50), Icons.Outlined.Check)
-            StatItem("失败", failedDownloads.toString(), Color(0xFFF44336), Icons.Outlined.Close)
-            StatItem("进行中", activeTasks.toString(), Color(0xFFFF9800), Icons.Outlined.Sync)
+    // 2×2 磁贴：每格独立色条 + 彩色图标底 + 大号粗体数字，扫一眼即可读数。
+    // 原设计是「单卡里 4 个数字平铺」，图标 16dp 很淡、层级弱。
+    val isDark = isDarkBackground()
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            StatTile("总下载", totalDownloads.toString(), StatPink, Icons.Outlined.ListAlt,
+                Modifier.weight(1f), isDark)
+            StatTile("成功", successDownloads.toString(), StatGreen, Icons.Outlined.Check,
+                Modifier.weight(1f), isDark)
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            StatTile("失败", failedDownloads.toString(), StatRed, Icons.Outlined.Close,
+                Modifier.weight(1f), isDark)
+            StatTile("进行中", activeTasks.toString(), StatAmber, Icons.Outlined.Sync,
+                Modifier.weight(1f), isDark)
         }
     }
 }
 
+/** 浅色判定：背景亮度低即为深色主题（避免再往上层传 isDarkMode 参数）。 */
 @Composable
-fun StatItem(label: String, value: String, color: Color, icon: androidx.compose.ui.graphics.vector.ImageVector) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Icon(icon, null, Modifier.size(16.dp), tint = color.copy(alpha = 0.6f))
-        Text(value, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = color)
-        Text(label, fontSize = 10.sp, color = Color.Gray)
+private fun isDarkBackground(): Boolean {
+    val bg = MaterialTheme.colorScheme.background
+    return (0.299f * bg.red + 0.587f * bg.green + 0.114f * bg.blue) < 0.5f
+}
+
+/**
+ * 卡片投影：浅色下用双层投影（近处收紧 + 远处扩散），卡片才会「浮起来」
+ * 而不是像贴上去的纸片。深色下不加投影 —— 深色靠明度差分层，投影反而显脏。
+ */
+@Composable
+private fun Modifier.cardShadow(shape: Shape = RoundedCornerShape(20.dp)): Modifier {
+    return if (isDarkBackground()) {
+        this
+    } else {
+        this.shadow(
+            elevation = 8.dp,
+            shape = shape,
+            ambientColor = Color(0x0F000000),
+            spotColor = Color(0x1A000000)
+        )
+    }
+}
+
+/** 浅色下给卡片描一道极淡的边，进一步区分卡片与背景（深色下不需要）。 */
+@Composable
+private fun cardBorderOrNull(): BorderStroke? {
+    return if (isDarkBackground()) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
+}
+
+@Composable
+fun StatTile(
+    label: String,
+    value: String,
+    accent: Color,
+    icon: ImageVector,
+    modifier: Modifier = Modifier,
+    isDark: Boolean = true
+) {
+    // 双层阴影：近处收紧 + 远处扩散 —— 浅色下卡片才会「浮起来」而不是像贴上去的纸片
+    val tileShadow = if (isDark) {
+        Modifier
+    } else {
+        Modifier.shadow(
+            elevation = 8.dp,
+            shape = RoundedCornerShape(16.dp),
+            ambientColor = Color(0x14000000),
+            spotColor = Color(0x1A000000)
+        )
+    }
+    Card(
+        modifier = modifier.then(tileShadow),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = if (isDark) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isDark) 0.dp else 0.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 13.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(11.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(RoundedCornerShape(11.dp))
+                    .background(accent.copy(alpha = 0.16f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(icon, null, Modifier.size(18.dp), tint = accent)
+            }
+            Column {
+                Text(value, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurface, lineHeight = 22.sp)
+                Text(label, fontSize = 10.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
     }
 }
 
 @Composable
 fun TipsCard() {
     Card(
+        modifier = Modifier.cardShadow(RoundedCornerShape(16.dp)),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        border = cardBorderOrNull(),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -287,8 +425,10 @@ fun InputCard(url: String, onUrlChange: (String) -> Unit, onParse: () -> Unit, o
     }
 
     Card(
+        modifier = Modifier.cardShadow(RoundedCornerShape(20.dp)),
         shape = RoundedCornerShape(20.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        border = cardBorderOrNull(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -370,8 +510,10 @@ fun VideoPreviewCard(videoInfo: ContentInfo.Video, onDownload: (String) -> Unit)
     }
 
     Card(
+        modifier = Modifier.cardShadow(RoundedCornerShape(20.dp)),
         shape = RoundedCornerShape(20.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        border = cardBorderOrNull(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column(Modifier.fillMaxWidth()) {
@@ -555,8 +697,10 @@ fun ImageCollectionPreviewCard(
     }
 
     Card(
+        modifier = Modifier.cardShadow(RoundedCornerShape(20.dp)),
         shape = RoundedCornerShape(20.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        border = cardBorderOrNull(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column(Modifier.fillMaxWidth()) {
@@ -914,31 +1058,61 @@ fun DownloadTaskCard(task: DownloadTask, onRetry: () -> Unit, onCancel: () -> Un
     val progress by animateFloatAsState(targetValue = task.overallProgress, label = "progress")
 
     Card(
+        modifier = Modifier.cardShadow(RoundedCornerShape(14.dp)),
         shape = RoundedCornerShape(14.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        border = cardBorderOrNull(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(52.dp).clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surfaceVariant)) {
-                    val coverUrl = task.contentInfo.coverUrl
-                    if (coverUrl.isNotEmpty()) {
-                        AsyncImage(
-                            model = ImageRequest.Builder(LocalContext.current)
-                                .data(coverUrl)
-                                .crossfade(true)
-                                .size(104, 104)
-                                .build(),
-                            contentDescription = null,
+                // 下载中：缩略图外包一圈环形进度（百分比居中）—— 全卡仅此一处进度指示，
+                // 不再另加横向进度条，避免同一个百分比显示两遍。
+                if (task.status == DownloadStatus.DOWNLOADING) {
+                    Box(Modifier.size(54.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(
+                            progress = progress,
                             modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Crop
+                            color = DouyinPink,
+                            trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                            strokeWidth = 4.dp
                         )
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                "${(progress * 100).toInt()}%",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = DouyinPink
+                            )
+                        }
                     }
-                    Surface(Modifier.align(Alignment.TopStart).padding(3.dp), shape = RoundedCornerShape(3.dp), color = getTypeColor(task.type)) {
-                        Icon(getTypeIcon(task.type), null, Modifier.padding(2.dp).size(10.dp), tint = Color.White)
+                } else {
+                    Box(Modifier.size(52.dp).clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surfaceVariant)) {
+                        val coverUrl = task.contentInfo.coverUrl
+                        if (coverUrl.isNotEmpty()) {
+                            AsyncImage(
+                                model = ImageRequest.Builder(LocalContext.current)
+                                    .data(coverUrl)
+                                    .crossfade(true)
+                                    .size(104, 104)
+                                    .build(),
+                                contentDescription = null,
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
+                            )
+                        }
+                        Surface(Modifier.align(Alignment.TopStart).padding(3.dp), shape = RoundedCornerShape(3.dp), color = getTypeColor(task.type)) {
+                            Icon(getTypeIcon(task.type), null, Modifier.padding(2.dp).size(10.dp), tint = Color.White)
+                        }
                     }
                 }
-                Spacer(Modifier.width(10.dp))
+                Spacer(Modifier.width(11.dp))
                 Column(Modifier.weight(1f)) {
                     Text(task.displayTitle, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Spacer(Modifier.height(3.dp))
@@ -960,22 +1134,18 @@ fun DownloadTaskCard(task: DownloadTask, onRetry: () -> Unit, onCancel: () -> Un
                         }
                     }
                     DownloadStatus.COMPLETED -> IconButton(onClick = onRemove, Modifier.size(32.dp)) {
-                        Icon(Icons.Outlined.CheckCircle, "完成", Modifier.size(18.dp), tint = Color(0xFF4CAF50))
+                        Icon(Icons.Outlined.CheckCircle, "完成", Modifier.size(18.dp), tint = StatusSuccess)
                     }
                     else -> {}
                 }
             }
-            if (task.status == DownloadStatus.DOWNLOADING) {
-                @Suppress("DEPRECATION")
-                LinearProgressIndicator(
-                    progress = progress,
-                    modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
-                    color = DouyinPink, trackColor = MaterialTheme.colorScheme.surfaceVariant
+            // 多文件任务（如图集）才显示文件进度 —— 这是真实可用的数据，不编造速度/体积
+            if (task.status == DownloadStatus.DOWNLOADING && task.totalFiles > 1) {
+                Text(
+                    "第 ${(task.completedFiles + 1).coerceAtMost(task.totalFiles)} / ${task.totalFiles} 个文件",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("${(progress * 100).toInt()}%", fontSize = 11.sp, color = DouyinPink, fontWeight = FontWeight.Bold)
-                    Text("正在下载...", fontSize = 11.sp, color = Color.Gray)
-                }
             }
             if (task.status == DownloadStatus.FAILED && task.errorMessage != null) {
                 Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)) {
