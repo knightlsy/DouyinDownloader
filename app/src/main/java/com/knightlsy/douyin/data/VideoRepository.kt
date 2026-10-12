@@ -108,10 +108,31 @@ class VideoRepository {
         Pattern.compile("aweme_id=(\\d+)")
     )
 
+    /**
+     * 从分享文案中抽出干净的短链地址。
+     *
+     * 抖音分享文案形如「4.35 复制打开抖音，看看【xxx的作品】… https://v.douyin.com/xxxxxx/ 09/09 :2pm …」，
+     * 链接周围常粘着中文文案与时间戳。若把整段文本当 URL 请求，短链解跳必然失败。
+     * 所以先用正则切出链接边界（以空白、中文字符或结尾为界），只保留链接本体。
+     *
+     * 匹配不到时返回 null，由调用方回退到 trim() 后的原文。
+     */
+    private fun extractShortLink(text: String): String? {
+        val m = Pattern.compile(
+            "https?://(?:v\\.douyin\\.com|www\\.douyin\\.com|www\\.iesdouyin\\.com|vm\\.tiktok\\.com)[^\\s\\u4e00-\\u9fff]*"
+        ).matcher(text)
+        return if (m.find()) m.group() else null
+    }
+
     suspend fun extractVideoId(url: String): String? = withContext(Dispatchers.IO) {
         try {
             var processedUrl = url.trim()
             if (processedUrl.contains("v.douyin.com") || processedUrl.contains("vm.tiktok.com")) {
+                // 优先用抽出的干净短链，抽不到才退回原文（兼容旧行为）
+                extractShortLink(processedUrl)?.let {
+                    Log.d(TAG, "Short link extracted from share text")
+                    processedUrl = it
+                }
                 processedUrl = resolveShortUrl(processedUrl)
             }
             for (pattern in videoIdPatterns) {

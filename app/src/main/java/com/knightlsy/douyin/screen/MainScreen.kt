@@ -530,7 +530,7 @@ fun VideoPreviewCard(videoInfo: ContentInfo.Video, onDownload: (String) -> Unit)
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column(Modifier.fillMaxWidth()) {
-            Box(Modifier.fillMaxWidth().height(220.dp).background(Color(0xFF0a0a1a))) {
+            Box(Modifier.fillMaxWidth().height(236.dp).background(Color(0xFF0a0a1a))) {
                 if (videoInfo.coverUrl.isNotEmpty()) {
                     AsyncImage(
                         model = ImageRequest.Builder(LocalContext.current)
@@ -542,6 +542,15 @@ fun VideoPreviewCard(videoInfo: ContentInfo.Video, onDownload: (String) -> Unit)
                         contentScale = ContentScale.Crop
                     )
                 }
+                // 底部渐变遮罩：把时长徽标和封面底部隔开，避免徽标直接压在画面上
+                Box(
+                    Modifier.fillMaxWidth().height(96.dp).align(Alignment.BottomCenter)
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(Color.Transparent, Color.Black.copy(alpha = 0.55f))
+                            )
+                        )
+                )
                 Box(
                     Modifier.align(Alignment.Center)
                         .size(60.dp)
@@ -574,20 +583,43 @@ fun VideoPreviewCard(videoInfo: ContentInfo.Video, onDownload: (String) -> Unit)
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(videoInfo.title, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 22.sp)
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Icon(Icons.Outlined.Person, null, Modifier.size(14.dp), tint = Color.Gray)
-                    Text("@${videoInfo.author}", fontSize = 13.sp, color = Color.Gray)
+                    Icon(Icons.Outlined.Person, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("@${videoInfo.author}", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 if (videoInfo.diggCount > 0 || videoInfo.commentCount > 0 || videoInfo.shareCount > 0) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        StatChip(Icons.Outlined.ThumbUpOffAlt, formatCount(videoInfo.diggCount))
-                        StatChip(Icons.Outlined.ChatBubbleOutline, formatCount(videoInfo.commentCount))
-                        StatChip(Icons.Outlined.Share, formatCount(videoInfo.shareCount))
+                    // 数据条：上下细分隔线，让元信息从正文里独立成一个区块
+                    Column {
+                        HorizontalDivider(
+                            Modifier.fillMaxWidth(),
+                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f),
+                            thickness = 0.5.dp
+                        )
+                        Row(
+                            Modifier.fillMaxWidth().padding(vertical = 11.dp),
+                            horizontalArrangement = Arrangement.spacedBy(18.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            StatChip(Icons.Outlined.ThumbUpOffAlt, formatCount(videoInfo.diggCount))
+                            StatChip(Icons.Outlined.ChatBubbleOutline, formatCount(videoInfo.commentCount))
+                            StatChip(Icons.Outlined.Share, formatCount(videoInfo.shareCount))
+                        }
+                        if (videoInfo.width > 0 && videoInfo.height > 0) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Icon(Icons.Outlined.HighQuality, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("${videoInfo.width} × ${videoInfo.height}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        HorizontalDivider(
+                            Modifier.fillMaxWidth(),
+                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f),
+                            thickness = 0.5.dp
+                        )
                     }
-                }
-                if (videoInfo.width > 0 && videoInfo.height > 0) {
+                } else if (videoInfo.width > 0 && videoInfo.height > 0) {
+                    // 没有互动数据时，分辨率单独成行，不丢掉这条信息
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Icon(Icons.Outlined.HighQuality, null, Modifier.size(14.dp), tint = Color.Gray)
-                        Text("${videoInfo.width}x${videoInfo.height}", fontSize = 12.sp, color = Color.Gray)
+                        Icon(Icons.Outlined.HighQuality, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("${videoInfo.width} × ${videoInfo.height}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
                 // 不再提供画质选择：统一取最高可用清晰度（1080p），
@@ -1214,12 +1246,13 @@ fun formatDuration(millis: Long): String {
 
 @Composable
 fun StatChip(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String) {
+    val tint = MaterialTheme.colorScheme.onSurfaceVariant
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(3.dp)
     ) {
-        Icon(icon, null, Modifier.size(13.dp), tint = Color.Gray)
-        Text(text, fontSize = 12.sp, color = Color.Gray)
+        Icon(icon, null, Modifier.size(13.dp), tint = tint)
+        Text(text, fontSize = 12.sp, color = tint)
     }
 }
 
