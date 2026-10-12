@@ -15,8 +15,8 @@ android {
         applicationId = "com.knightlsy.douyin"
         minSdk = 26
         targetSdk = 34
-        versionCode = 35
-        versionName = "1.6.7"
+        versionCode = 36
+        versionName = "1.6.8"
 
         // 云端同步记录接口。密钥不写进源码（仓库是公开的）：
         // 优先环境变量（CI secrets），其次 local.properties（本地构建，已 gitignore）。

@@ -27,11 +27,14 @@ class ThemePreferences(context: Context) {
         if (raw != null) {
             return runCatching { ThemeMode.valueOf(raw) }.getOrDefault(ThemeMode.SYSTEM)
         }
-        // 迁移旧值：曾经手动选过深色的用户保持深色，其余改为跟随系统
+        // 旧版本（v1.6.6 及以前）只存一个 Boolean dark_mode，且它没有「跟随系统」这个概念：
+        // 那个值只是「上次渲染时是不是深色」，不是用户的明确选择（默认就是浅色）。
+        // 因此迁移时一律转为 SYSTEM（跟随系统），而不是把它当成用户锁定了浅色/深色 ——
+        // 否则升级后系统切深色，App 会一直卡在浅色，看起来就是「不跟随系统」。
         if (prefs.contains(legacyKey)) {
-            val migrated = if (prefs.getBoolean(legacyKey, false)) ThemeMode.DARK else ThemeMode.LIGHT
-            setMode(migrated)
-            return migrated
+            setMode(ThemeMode.SYSTEM)
+            prefs.edit().remove(legacyKey).apply()
+            return ThemeMode.SYSTEM
         }
         return ThemeMode.SYSTEM
     }
