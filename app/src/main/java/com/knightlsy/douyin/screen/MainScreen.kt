@@ -48,13 +48,19 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.ui.PlayerView
+import androidx.media3.ui.compose.material3.Player
+import androidx.media3.ui.compose.material3.PlayerDefaults
+import androidx.media3.ui.compose.material3.buttons.PlayPauseButton
+import androidx.media3.ui.compose.material3.buttons.SeekBackButton
+import androidx.media3.ui.compose.material3.buttons.SeekForwardButton
+import androidx.media3.ui.compose.material3.indicator.PositionText
+import androidx.media3.ui.compose.material3.indicator.ProgressSlider
+import androidx.media3.ui.compose.material3.indicator.RemainingDurationText
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.knightlsy.douyin.R
@@ -684,24 +690,65 @@ fun VideoPlayerDialog(videoUrl: String, onDismiss: () -> Unit) {
             contentAlignment = Alignment.Center
         ) {
             player?.let { exoPlayer ->
-                AndroidView(
-                    factory = { ctx ->
-                        PlayerView(ctx).apply {
-                            useController = true
-                            this.player = exoPlayer
-                            setShowBuffering(PlayerView.SHOW_BUFFERING_ALWAYS)
-                        }
+                // 官方 media3 Compose material3 Player：视频渲染 + 控制层全部走 Compose，
+                // 不再用 AndroidView(PlayerView) 桥接。
+                Player(
+                    player = exoPlayer,
+                    modifier = Modifier.fillMaxSize(),
+                    // 中央区：播放/暂停 + 快进快退。官方 CenterControls 已带这些，
+                    // 但图标和间距用我们自己的，保持品牌一致。
+                    centerControls = { p, visible ->
+                        PlayerDefaults.CenterControls(
+                            player = p,
+                            visible = visible,
+                            modifier = Modifier.fillMaxWidth(),
+                            back = {
+                                SeekBackButton(p, Modifier.size(44.dp), tint = Color.White)
+                            },
+                            central = { pp ->
+                                PlayPauseButton(pp, Modifier.size(64.dp), tint = Color.White)
+                            },
+                            forward = {
+                                SeekForwardButton(p, Modifier.size(44.dp), tint = Color.White)
+                            }
+                        )
                     },
-                    modifier = Modifier.fillMaxSize()
+                    // 底部区：进度条 + 时间。自己写，才能用品牌粉和细线样式。
+                    bottomControls = { p, _ ->
+                        Column(
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            ProgressSlider(
+                                player = p,
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = SliderDefaults.colors(
+                                    thumbColor = DouyinPink,
+                                    activeTrackColor = DouyinPink,
+                                    inactiveTrackColor = Color.White.copy(alpha = 0.25f)
+                                )
+                            )
+                            Row(
+                                Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                PositionText(p, Modifier, color = Color.White.copy(alpha = 0.8f))
+                                RemainingDurationText(p, Modifier, color = Color.White.copy(alpha = 0.8f))
+                            }
+                        }
+                    }
                 )
             }
+            // 顶部：关闭按钮
             IconButton(
                 onClick = {
                     player?.release()
                     player = null
                     onDismiss()
                 },
-                modifier = Modifier.align(Alignment.TopStart).padding(16.dp)
+                modifier = Modifier.align(Alignment.TopStart).padding(8.dp)
             ) {
                 Icon(Icons.Outlined.Close, "关闭", tint = Color.White, modifier = Modifier.size(24.dp))
             }
@@ -1116,7 +1163,7 @@ fun DownloadTaskCard(task: DownloadTask, onRetry: () -> Unit, onCancel: () -> Un
                 if (task.status == DownloadStatus.DOWNLOADING) {
                     Box(Modifier.size(54.dp), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator(
-                            progress = progress,
+                            progress = { progress },
                             modifier = Modifier.fillMaxSize(),
                             color = DouyinPink,
                             trackColor = MaterialTheme.colorScheme.surfaceVariant,
