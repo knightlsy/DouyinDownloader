@@ -15,6 +15,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -38,6 +39,7 @@ import androidx.compose.ui.unit.sp
 import androidx.activity.compose.BackHandler
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.knightlsy.douyin.data.ThemeMode
 import com.knightlsy.douyin.data.UpdateChecker
 import com.knightlsy.douyin.data.UpdateResult
 import com.knightlsy.douyin.screen.AboutScreen
@@ -54,7 +56,15 @@ class MainActivity : ComponentActivity() {
         requestNotificationPermission()
         setContent {
             val mainViewModel: MainViewModel = viewModel()
-            val isDarkMode by mainViewModel.isDarkMode.collectAsState()
+            val themeMode by mainViewModel.themeMode.collectAsState()
+            // 跟随系统：直接读系统的深色状态，系统切换时 Compose 会重组，
+            // 无需重建 Activity（Manifest 已声明 configChanges="uiMode"）。
+            val systemDark = isSystemInDarkTheme()
+            val isDarkMode = when (themeMode) {
+                ThemeMode.SYSTEM -> systemDark
+                ThemeMode.LIGHT -> false
+                ThemeMode.DARK -> true
+            }
             val context = this@MainActivity
 
             var showDialog by remember { mutableStateOf(false) }

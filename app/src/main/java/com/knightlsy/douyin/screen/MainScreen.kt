@@ -62,6 +62,7 @@ import com.knightlsy.douyin.data.ContentInfo
 import com.knightlsy.douyin.data.ContentType
 import com.knightlsy.douyin.data.DownloadStatus
 import com.knightlsy.douyin.data.DownloadTask
+import com.knightlsy.douyin.data.ThemeMode
 import com.knightlsy.douyin.data.VideoQuality
 import com.knightlsy.douyin.ui.theme.AppBarDarkEnd
 import com.knightlsy.douyin.ui.theme.AppBarDarkMid
@@ -100,7 +101,8 @@ fun MainScreen(
     val uiState by viewModel.uiState.collectAsState()
     val downloadTasks by viewModel.downloadTasks.collectAsState()
     val stats by viewModel.stats.collectAsState()
-    val isDarkMode by viewModel.isDarkMode.collectAsState()
+    val isDarkMode = isDarkBackground()
+    val themeMode by viewModel.themeMode.collectAsState()
     val context = LocalContext.current
 
     val activeTaskCount by remember(downloadTasks) {
@@ -184,10 +186,21 @@ fun MainScreen(
                         titleContentColor = appBarOnColor
                     ),
                     actions = {
-                        IconButton(onClick = { viewModel.toggleDarkMode() }) {
+                        // 三态循环：跟随系统 → 浅色 → 深色。
+                        // 图标反映「当前模式」而非「点击后的模式」，用户一眼知道现在处于哪一态。
+                        IconButton(onClick = { viewModel.cycleThemeMode() }) {
                             Icon(
-                                if (isDarkMode) Icons.Outlined.LightMode else Icons.Outlined.DarkMode,
-                                "切换主题", tint = appBarOnColor
+                                when (themeMode) {
+                                    ThemeMode.SYSTEM -> Icons.Outlined.BrightnessAuto
+                                    ThemeMode.LIGHT -> Icons.Outlined.LightMode
+                                    ThemeMode.DARK -> Icons.Outlined.DarkMode
+                                },
+                                when (themeMode) {
+                                    ThemeMode.SYSTEM -> "跟随系统"
+                                    ThemeMode.LIGHT -> "浅色模式"
+                                    ThemeMode.DARK -> "深色模式"
+                                },
+                                tint = appBarOnColor
                             )
                         }
                         IconButton(onClick = onNavigateToHistory) {

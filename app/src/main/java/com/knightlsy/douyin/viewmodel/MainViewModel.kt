@@ -17,13 +17,17 @@ import com.knightlsy.douyin.data.DownloadTask
 import com.knightlsy.douyin.data.HistoryRepository
 import com.knightlsy.douyin.data.ParseDiag
 import com.knightlsy.douyin.data.ParseRecord
+import com.knightlsy.douyin.data.ThemeMode
 import com.knightlsy.douyin.data.ThemePreferences
 import com.knightlsy.douyin.data.VideoRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
@@ -48,14 +52,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _stats = MutableStateFlow(DownloadStats())
     val stats: StateFlow<DownloadStats> = _stats.asStateFlow()
 
-    private val _isDarkMode = MutableStateFlow(themePreferences.isDarkMode())
-    val isDarkMode: StateFlow<Boolean> = _isDarkMode.asStateFlow()
+    // 主题模式：跟随系统 / 浅色 / 深色（三态）。跟随系统时由 Composable 读取
+    // isSystemInDarkTheme() 实时判定，系统切换深色模式即刻生效。
+    private val _themeMode = MutableStateFlow(themePreferences.mode())
+    val themeMode: StateFlow<ThemeMode> = _themeMode.asStateFlow()
 
-    fun toggleDarkMode() {
-        val newMode = !_isDarkMode.value
-        _isDarkMode.value = newMode
-        themePreferences.setDarkMode(newMode)
+    /** 在「跟随系统 → 浅色 → 深色」之间循环切换。 */
+    fun cycleThemeMode() {
+        val next = when (_themeMode.value) {
+            ThemeMode.SYSTEM -> ThemeMode.LIGHT
+            ThemeMode.LIGHT -> ThemeMode.DARK
+            ThemeMode.DARK -> ThemeMode.SYSTEM
+        }
+        _themeMode.value = next
+        themePreferences.setMode(next)
     }
+
+    /** 兼容旧调用点：当前是否呈现深色（跟随系统时返回系统值由 UI 层决定，这里保守返回 false）。 */
+    val isDarkMode: StateFlow<Boolean> = _themeMode
+        .map { it == ThemeMode.DARK }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, themePreferences.mode() == ThemeMode.DARK)
+
+    fun toggleDarkMode() = cycleThemeMode()
 
     private val urlPatterns = listOf(
         Regex("https?://v\\.douyin\\.com/[\\w-]+/?"),

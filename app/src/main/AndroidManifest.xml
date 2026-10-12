@@ -28,6 +28,7 @@
             android:name="com.knightlsy.douyin.MainActivity"
             android:exported="true"
             android:theme="@style/Theme.DouyinDownloader"
+            android:configChanges="uiMode|orientation|screenSize|screenLayout|keyboardHidden|density"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
