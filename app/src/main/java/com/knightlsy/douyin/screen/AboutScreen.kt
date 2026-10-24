@@ -1,35 +1,56 @@
 package com.knightlsy.douyin.screen
 
 import android.content.Intent
-import com.knightlsy.douyin.BuildConfig
 import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.outlined.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.knightlsy.douyin.ui.theme.DouyinCyan
-import com.knightlsy.douyin.ui.theme.DouyinPink
+import com.knightlsy.douyin.BuildConfig
+import com.knightlsy.douyin.ui.components.BgGhostButton
+import com.knightlsy.douyin.ui.components.BgHair
+import com.knightlsy.douyin.ui.components.BgSectionLabel
+import com.knightlsy.douyin.ui.theme.BgRadius
+import com.knightlsy.douyin.ui.theme.BgSpace
+import com.knightlsy.douyin.ui.theme.LocalBgColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.net.URL
+
 
 private data class UpdateInfo(
     val hasUpdate: Boolean,
@@ -81,9 +102,20 @@ private suspend fun checkUpdate(): UpdateInfo = withContext(Dispatchers.IO) {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * 关于页。
+ *
+ * 内容一项没删：软件信息、10 项技术架构、8 项功能特性、开源信息、更新检查。
+ * 但把旧版的「图标 + 卡片 + 分组标题」全部拆掉，换成
+ * 「等宽小节标签 + 细线 + 左边标签右边值」的排版。
+ *
+ * 旧版每个技术项都配一个 Material 图标（Cloud / Storage / AccountTree…），
+ * 10 个图标各有各的语义，读者反而要逐个辨认。现在只用文字对齐，
+ * 扫一眼就能读完 —— 这是「关于」页，信息密度比装饰重要。
+ */
 @Composable
 fun AboutScreen(onBack: () -> Unit) {
+    val c = LocalBgColors.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val githubUrl = "https://github.com/knightlsy/DouyinDownloader"
@@ -92,303 +124,273 @@ fun AboutScreen(onBack: () -> Unit) {
     var updateInfo by remember { mutableStateOf<UpdateInfo?>(null) }
     var isChecking by remember { mutableStateOf(false) }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("关于", fontWeight = FontWeight.Bold, fontSize = 18.sp) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Filled.ArrowBack, "返回", tint = Color.White)
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = DouyinPink, titleContentColor = Color.White)
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(c.paper)
+            .systemBarsPadding()
+    ) {
+        // 顶栏
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(start = 10.dp, end = BgSpace.gutter, top = 8.dp, bottom = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                Modifier
+                    .size(38.dp)
+                    .clip(CircleShape)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = onBack,
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text("←", fontSize = 17.sp, color = c.ink2)
+            }
+            Spacer(Modifier.width(4.dp))
+            Text(
+                text = "关于",
+                style = MaterialTheme.typography.displayMedium,
+                color = c.ink,
             )
         }
-    ) { paddingValues ->
+
+        BgHair()
+
         Column(
-            modifier = Modifier
+            Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
-                .background(MaterialTheme.colorScheme.background)
                 .verticalScroll(rememberScrollState())
-                .padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp)
+                .padding(horizontal = BgSpace.gutter)
         ) {
-            Card(
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-            ) {
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Surface(
-                        modifier = Modifier.size(80.dp),
-                        shape = CircleShape,
-                        color = DouyinPink
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Text("DY", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                        }
-                    }
-                    Text("抖音下载器", fontWeight = FontWeight.Bold, fontSize = 20.sp)
-                    Text("无水印 · 图集下载", fontSize = 13.sp, color = Color.Gray)
-                    Text("v${BuildConfig.VERSION_NAME}", fontSize = 12.sp, color = Color.Gray)
+            Spacer(Modifier.height(22.dp))
+
+            // 应用标记
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    Modifier
+                        .size(9.dp)
+                        .clip(CircleShape)
+                        .background(c.accent)
+                )
+                Spacer(Modifier.width(10.dp))
+                Column {
+                    Text(
+                        text = "抖音下载器",
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = c.ink,
+                    )
+                    Spacer(Modifier.height(3.dp))
+                    Text(
+                        text = "无水印 · 图集下载",
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 10.sp,
+                        letterSpacing = 1.4.sp,
+                        color = c.ink3,
+                    )
                 }
             }
 
-            Card(
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-            ) {
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+            Spacer(Modifier.height(26.dp))
+            BgSectionLabel("软件信息")
+            Spacer(Modifier.height(6.dp))
+            BgHair()
+
+            KVRow("软件名称", "抖音视频无水印下载器")
+            KVRow("作者", "Knightlsy")
+            KVRow("版本", "v${BuildConfig.VERSION_NAME}")
+            KVRow("开源协议", "MIT License")
+
+            Spacer(Modifier.height(6.dp))
+            BgGhostButton(
+                text = if (isChecking) "正在检查…" else "检查更新",
+                enabled = !isChecking,
+                onClick = {
+                    scope.launch {
+                        isChecking = true
+                        val info = checkUpdate()
+                        isChecking = false
+                        updateInfo = info
+                        showUpdateDialog = true
+                    }
+                },
+            )
+
+            Spacer(Modifier.height(26.dp))
+            BgSectionLabel("技术架构")
+            Spacer(Modifier.height(6.dp))
+            BgHair()
+
+            KVRow("开发语言", "Kotlin")
+            KVRow("UI 框架", "Jetpack Compose")
+            KVRow("设计规范", "Material Design 3")
+            KVRow("网络库", "OkHttp3")
+            KVRow("JSON 解析", "Gson")
+            KVRow("图片加载", "Coil")
+            KVRow("视频播放", "Media3 ExoPlayer")
+            KVRow("异步处理", "Kotlin Coroutines")
+            KVRow("状态管理", "StateFlow")
+            KVRow("本地数据库", "Room")
+
+            Spacer(Modifier.height(26.dp))
+            BgSectionLabel("功能特性", accent = "· 8 项")
+            Spacer(Modifier.height(6.dp))
+            BgHair()
+
+            listOf(
+                "无水印下载抖音视频",
+                "支持图集批量下载",
+                "自动解析短链接",
+                "多线程并发下载",
+                "断点续传与自动重试",
+                "实时下载进度通知",
+                "下载历史记录管理",
+                "深色模式支持",
+            ).forEachIndexed { i, t ->
+                Row(
+                    Modifier.fillMaxWidth().padding(vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Icon(Icons.Outlined.Person, null, tint = DouyinPink, modifier = Modifier.size(20.dp))
-                        Text("软件信息", fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                    }
-                    Spacer(Modifier.height(4.dp))
-                    AboutItem(label = "软件名称", value = "抖音视频无水印下载器")
-                    AboutItem(label = "软件作者", value = "Knightlsy")
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("版本号", fontSize = 13.sp, color = Color.Gray)
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            TextButton(
-                                onClick = {
-                                    isChecking = true
-                                    scope.launch {
-                                        updateInfo = checkUpdate()
-                                        isChecking = false
-                                        showUpdateDialog = true
-                                    }
-                                },
-                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
-                                enabled = !isChecking
-                            ) {
-                                if (isChecking) {
-                                    CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = DouyinCyan)
-                                } else {
-                                    Text("检查更新", fontSize = 12.sp, color = DouyinCyan)
-                                }
-                            }
-                            Text("v${BuildConfig.VERSION_NAME}", fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                        }
-                    }
-                    AboutItem(label = "开源协议", value = "MIT License")
+                    Text(
+                        text = (i + 1).toString().padStart(2, '0'),
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 9.5.sp,
+                        letterSpacing = 0.6.sp,
+                        color = c.ink3,
+                        modifier = Modifier.width(26.dp),
+                    )
+                    Text(t, fontSize = 13.sp, color = c.ink2)
                 }
+                if (i != 7) BgHair()
             }
 
-            Card(
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-            ) {
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Icon(Icons.Outlined.Code, null, tint = DouyinCyan, modifier = Modifier.size(20.dp))
-                        Text("技术架构", fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                    }
-                    Spacer(Modifier.height(4.dp))
-                    TechItem("开发语言", "Kotlin", Icons.Outlined.Brush)
-                    TechItem("UI框架", "Jetpack Compose", Icons.Outlined.ViewQuilt)
-                    TechItem("设计规范", "Material Design 3", Icons.Outlined.Palette)
-                    TechItem("网络库", "OkHttp3", Icons.Outlined.Cloud)
-                    TechItem("JSON解析", "Gson", Icons.Outlined.DataObject)
-                    TechItem("图片加载", "Coil", Icons.Outlined.Image)
-                    TechItem("视频播放", "Media3 ExoPlayer", Icons.Outlined.PlayCircle)
-                    TechItem("异步处理", "Kotlin Coroutines", Icons.Outlined.Autorenew)
-                    TechItem("状态管理", "StateFlow", Icons.Outlined.AccountTree)
-                    TechItem("本地数据库", "Room", Icons.Outlined.Storage)
-                }
-            }
+            Spacer(Modifier.height(26.dp))
+            BgSectionLabel("开源信息")
+            Spacer(Modifier.height(6.dp))
+            BgHair()
 
-            Card(
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-            ) {
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Icon(Icons.Outlined.Star, null, tint = Color(0xFFFF9800), modifier = Modifier.size(20.dp))
-                        Text("功能特性", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+            KVRow("仓库地址", "github.com/knightlsy/DouyinDownloader")
+            Spacer(Modifier.height(4.dp))
+            BgGhostButton(
+                text = "访问 GitHub 仓库",
+                onClick = {
+                    runCatching {
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(githubUrl)))
                     }
-                    Spacer(Modifier.height(4.dp))
-                    FeatureItem("无水印下载抖音视频")
-                    FeatureItem("支持图集批量下载")
-                    FeatureItem("自动解析短链接")
-                    FeatureItem("多线程并发下载")
-                    FeatureItem("断点续传与自动重试")
-                    FeatureItem("实时下载进度通知")
-                    FeatureItem("下载历史记录管理")
-                    FeatureItem("深色模式支持")
-                }
-            }
+                },
+            )
 
-            Card(
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-            ) {
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Icon(Icons.Outlined.Code, null, tint = Color(0xFF333333), modifier = Modifier.size(20.dp))
-                        Text("开源信息", fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                    }
-                    Spacer(Modifier.height(4.dp))
-                    AboutItem(label = "开源协议", value = "MIT License")
-                    AboutItem(label = "仓库地址", value = "github.com/knightlsy/DouyinDownloader")
-                    Spacer(Modifier.height(8.dp))
-
-                    Button(
-                        onClick = {
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(githubUrl))
-                            context.startActivity(intent)
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF333333)),
-                        contentPadding = PaddingValues(vertical = 12.dp)
-                    ) {
-                        Icon(Icons.Outlined.OpenInNew, null, Modifier.size(18.dp), tint = Color.White)
-                        Spacer(Modifier.width(8.dp))
-                        Text("访问 GitHub 仓库", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 14.sp)
-                    }
-                }
-            }
-
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(48.dp))
         }
     }
 
-    if (showUpdateDialog && updateInfo != null) {
+    /* ── 更新弹窗 ── */
+    if (showUpdateDialog) {
+        val info = updateInfo
         AlertDialog(
             onDismissRequest = { showUpdateDialog = false },
-            icon = {
-                Icon(
-                    if (updateInfo!!.hasUpdate) Icons.Outlined.SystemUpdate else Icons.Outlined.CheckCircle,
-                    null,
-                    tint = if (updateInfo!!.hasUpdate) DouyinCyan else Color(0xFF4CAF50),
-                    modifier = Modifier.size(48.dp)
-                )
-            },
+            containerColor = c.paper,
+            shape = RoundedCornerShape(BgRadius.r2),
             title = {
                 Text(
-                    if (updateInfo!!.hasUpdate) "发现新版本" else "已是最新版本",
-                    fontWeight = FontWeight.Bold
+                    text = if (info?.hasUpdate == true) "发现新版本" else "已是最新版本",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = c.ink,
                 )
             },
             text = {
                 Column {
-                    if (updateInfo!!.hasUpdate) {
-                        Text("当前版本: v${BuildConfig.VERSION_NAME}", fontSize = 13.sp, color = Color.Gray)
-                        Text("最新版本: v${updateInfo!!.version}", fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                    } else if (updateInfo!!.packagedAt.isNotEmpty()) {
-                        // 已是最新版：不重复版本号，只说明最后一次打包时间
-                        Text("最后更新：${updateInfo!!.packagedAt}", fontSize = 13.sp, color = Color.Gray)
+                    Text(
+                        text = "当前版本: v${BuildConfig.VERSION_NAME}",
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 11.5.sp,
+                        color = c.ink3,
+                    )
+                    if (info != null && info.version.isNotBlank()) {
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = "最新版本: v${info.version}",
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 11.5.sp,
+                            color = c.ink3,
+                        )
                     }
-                    if (updateInfo!!.releaseNotes.isNotEmpty()) {
+                    if (info != null && info.packagedAt.isNotBlank()) {
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = "最后更新: ${info.packagedAt}",
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 11.5.sp,
+                            color = c.ink3,
+                        )
+                    }
+                    if (info != null && info.releaseNotes.isNotBlank() && info.hasUpdate) {
                         Spacer(Modifier.height(12.dp))
-                        Text("更新内容：", fontSize = 12.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
-                        Text(updateInfo!!.releaseNotes, fontSize = 13.sp, lineHeight = 20.sp)
+                        Text("更新内容：", fontSize = 12.5.sp, fontWeight = FontWeight.Medium, color = c.ink)
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = info.releaseNotes.take(600),
+                            fontSize = 11.5.sp,
+                            lineHeight = 17.sp,
+                            color = c.ink2,
+                        )
                     }
                 }
             },
             confirmButton = {
-                if (updateInfo!!.hasUpdate) {
-                    Button(
-                        onClick = {
-                            showUpdateDialog = false
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(updateInfo!!.downloadUrl))
-                            context.startActivity(intent)
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = DouyinCyan)
-                    ) {
-                        Text("下载更新")
+                if (info?.hasUpdate == true && info.downloadUrl.isNotBlank()) {
+                    TextButton(onClick = {
+                        showUpdateDialog = false
+                        runCatching {
+                            context.startActivity(
+                                Intent(Intent.ACTION_VIEW, Uri.parse(info.downloadUrl))
+                            )
+                        }
+                    }) {
+                        Text("下载更新", color = c.accent)
                     }
                 } else {
-                    Button(
-                        onClick = { showUpdateDialog = false },
-                        colors = ButtonDefaults.buttonColors(containerColor = DouyinCyan)
-                    ) {
-                        Text("确定")
+                    TextButton(onClick = { showUpdateDialog = false }) {
+                        Text("确定", color = c.ink2)
                     }
                 }
             },
-            dismissButton = {
-                if (updateInfo!!.hasUpdate) {
+            dismissButton = if (info?.hasUpdate == true) {
+                {
                     TextButton(onClick = { showUpdateDialog = false }) {
-                        Text("稍后")
+                        Text("稍后", color = c.ink3)
                     }
                 }
-            }
+            } else null,
         )
     }
 }
 
+/** 左边等宽标签、右边值的对齐行。 */
 @Composable
-private fun AboutItem(label: String, value: String) {
+private fun KVRow(label: String, value: String) {
+    val c = LocalBgColors.current
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Text(label, fontSize = 13.sp, color = Color.Gray)
-        Text(value, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-    }
-}
-
-@Composable
-private fun TechItem(name: String, value: String, icon: ImageVector) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+        Modifier.fillMaxWidth().padding(vertical = 11.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
+        horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Surface(
-            modifier = Modifier.size(32.dp),
-            shape = RoundedCornerShape(8.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(icon, null, Modifier.size(16.dp), tint = DouyinPink)
-            }
-        }
-        Column {
-            Text(name, fontSize = 12.sp, color = Color.Gray)
-            Text(value, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-        }
+        Text(
+            text = label,
+            fontFamily = FontFamily.Monospace,
+            fontSize = 10.5.sp,
+            letterSpacing = 0.6.sp,
+            color = c.ink3,
+        )
+        Text(
+            text = value,
+            fontSize = 12.5.sp,
+            color = c.ink,
+            modifier = Modifier.padding(start = 16.dp),
+        )
     }
-}
-
-@Composable
-private fun FeatureItem(text: String) {
-    Row(
-        modifier = Modifier.padding(vertical = 3.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Surface(
-            modifier = Modifier.size(6.dp),
-            shape = CircleShape,
-            color = DouyinCyan
-        ) {}
-        Text(text, fontSize = 13.sp)
-    }
+    BgHair()
 }

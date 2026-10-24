@@ -2,6 +2,132 @@
 
 > 现代化Material Design 3界面 | 适用于小米14Pro / Android 16
 
+## 界面设计系统（v1.7.0）
+
+整套 UI 重写。设计语言是 **A+D 混合**：骨架取「影院感」（内容当主角、UI 退到边缘），
+配色取「抖音基因的克制版」（深紫黑底 + 粉青双色，但整体压暗、去渐变滥用）。
+
+### 配色
+
+所有色值由 OKLCH 精确转换而来，不是肉眼估的：
+
+```
+深色底   oklch(0.14 0.018 295)  → #0A0810
+深色粉   oklch(0.68 0.21 12)    → #FE4F75   抖音原色 #FE2C55 同族，稍沉
+深色青   oklch(0.80 0.13 195)   → #2AD7D7   抖音原色 #25F4EE 同族，降饱和
+浅色粉   oklch(0.55 0.21 12)    → #CE1750   深色粉在白底会糊，必须压暗
+浅色青   oklch(0.60 0.13 195)   → #009798
+```
+
+**纪律：一屏里粉青加起来不超过 4 处。** 粉只用于主行动（解析 / 下载 / 已选）与失败，
+青只用于成功与次要标记，其余全部走中性灰。超过这个数就从「信号」退化成「装饰」。
+
+### 几何
+
+- 圆角统一 **2dp**（Material 默认 12–28dp 是「友好」语言，这个应用是工具，方角表达精确）
+- 分隔只用 **1dp 细线**，不用卡片阴影与浮起
+- 去掉 Scaffold + TopAppBar（顶栏从 64dp 降到 46dp），标题自己承担导航
+
+### 排版
+
+大标题用「系统无衬线 + Light 字重 + 负字距 + 大写」逼近窄体观感 —— 设计稿里的 Oswald
+是窄体，但 Android 没有内置窄体，打包 Oswald 又会因为不含中文字形而露出 fallback 接缝。
+等宽用于所有数据：体积、时长、分辨率、百分比、文件序号。
+
+### 控件库
+
+`ui/components/BgControls.kt`：
+
+| 组件 | 替代 | 差异 |
+|---|---|---|
+| `BgProgressLine` | 圆环进度 | 2dp 细线，省一半高度 |
+| `BgCheckBox` | Material Checkbox | 方角 17dp，触摸区 44dp |
+| `BgSegmented` | FilterChip 组 | 一格反色，无胶囊外形 |
+| `BgPrimaryButton` | Button | 粉底反白，全屏最多一处 |
+| `BgGhostButton` | OutlinedButton | 只有一圈细线 |
+| `BgWarn` | 提示 Card | 左侧 2dp 竖线，缺几项列几条 |
+
+### 文件结构
+
+`MainScreen.kt` 从 **1310 行**降到 **317 行**，其余拆到 `ui/screen/components/`：
+
+```
+ui/screen/MainScreen.kt              主函数：编排 + 路由
+ui/screen/HistoryScreen.kt           历史
+ui/screen/AboutScreen.kt             关于
+ui/screen/components/StatsBar.kt     三格统计
+ui/screen/components/LinkInputCard.kt  链接输入
+ui/screen/components/VideoPreviewCard.kt
+ui/screen/components/CollectionPreviewCard.kt
+ui/screen/components/TaskCard.kt
+ui/screen/components/VideoPlayerDialog.kt
+ui/screen/components/ImageViewerDialog.kt
+ui/Format.kt                         时长 / 计数 / 体积格式化
+```
+
+---
+
+## v1.7.0 修掉的老问题
+
+这一版顺带处理了五个长期存在的交互问题。其中两个之前**以为修过**，
+但 `git log -S` 显示这个仓库的历史里从来没有相关提交 —— 大概是在别的工作区改的，没提交上来。
+
+### 1. 播放器看不见播放/暂停按钮
+
+**现象**：打开播放器只有一块画面，什么按钮都没有，点哪儿都没反应。
+
+**真实原因**（和网上流传的说法不一样）：media3 的 `Player` composable **没有**
+`showControls` 这个参数。控制层显隐是通过 `centerControls` / `bottomControls`
+两个 lambda 的**第二个参数 `visible`** 传下来的，默认状态是「隐」（要点画面才出现）。
+旧代码把 `visible` 原样透传给了 `PlayerDefaults.CenterControls`，所以控制层跟着内部状态一起隐掉。
+
+**改法**：`centerControls = { p, _ -> ... }`，丢弃第二参数，`visible` 写死 `true`。
+代价是画面被按钮挡一点，但「看得见怎么操作」比「纯净画面」重要。
+
+### 2. 解析后键盘不收起
+
+**现象**：点「解析」后输入框失焦，但键盘还挡在下面。
+
+**真实原因**：`SoftwareKeyboardController.hide()` 在百度输入法、搜狗输入法下经常返回
+`null` 或调了无效。
+
+**改法**（两个必须一起做，缺一个都不可靠）：
+
+```kotlin
+focusManager.clearFocus()
+val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+imm?.hideSoftInputFromWindow(view.windowToken, 0)
+```
+
+只 `clearFocus()` → 输入框失焦但键盘还在；
+只 `hideSoftInput` → 有时输入框又把焦点抢回来。
+
+### 3. 输入框只能单行
+
+抖音分享文案是「长按复制此条消息，打开抖音搜索…」这种几十字的东西。
+`singleLine = true` 会横向滚动，用户看不到自己粘对了没。
+→ 改 `maxLines = 2` 自动换行。
+
+### 4. 任务卡整卡可点，跟内部按钮打架
+
+真机 dump 出卡片区有 3 个 clickable，但代码里只有单个通栏按钮 —— 手指落在图标边缘
+会先触发整卡。→ 卡片本身去掉 `clickable`，只有图标可点。
+
+### 5. 图标触摸区 32dp
+
+`IconButton(Modifier.size(32.dp))` 的可点区域就 32dp，低于 Material 建议的 48dp。
+→ 视觉仍是 20dp 图标，外层用 44dp 透明区包住。
+
+### 另外修掉的两个小问题
+
+- **播放器封面图标错了**：旧版播放按钮用的是 `ic_cloud_download`（云+下箭头），
+  放在画面中央看着像「下载」不像「播放」。→ 换 `Icons.Filled.PlayArrow`。
+- **`player.release()` 调了两次**（`onDispose` + 关闭按钮各一次）。
+  ExoPlayer 的 release 幂等不会崩，但两处都管生命周期，将来加暂停恢复逻辑会踩空。
+  → 统一交给 `DisposableEffect`。
+
+---
+
 ## 功能特点
 
 ### 核心功能
@@ -75,25 +201,47 @@ cd DouyinDownloader
 
 ## 项目结构
 
+``` 
+app/src/main/java/com/knightlsy/douyin/
+├── MainActivity.kt           入口 + 三屏路由（main / history / about）
+├── App.kt                    Application（Coil 图像加载器配置）
+├── data/                     数据层
+│   ├── Models.kt             ContentInfo / DownloadTask / ContentType
+│   ├── VideoRepository.kt    解析 + 下载 + 重试（最大的文件）
+│   ├── WebViewParser.kt      WebView 兜底解析通道
+│   ├── MotionPhotoMuxer.kt   实况图合成（JPEG + MP4 → Motion Photo）
+│   ├── GalleryRepository.kt  相册读写
+│   ├── AppDatabase.kt        Room 数据库
+│   ├── HistoryDao.kt / HistoryEntity.kt / HistoryRepository.kt
+│   ├── ThemePreferences.kt   主题三态持久化
+│   ├── UpdateChecker.kt      版本更新检查
+│   └── ParseDiag.kt          解析失败诊断（复制到剪贴板）
+├── screen/
+│   ├── MainScreen.kt         主函数：编排 + 路由（317 行）
+│   ├── HistoryScreen.kt      下载历史
+│   ├── AboutScreen.kt        关于 + 检查更新
+│   └── components/           首页各区块（v1.7.0 从 MainScreen 拆出）
+│       ├── StatsBar.kt              三格统计
+│       ├── LinkInputCard.kt         链接输入（含键盘收起）
+│       ├── VideoPreviewCard.kt      视频预览
+│       ├── CollectionPreviewCard.kt 图集预览（3 列网格 + 勾选）
+│       ├── TaskCard.kt              下载任务（细线进度）
+│       ├── VideoPlayerDialog.kt     播放器（控制层常驻）
+│       └── ImageViewerDialog.kt     全屏看图（可翻页）
+├── ui/
+│   ├── Format.kt             时长 / 计数 / 体积格式化
+│   ├── components/
+│   │   └── BgControls.kt     BgProgressLine / BgCheckBox / BgSegmented /
+│   │                         BgPrimaryButton / BgGhostButton / BgWarn …
+│   └── theme/
+│       ├── Color.kt          A+D 配色 token（OKLCH 转换）
+│       ├── Type.kt           三字族排版
+│       └── Theme.kt          双主题 + 逐色过渡（420ms）
+└── viewmodel/
+    ├── MainViewModel.kt      解析 / 下载 / 主题 / 状态机
+    └── HistoryViewModel.kt   历史增删改查
 ```
-DouyinDownloader/
-├── app/src/main/
-│   ├── java/com/douyin/downloader/
-│   │   ├── MainActivity.kt          # 入口Activity
-│   │   ├── data/
-│   │   │   ├── Models.kt            # 数据模型
-│   │   │   ├── VideoRepository.kt   # 下载仓库
-│   │   │   └── WebViewParser.kt     # WebView 解析通道
-│   │   ├── screen/
-│   │   │   └── MainScreen.kt        # 主界面UI
-│   │   ├── viewmodel/
-│   │   │   └── MainViewModel.kt     # 业务逻辑
-│   │   └── ui/theme/                # Material 3主题
-│   ├── res/                          # 资源文件
-│   └── AndroidManifest.xml
-├── build.gradle.kts
-└── README.md
-```
+
 
 ## 技术栈
 
@@ -136,6 +284,18 @@ A: 在下载任务列表中点击关闭按钮
 A: 目前支持批量下载全部，后续版本会添加单张下载
 
 ## 更新日志
+
+### v1.7.0
+- **界面全部重写**：A+D 混合设计语言（影院感骨架 + 克制的粉青配色），深浅双主题
+- **修复：播放器控制层不显示** —— media3 `Player` 没有 `showControls` 参数，
+  真正的开关是 `centerControls` / `bottomControls` 的 `visible` 参数
+- **修复：解析后键盘不收起** —— `hideSoftInputFromWindow` + `clearFocus` 双保险
+- **修复：输入框单行裁切** —— 改两行
+- **修复：任务卡点击区域打架** —— 去掉整卡可点，图标触摸区 32dp → 44dp
+- **修复：播放器封面用了下载图标** —— 换成 PlayArrow
+- **重构：MainScreen 1310 行拆成 10 个文件**
+- 播放器新增「下载此视频」，不用关掉回首页
+
 
 ### v1.5.1 (2026-09-24)
 - 修复实况图仍下载成静态图的问题：动态视频数据的字段名不匹配，导致动态照片合成从未真正生效；现在实况图下载即为可播放的动态照片

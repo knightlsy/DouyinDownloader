@@ -15,8 +15,8 @@ android {
         applicationId = "com.knightlsy.douyin"
         minSdk = 26
         targetSdk = 34
-        versionCode = 37
-        versionName = "1.6.9"
+        versionCode = 38
+        versionName = "1.7.0"
 
         // 云端同步记录接口。密钥不写进源码（仓库是公开的）：
         // 优先环境变量（CI secrets），其次 local.properties（本地构建，已 gitignore）。
@@ -85,9 +85,6 @@ android {
         sourceCompatibility = JavaVersion.VERSION_1_8
         targetCompatibility = JavaVersion.VERSION_1_8
     }
-    kotlinOptions {
-        jvmTarget = "1.8"
-    }
     buildFeatures {
         compose = true
         buildConfig = true
@@ -135,4 +132,17 @@ dependencies {
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
+
+/**
+ * Kotlin 编译选项。
+ *
+ * 旧的 `android { kotlinOptions { jvmTarget = "1.8" } }` 在 Kotlin 2.x 已废弃，
+ * 每次编译都会打一条 deprecation。新写法是顶层的 kotlin { compilerOptions { } }。
+ */
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_1_8)
+    }
+}
+
 }
