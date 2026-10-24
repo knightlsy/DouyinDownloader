@@ -363,6 +363,28 @@ A: 目前支持批量下载全部，后续版本会添加单张下载
 
 ## 更新日志
 
+### v1.7.5 🔀 后备下载地址 + 并发测速选最快线路
+- **修好后备地址**：`/api/download-apk` 原来只认 GET，客户端 HEAD 测速打进去
+  会掉进需要 token 的分支返回 **401**，这个"后备"从来没生效过。
+  现在同时接 GET/HEAD，GET 还透传 `Range`（支持断点续传）
+- **并发测速**：`pickDownloadUrl()` 原来是串行 for 循环，第一个返回 2xx/3xx
+  的镜像就直接用。问题有两个 ——「能用」不等于「快」，公共镜像常能连上但只有
+  几十 KB/s；全部不通时要等 N × 超时。
+  改为 `resolveFastest()`：6 条线路 `async` 并发 `Range: bytes=0-0` 探测
+  （只拉 1 字节），`awaitAll()` 后 `minByOrNull { latencyMs }`
+- **候选线路**：GitHub 直连 / 自建代理 / ghproxy.net / gh.jesd.top /
+  gh.horsey.top / gh.chenx264.top
+- **界面反馈**：点「立即更新」后按钮变「◌ 正在测速选择线路…」，
+  选完在按钮下显示「线路：自建代理 · 866ms」
+- **兜底**：全部线路不可达时回退原始地址，不阻断用户
+
+测速实测：
+```
+GitHub 直连   HEAD      302     737 ms
+自建代理      HEAD      200    1116 ms
+自建代理      Range0-0  206 1   866 ms
+```
+
 ### v1.7.4 ⚠️ 强制更新开始生效
 - **强制更新**：检测到新版本后，整个应用被不透明全屏遮罩挡住，**不更新无法使用**
   - 用 `Dialog` + `dismissOnBackPress = false` + `dismissOnClickOutside = false`

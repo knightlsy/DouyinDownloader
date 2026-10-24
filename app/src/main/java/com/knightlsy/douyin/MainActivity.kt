@@ -76,6 +76,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
+import androidx.compose.material3.CircularProgressIndicator
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -98,6 +99,8 @@ class MainActivity : ComponentActivity() {
             var isForceMode by remember { mutableStateOf(false) }
             var updateResult by remember { mutableStateOf<UpdateResult?>(null) }
             var isRechecking by remember { mutableStateOf(false) }
+            var isResolving by remember { mutableStateOf(false) }
+            var selectedLine by remember { mutableStateOf<String?>(null) }
             val updateChecker = remember { UpdateChecker(context) }
             val scope = rememberCoroutineScope()
 
@@ -130,8 +133,25 @@ class MainActivity : ComponentActivity() {
                             version = result.version,
                             releaseNotes = result.releaseNotes,
                             onUpdate = {
-                                updateChecker.startDownload(result.downloadUrl)
+                                // 点击后先并发测速，挑最快的那条线路再打开浏览器。
+                                // 实测延迟会显示在按钮下面，用户知道为什么要跳这条。
+                                if (!isResolving) {
+                                    isResolving = true
+                                    selectedLine = null
+                                    scope.launch {
+                                        val ep = updateChecker.resolveFastest(result.downloadUrl)
+                                        isResolving = false
+                                        selectedLine = if (ep.latencyMs >= 0) {
+                                            "${ep.name} · ${ep.latencyMs}ms"
+                                        } else {
+                                            "全部线路不可达，已用原始地址"
+                                        }
+                                        updateChecker.startDownload(ep.url)
+                                    }
+                                }
                             },
+                            isResolving = isResolving,
+                            selectedLine = selectedLine,
                             isChecking = isRechecking,
                             onRetry = {
                                 // 只重新检查，不跳过：检查到更新仍然停在这个界面
@@ -233,6 +253,8 @@ fun ForceUpdateDialog(
     onUpdate: () -> Unit,
     onRetry: () -> Unit,
     isChecking: Boolean = false,
+    isResolving: Boolean = false,
+    selectedLine: String? = null,
 ) {
     val c = LocalBgColors.current
 
@@ -321,21 +343,41 @@ fun ForceUpdateDialog(
                         .fillMaxWidth()
                         .height(50.dp)
                         .clip(RoundedCornerShape(BgRadius.r2))
-                        .background(c.accent)
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null,
-                            onClick = onUpdate,
+                        .background(if (isResolving) c.hair else c.accent)
+                        .then(
+                            if (!isResolving) Modifier.clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                                onClick = onUpdate,
+                            ) else Modifier
                         ),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text(
-                        text = "↓  立即更新",
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 12.sp,
-                        letterSpacing = 1.4.sp,
-                        color = c.accentInk,
-                    )
+                    if (isResolving) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(14.dp),
+                                strokeWidth = 1.5.dp,
+                                color = c.accentInk,
+                            )
+                            Spacer(Modifier.width(9.dp))
+                            Text(
+                                text = "正在测速选择线路…",
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 11.5.sp,
+                                letterSpacing = 1.0.sp,
+                                color = c.accentInk,
+                            )
+                        }
+                    } else {
+                        Text(
+                            text = "↓  立即更新",
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 12.sp,
+                            letterSpacing = 1.4.sp,
+                            color = c.accentInk,
+                        )
+                    }
                 }
 
                 Spacer(Modifier.height(10.dp))
@@ -364,6 +406,17 @@ fun ForceUpdateDialog(
                 }
 
                 Spacer(Modifier.height(6.dp))
+
+                if (selectedLine != null) {
+                    Text(
+                        text = "线路：$selectedLine",
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 9.5.sp,
+                        letterSpacing = 0.4.sp,
+                        color = c.ink4,
+                        modifier = Modifier.padding(bottom = 6.dp),
+                    )
+                }
 
                 Text(
                     text = "此版本包含必要修复，不更新将无法继续使用。",
