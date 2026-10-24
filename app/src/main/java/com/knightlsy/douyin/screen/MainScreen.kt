@@ -268,8 +268,12 @@ fun MainScreen(
         VideoPlayerDialog(
             videoUrl = url,
             onDownload = { downloadUrl ->
+                // 用正在播放的那个地址直接建任务。
+                // 注意不能调 downloadFromUrl() —— 那个是历史页「重新解析」用的，
+                // 它会把 inputUrl 覆盖成视频直链再重新解析，而直链不是分享链接，
+                // 解析必然失败，用户看到的就是「输入框被换成了一个下不了的链接」。
                 playingUrl = null
-                viewModel.downloadFromUrl(downloadUrl)
+                viewModel.startDownloadWithUrl(downloadUrl)
             },
             onDismiss = { playingUrl = null },
         )
