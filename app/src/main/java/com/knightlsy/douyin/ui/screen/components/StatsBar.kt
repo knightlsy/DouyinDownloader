@@ -35,7 +35,9 @@ fun StatsBar(stats: DownloadStats, modifier: Modifier = Modifier) {
             .fillMaxWidth()
             .padding(horizontal = BgSpace.gutter)
     ) {
-        StatCell("今日", stats.totalDownloads.toString(), c.ink, Modifier.weight(1f))
+        // 标签原本写「今日」，但 stats 只在内存里、重启即归零，
+        // 叫「本次」才不骗人。
+        StatCell("本次", stats.totalDownloads.toString(), c.ink, Modifier.weight(1f))
         StatCell("成功", stats.successDownloads.toString(), c.success, Modifier.weight(1f))
         StatCell("失败", stats.failedDownloads.toString(), c.accent, Modifier.weight(1f))
     }

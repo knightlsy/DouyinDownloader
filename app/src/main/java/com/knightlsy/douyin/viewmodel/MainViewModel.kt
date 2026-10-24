@@ -231,7 +231,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             ContentType.IMAGE_COLLECTION -> (contentInfo as? ContentInfo.ImageCollection)?.imageUrls?.size ?: 1
             else -> 1
         }
-        addTask(DownloadTask(id = taskId, contentInfo = contentInfo, type = contentType, status = DownloadStatus.DOWNLOADING, totalFiles = totalFiles))
+        addTask(DownloadTask(id = taskId, contentInfo = contentInfo, type = contentType, status = DownloadStatus.DOWNLOADING, totalFiles = totalFiles, originalUrl = originalUrl))
         _uiState.value = _uiState.value.copy(inputUrl = "", contentInfo = null, contentType = null)
         performDownload(taskId, contentInfo, originalUrl)
     }
@@ -243,7 +243,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         // 只换起点地址，候选列表（降级链）保持不变：若该档位不可用会自动降级。
         val replaced = contentInfo.copy(videoUrl = videoUrl)
         val taskId = UUID.randomUUID().toString()
-        addTask(DownloadTask(id = taskId, contentInfo = replaced, type = ContentType.VIDEO, status = DownloadStatus.DOWNLOADING, totalFiles = 1))
+        addTask(DownloadTask(id = taskId, contentInfo = replaced, type = ContentType.VIDEO, status = DownloadStatus.DOWNLOADING, totalFiles = 1, originalUrl = originalUrl))
         _uiState.value = _uiState.value.copy(inputUrl = "", contentInfo = null, contentType = null)
         performDownload(taskId, replaced, originalUrl)
     }
@@ -258,7 +258,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
         val selected = contentInfo.copy(imageUrls = selectedUrls, animatedUrls = selectedAnim)
         val taskId = UUID.randomUUID().toString()
-        addTask(DownloadTask(id = taskId, contentInfo = selected, type = ContentType.IMAGE_COLLECTION, status = DownloadStatus.DOWNLOADING, totalFiles = selectedUrls.size))
+        addTask(DownloadTask(id = taskId, contentInfo = selected, type = ContentType.IMAGE_COLLECTION, status = DownloadStatus.DOWNLOADING, totalFiles = selectedUrls.size, originalUrl = originalUrl))
         _uiState.value = _uiState.value.copy(inputUrl = "", contentInfo = null, contentType = null)
         performDownload(taskId, selected, originalUrl)
     }
@@ -312,15 +312,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun retryDownload(taskId: String) {
         val task = _downloadTasks.value.find { it.id == taskId } ?: return
         updateTask(taskId) { it.copy(status = DownloadStatus.PENDING, retryCount = it.retryCount + 1, errorMessage = null) }
-        // 用历史记录里的原始链接还原 originalUrl，避免重试后记录退化
-        val originalUrl = _uiState.value.inputUrl.ifEmpty { task.contentInfo.id }
-        performDownload(taskId, task.contentInfo, originalUrl)
+        // 从任务自身取原链接：_uiState.inputUrl 是当前输入框，和这个任务无关，
+        // 且下载一开始就被清空了，用它会让历史记录里的链接退化成 contentId。
+        performDownload(taskId, task.contentInfo, task.originalUrl)
     }
 
     fun cancelDownload(taskId: String) {
         activeJobs[taskId]?.cancel()
         activeJobs.remove(taskId)
-        updateTaskStatus(taskId, DownloadStatus.FAILED, error = "已取消")
+        // 用 CANCELLED 而不是 FAILED：用户主动取消不该标红、也不该计入失败数
+        updateTaskStatus(taskId, DownloadStatus.CANCELLED)
         notificationHelper.cancel(taskId)
     }
 

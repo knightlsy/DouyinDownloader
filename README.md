@@ -363,6 +363,18 @@ A: 目前支持批量下载全部，后续版本会添加单张下载
 
 ## 更新日志
 
+### v1.7.6 🔒 APK 完整性校验 + 13 项审查修复
+- **APK SHA256 校验**：下载候选里除 GitHub 与自建代理外还有 4 条公共镜像，
+  任何一条都可能返回篡改包或 HTML 错误页。强制更新下用户没有「不装」的选项，
+  所以必须校验。链路改为：`DownloadManager` 下到私有目录（免存储权限）
+  → 算 SHA256 比对 GitHub 公布的 `digest` → 不符立刻删文件 → 相符才经
+  `FileProvider` 交给系统安装器
+- **下载进度**：按钮显示「正在下载 42%」+ 2dp 进度线 + 「4.6 / 10.8 MB」
+- **服务端**：`/api/check-update` 增加 `sha256` 与 `size` 字段
+  （GitHub Release asset 自 2024 年起提供 `digest`，无需自行计算）
+- **13 项审查修复**：见提交说明
+- **清理**：`isForceMode` 死分支、`OptionalUpdateDialog`、`UpdateChecker.startDownload`
+
 ### v1.7.5 🔀 后备下载地址 + 并发测速选最快线路
 - **修好后备地址**：`/api/download-apk` 原来只认 GET，客户端 HEAD 测速打进去
   会掉进需要 token 的分支返回 **401**，这个"后备"从来没生效过。

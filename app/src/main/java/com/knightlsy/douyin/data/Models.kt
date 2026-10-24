@@ -38,7 +38,17 @@ data class DownloadTask(
     val id: String, val contentInfo: ContentInfo, val type: ContentType,
     val status: DownloadStatus = DownloadStatus.PENDING, val progress: Float = 0f,
     val downloadedFiles: List<String> = emptyList(), val totalFiles: Int = 1,
-    val completedFiles: Int = 0, val errorMessage: String? = null, val retryCount: Int = 0
+    val completedFiles: Int = 0, val errorMessage: String? = null, val retryCount: Int = 0,
+    /**
+     * 建任务时的原始分享链接。
+     *
+     * 单独存一份是必须的：重试时要从这里还原，不能用 _uiState.inputUrl ——
+     * 那个是「当前输入框」的内容，和这个任务毫无关系，而且下载一开始
+     * 输入框就被清空了。旧代码 `_uiState.value.inputUrl.ifEmpty { contentInfo.id }`
+     * 几乎总是落到 contentId，于是重试成功后写进历史记录的 originalUrl
+     * 变成一串数字，「重新解析」按钮就废了。
+     */
+    val originalUrl: String = ""
 ) {
     val overallProgress: Float
         get() = if (totalFiles > 0) (completedFiles.toFloat() + progress) / totalFiles.toFloat() else progress
@@ -46,7 +56,11 @@ data class DownloadTask(
         get() = contentInfo.title
 }
 
-enum class DownloadStatus { PENDING, DOWNLOADING, COMPLETED, FAILED, PAUSED }
+enum class DownloadStatus {
+    PENDING, DOWNLOADING, COMPLETED, FAILED, PAUSED,
+    /** 用户主动取消。与 FAILED 分开，否则取消会被计入「失败」并显示红字。 */
+    CANCELLED
+}
 
 data class ApiResponse(val aweme_detail: AwemeDetail? = null, val status_code: Int = 0)
 data class AwemeDetail(

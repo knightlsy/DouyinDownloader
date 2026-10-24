@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!--
+        DownloadManager.setDestinationInExternalFilesDir(...)
+        下载到 Android/data/<包名>/files/Download/，不需要任何存储权限。
+    -->
+    <external-files-path name="apk" path="Download/" />
+    <cache-path name="cache" path="." />
+</paths>

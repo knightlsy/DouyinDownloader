@@ -58,6 +58,8 @@ import com.knightlsy.douyin.ui.screen.components.VideoPreviewCard
 import com.knightlsy.douyin.ui.theme.BgSpace
 import com.knightlsy.douyin.ui.theme.LocalBgColors
 import com.knightlsy.douyin.viewmodel.MainViewModel
+import com.knightlsy.douyin.data.DownloadStatus
+import com.knightlsy.douyin.data.ThemeMode
 
 /**
  * 主页。
@@ -84,6 +86,7 @@ fun MainScreen(
     val context = LocalContext.current
 
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
     val tasks by viewModel.downloadTasks.collectAsStateWithLifecycle()
     val stats by viewModel.stats.collectAsStateWithLifecycle()
 
@@ -92,8 +95,11 @@ fun MainScreen(
     // 看图：图片列表 + 起始序号（null = 没在看）
     var viewer by remember { mutableStateOf<Pair<List<String>, Int>?>(null) }
 
-    // 进页面尝试从剪贴板自动填链接
-    LaunchedEffect(Unit) { viewModel.autoPasteFromClipboard() }
+    // 自动填链接改由 MainActivity.onResume() 触发 —— 不能只用 LaunchedEffect(Unit)：
+    // 核心路径是「抖音里复制 → 切回本应用」，此时 App 只是从后台恢复，
+    // composition 不重建，LaunchedEffect(Unit) 早就跑完了，剪贴板不会被重读。
+    // （放在 Activity 里而不是这里，是因为 lifecycle-runtime-compose 只有 2.6.2，
+    //   androidx.lifecycle.compose.LocalLifecycleOwner 要 2.8+ 才有。）
 
     // 成功提示
     LaunchedEffect(uiState.successMessage) {
@@ -104,8 +110,12 @@ fun MainScreen(
     }
     // 错误提示
     LaunchedEffect(uiState.error) {
-        uiState.error?.let {
-            Toast.makeText(context, it, Toast.LENGTH_LONG).show()
+        uiState.error?.let { raw ->
+            // 错误文本可能是「人话 + 空行 + 诊断信息」。Toast 最多显示几秒，
+            // 塞多行技术细节等于没提示。只取第一段；完整诊断在失败时
+            // 已经自动复制进剪贴板了。
+            val human = raw.substringBefore("\n\n").ifBlank { raw }
+            Toast.makeText(context, human, Toast.LENGTH_LONG).show()
             viewModel.clearError()
         }
     }
@@ -140,7 +150,15 @@ fun MainScreen(
                 color = c.ink,
             )
             Spacer(Modifier.weight(1f))
-            TopAction("主题") { viewModel.toggleDarkMode() }
+            // 显示当前模式：三态循环如果只靠颜色变化，用户从浅色系统
+            // 点一下就变「浅色」，看到没变化会以为按钮坏了。
+            TopAction(
+                text = when (themeMode) {
+                    ThemeMode.SYSTEM -> "主题·自动"
+                    ThemeMode.LIGHT -> "主题·浅"
+                    ThemeMode.DARK -> "主题·深"
+                }
+            ) { viewModel.toggleDarkMode() }
             TopAction("历史", onNavigateToHistory)
             TopAction("关于", onNavigateToAbout)
         }
@@ -185,7 +203,17 @@ fun MainScreen(
                                     val url = info.videoUrl.ifBlank {
                                         info.candidateUrls.firstOrNull().orEmpty()
                                     }
-                                    if (url.isNotBlank()) playingUrl = url
+                                    if (url.isNotBlank()) {
+                                        playingUrl = url
+                                    } else {
+                                        // 原来这里静默返回，用户点「播放」毫无反应，
+                                        // 以为按钮坏了。明确告知还能直接下载。
+                                        Toast.makeText(
+                                            context,
+                                            "暂无可用播放地址，可直接下载后观看",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
                                 },
                                 onDownload = { viewModel.startDownload() },
                             )
@@ -219,7 +247,7 @@ fun MainScreen(
                             modifier = Modifier.weight(1f),
                             accent = "· ${tasks.size}",
                         )
-                        if (tasks.any { it.status.name == "COMPLETED" }) {
+                        if (tasks.any { it.status == DownloadStatus.COMPLETED }) {
                             BgMonoLabel(
                                 text = "清空已完成",
                                 color = c.ink3,

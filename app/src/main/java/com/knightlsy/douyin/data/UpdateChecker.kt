@@ -11,9 +11,10 @@ import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.util.concurrent.TimeUnit
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 class UpdateChecker(private val context: Context) {
     companion object {
@@ -23,6 +24,10 @@ class UpdateChecker(private val context: Context) {
         // 备选：GitHub 最新 Release
         private const val GITHUB_LATEST_API =
             "https://api.github.com/repos/knightlsy/DouyinDownloader/releases/latest"
+        /** 整次检查的总超时（毫秒）。超过就当作「没有更新」，不阻塞界面。 */
+        private const val CHECK_TIMEOUT_MS = 12_000L
+        /** 测速总预算（毫秒）。全部线路都没应答时，到点回退原始地址。 */
+        private const val PROBE_BUDGET_MS = 5_000L
         // GitHub 下载加速镜像，按优先级排序；GitHub 直连作为最后兜底
         private val MIRRORS = listOf(
             "https://ghproxy.net/",
@@ -42,6 +47,10 @@ class UpdateChecker(private val context: Context) {
     private val probeClient = OkHttpClient.Builder()
         .connectTimeout(4, TimeUnit.SECONDS)
         .readTimeout(4, TimeUnit.SECONDS)
+        // callTimeout 才是真兜底：connect/read 超时管不住 DNS 解析卡住，
+        // 也管不住服务端一点一点滴数据的场景。没有它，一条线路就能把
+        // 整个测速挂死，而测速发生在强制更新弹窗里 —— 挂死 = 用户被锁住。
+        .callTimeout(5, TimeUnit.SECONDS)
         .build()
 
     private val gson = Gson()
@@ -49,44 +58,70 @@ class UpdateChecker(private val context: Context) {
     private data class GithubRelease(
         @SerializedName("tag_name") val tagName: String = "",
         @SerializedName("html_url") val htmlUrl: String = "",
+        val body: String = "",
         val assets: List<GithubAsset> = emptyList()
     )
 
     private data class GithubAsset(
         val name: String = "",
-        @SerializedName("browser_download_url") val browserDownloadUrl: String = ""
+        @SerializedName("browser_download_url") val browserDownloadUrl: String = "",
+        /** 形如 "sha256:abc..."，GitHub 从 2024 年起提供 */
+        val digest: String = "",
+        val size: Long = 0L
     )
 
     data class ServerApiResponse(
         @SerializedName("has_update") val hasUpdate: Boolean = false,
         val version: String = "",
         @SerializedName("download_url") val downloadUrl: String = "",
-        @SerializedName("release_notes") val releaseNotes: String = ""
+        @SerializedName("release_notes") val releaseNotes: String = "",
+        val sha256: String = "",
+        val size: Long = 0L
     )
 
     /**
-     * 检查更新：自有服务器优先，失败或无更新时回退 GitHub 最新 Release。
+     * 一次检查的三种结果。
+     *
+     * 必须区分「确认没有新版本」和「服务器不可达」：
+     *   旧实现两者都返回 null，于是「服务器说没更新」时还会回退去问 GitHub。
+     *   国内环境问 GitHub 基本必然超时，等于每次冷启动都白挂一个几十秒的请求。
      */
-    suspend fun checkForUpdate(currentVersion: String): UpdateResult = withContext(Dispatchers.IO) {
-        // 1) 自有服务器
-        val fromServer = checkServer(currentVersion)
-        if (fromServer != null) {
-            Log.d(TAG, "Update source: server")
-            return@withContext fromServer
-        }
-
-        // 2) GitHub 备选
-        val fromGithub = checkGithub(currentVersion)
-        if (fromGithub != null) {
-            Log.d(TAG, "Update source: github")
-            return@withContext fromGithub
-        }
-
-        UpdateResult(hasUpdate = false)
+    private sealed class CheckOutcome {
+        data class Found(val result: UpdateResult) : CheckOutcome()
+        /** 服务器明确答复：没有新版本。这是权威答案，不再回退 GitHub。 */
+        object Nothing : CheckOutcome()
+        /** 服务器不可达 / 返回错误，可以回退 GitHub。 */
+        object Unreachable : CheckOutcome()
     }
 
-    /** 服务器检查：返回 null 表示不可用或无更新（此时才考虑 GitHub） */
-    private suspend fun checkServer(currentVersion: String): UpdateResult? = withContext(Dispatchers.IO) {
+    /**
+     * 检查更新：自有服务器优先，不可达时才回退 GitHub 最新 Release。
+     */
+    suspend fun checkForUpdate(currentVersion: String): UpdateResult = withContext(Dispatchers.IO) {
+        // 总超时兜底：服务器段 10+15 秒，GitHub 段再来 10+15 秒，最坏 50 秒。
+        // 强制更新弹窗里点「重新检查」时，用户看到的就是按钮文字卡住不动。
+        val outcome = withTimeoutOrNull(CHECK_TIMEOUT_MS) {
+            when (val server = checkServer(currentVersion)) {
+                is CheckOutcome.Found -> {
+                    Log.d(TAG, "Update source: server")
+                    server.result
+                }
+                // 服务器说没更新 = 权威答案，直接结束，不再问 GitHub。
+                CheckOutcome.Nothing -> {
+                    Log.d(TAG, "Server says up to date")
+                    null
+                }
+                CheckOutcome.Unreachable -> {
+                    Log.d(TAG, "Server unreachable, fallback to GitHub")
+                    checkGithub(currentVersion)?.also { Log.d(TAG, "Update source: github") }
+                }
+            }
+        }
+        outcome ?: UpdateResult(hasUpdate = false)
+    }
+
+    /** 服务器检查。返回三态，见 CheckOutcome。 */
+    private suspend fun checkServer(currentVersion: String): CheckOutcome = withContext(Dispatchers.IO) {
         try {
             val request = Request.Builder()
                 .url("$API_URL/api/check-update")
@@ -96,31 +131,36 @@ class UpdateChecker(private val context: Context) {
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) {
                     Log.w(TAG, "Server check failed: ${response.code}")
-                    return@withContext null
+                    return@withContext CheckOutcome.Unreachable
                 }
 
-                val json = response.body?.string() ?: return@withContext null
+                val json = response.body?.string() ?: return@withContext CheckOutcome.Unreachable
                 val apiResponse = gson.fromJson(json, ServerApiResponse::class.java)
-                    ?: return@withContext null
+                    ?: return@withContext CheckOutcome.Unreachable
 
-                if (apiResponse.hasUpdate && apiResponse.version != currentVersion) {
-                    // 服务器返回 GitHub 地址时同样套用 CDN 加速探测
-                    val url = apiResponse.downloadUrl
-                    // 不再在这里探测：留给点击「立即更新」时并发测速，选最快的
-            val finalUrl = url
+                // 数值比较，不用 !=：
+                // 服务器若因缓存/回滚返回了更旧的版本号，!="" 会把它当成
+                // 「有新版本」，用户点下去反而装回旧版。
+                val hasNewer = apiResponse.hasUpdate &&
+                    compareVersions(apiResponse.version, currentVersion) > 0
+
+                if (!hasNewer) return@withContext CheckOutcome.Nothing
+
+                CheckOutcome.Found(
                     UpdateResult(
                         hasUpdate = true,
                         version = apiResponse.version,
-                        downloadUrl = finalUrl,
-                        releaseNotes = apiResponse.releaseNotes
+                        // 不在检查阶段探测线路：留给点击「立即更新」时并发测速
+                        downloadUrl = apiResponse.downloadUrl,
+                        releaseNotes = apiResponse.releaseNotes,
+                        sha256 = apiResponse.sha256,
+                        size = apiResponse.size
                     )
-                } else {
-                    null
-                }
+                )
             }
         } catch (e: Exception) {
-            Log.w(TAG, "Server check error", e)
-            null
+            Log.w(TAG, "Server check error: ${e.message?.take(60)}")
+            CheckOutcome.Unreachable
         }
     }
 
@@ -159,7 +199,12 @@ class UpdateChecker(private val context: Context) {
                     hasUpdate = true,
                     version = latestVersion,
                     downloadUrl = downloadUrl,
-                    releaseNotes = release.htmlUrl
+                    // 原来这里塞的是 htmlUrl（一串网址），界面上「更新内容」
+                    // 显示出来就是一条链接。改用 Release 正文。
+                    releaseNotes = release.body.take(1200),
+                    // GitHub asset 的 digest 形如 "sha256:abc..."，去掉前缀
+                    sha256 = apkAsset.digest.removePrefix("sha256:").takeIf { it.length == 64 } ?: "",
+                    size = apkAsset.size
                 )
             }
         } catch (e: Exception) {
@@ -200,19 +245,31 @@ class UpdateChecker(private val context: Context) {
 
         Log.d(TAG, "Probing ${candidates.size} endpoints concurrently")
 
-        val results = candidates.map { (name, url) ->
-            async(Dispatchers.IO) {
-                val ms = probeLatency(url)
-                if (ms != null) DownloadEndpoint(name, url, ms) else null
-            }
-        }.awaitAll().filterNotNull()
+        if (candidates.size == 1) {
+            val (name, url) = candidates.first()
+            return@coroutineScope DownloadEndpoint(name, url, probeLatency(url) ?: -1L)
+        }
 
-        results.forEach { Log.d(TAG, "  ${it.name}: ${it.latencyMs}ms") }
-
-        results.minByOrNull { it.latencyMs }
-            ?: DownloadEndpoint("原始地址", downloadUrl, -1L).also {
-                Log.w(TAG, "All endpoints failed, falling back to original URL")
+        // 先到先得：谁先测出延迟，谁就是当前最快的，立刻用它，不等其余线路。
+        //
+        // 上一版用 awaitAll()，语义是「等全部完成再挑最小」——
+        // 总耗时 = 最慢那条的超时（4~5 秒）。即使大多数时候最快线路
+        // 200ms 就回来了，用户仍要干等满 5 秒。
+        // 而这段代码跑在强制更新弹窗里，等待时间直接等于「被锁住的时长」。
+        val channel = Channel<DownloadEndpoint>(Channel.UNLIMITED)
+        val jobs = candidates.map { (name, url) ->
+            launch(Dispatchers.IO) {
+                probeLatency(url)?.let { ms -> channel.send(DownloadEndpoint(name, url, ms)) }
             }
+        }
+
+        val fastest = withTimeoutOrNull(PROBE_BUDGET_MS) { channel.receive() }
+        jobs.forEach { it.cancel() }
+        channel.close()
+
+        fastest ?: DownloadEndpoint("原始地址", downloadUrl, -1L).also {
+            Log.w(TAG, "No endpoint answered within ${PROBE_BUDGET_MS}ms, using original URL")
+        }
     }
 
     /** 从代理地址里还原出 GitHub 直链；不是代理地址就原样返回。 */
@@ -285,24 +342,15 @@ class UpdateChecker(private val context: Context) {
         return 0
     }
 
-    fun startDownload(downloadUrl: String) {
-        if (downloadUrl.isBlank()) {
-            Log.w(TAG, "Download URL is empty")
-            return
-        }
-        try {
-            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(downloadUrl))
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            context.startActivity(intent)
-        } catch (e: Exception) {
-            Log.e(TAG, "Start download failed", e)
-        }
-    }
 }
 
 data class UpdateResult(
-    val hasUpdate: Boolean,
+    val hasUpdate: Boolean = false,
     val version: String = "",
     val downloadUrl: String = "",
-    val releaseNotes: String = ""
+    val releaseNotes: String = "",
+    /** APK 的 SHA256（十六进制，小写，无前缀）。为空表示服务端没提供，此时不校验。 */
+    val sha256: String = "",
+    /** APK 字节数，仅用于进度显示的初值。 */
+    val size: Long = 0L
 )

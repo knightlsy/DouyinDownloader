@@ -77,6 +77,7 @@ fun TaskCard(
         DownloadStatus.COMPLETED -> "已完成"
         DownloadStatus.FAILED -> "失败"
         DownloadStatus.PAUSED -> "已暂停"
+        DownloadStatus.CANCELLED -> "已取消"
     }
     val statusColor = when (task.status) {
         DownloadStatus.DOWNLOADING -> c.accent
@@ -189,8 +190,11 @@ fun TaskCard(
             ) {
                 Box(Modifier.width(2.dp).height(30.dp).background(c.accent))
                 Spacer(Modifier.width(9.dp))
+                // 只显示人话。原来拼了 "\n" + 原始异常，用户会看到
+                // 「下载失败，可重试一次」下面紧跟一行 HTTP 403 —— 等于白改。
+                // 原始错误仍在 task.errorMessage 里，需要排查时从日志取。
                 Text(
-                    text = humanizeError(task.errorMessage) + "\n" + task.errorMessage,
+                    text = humanizeError(task.errorMessage),
                     fontSize = 10.5.sp,
                     lineHeight = 15.sp,
                     color = c.ink2,
