@@ -152,37 +152,110 @@ class ApkUpdater(private val context: Context) {
     }
 
     /**
-     * 校验 SHA256。
-     * expected 为空时不做校验（服务端没给哈希），此时仅校验文件非空。
+     * 校验结果。三态而不是 Boolean —— 因为「验过了」和「没验成但能用」
+     * 是两种完全不同的情况，界面上必须能区分。
      */
-    fun verify(file: File, expectedSha256: String): Boolean {
+    sealed interface VerifyResult {
+        /** SHA256 匹配。 */
+        object Verified : VerifyResult
+        /** 服务端没给哈希，只校验了大小和文件类型。 */
+        data class Degraded(val reason: String) : VerifyResult
+        /** 校验不通过，必须丢弃。 */
+        data class Rejected(val reason: String) : VerifyResult
+    }
+
+    /**
+     * 校验下载到的安装包。
+     *
+     * 三档防线，从便宜到贵依次做：
+     *   1. 文件非空
+     *   2. 文件头是 ZIP 魔数 "PK" —— 挡住镜像返回 HTML 错误页的情况
+     *      （这是最常见的劫持形态：200 OK + 一段 HTML，长度几百字节）
+     *   3. 大小与 GitHub 报的一致
+     *   4. SHA256 匹配（只有服务端给了哈希时才做）
+     *
+     * 服务端没给哈希时不放行也不拒绝，而是降级为「已校大小」
+     * —— 静默跳过校验等于安全机制失效；一律拒绝又可能把自己锁死。
+     */
+    fun verify(file: File, expectedSha256: String, expectedSize: Long): VerifyResult {
         if (!file.exists() || file.length() == 0L) {
-            Log.w(TAG, "verify: file missing or empty")
-            return false
+            return VerifyResult.Rejected("下载到的文件为空")
         }
+
+        if (!looksLikeApk(file)) {
+            return VerifyResult.Rejected(
+                "下载到的不是安装包（可能是镜像返回的错误页），已丢弃"
+            )
+        }
+
+        if (expectedSize > 0L && file.length() != expectedSize) {
+            return VerifyResult.Rejected(
+                "安装包大小不符：期望 $expectedSize 字节，实际 ${file.length()} 字节"
+            )
+        }
+
         if (expectedSha256.isBlank()) {
-            Log.w(TAG, "verify: no expected sha256, skipping")
-            return true
+            Log.w(TAG, "verify: server gave no sha256, degraded to size-only check")
+            return VerifyResult.Degraded("服务端未提供校验值，本次只核对了文件大小")
         }
+
         return try {
-            val md = MessageDigest.getInstance("SHA-256")
-            file.inputStream().use { input ->
-                val buf = ByteArray(1 shl 16)
-                while (true) {
-                    val n = input.read(buf)
-                    if (n <= 0) break
-                    md.update(buf, 0, n)
-                }
-            }
-            val actual = md.digest().joinToString("") { "%02x".format(it) }
-            val ok = actual.equals(expectedSha256, ignoreCase = true)
-            if (!ok) {
+            val actual = sha256Of(file)
+            if (actual.equals(expectedSha256, ignoreCase = true)) {
+                VerifyResult.Verified
+            } else {
                 Log.e(TAG, "SHA256 mismatch: expected=$expectedSha256 actual=$actual")
+                VerifyResult.Rejected(
+                    "安装包校验失败（SHA256 不匹配），这条线路可能被劫持，已丢弃"
+                )
             }
-            ok
         } catch (e: Exception) {
             Log.e(TAG, "verify failed", e)
+            VerifyResult.Rejected("校验过程出错：${e.message?.take(40)}")
+        }
+    }
+
+    /** APK 本质是 ZIP，文件头必须是 "PK"（0x50 0x4B）。 */
+    private fun looksLikeApk(file: File): Boolean {
+        return try {
+            file.inputStream().use { input ->
+                val head = ByteArray(4)
+                if (input.read(head) != 4) return false
+                head[0] == 0x50.toByte() && head[1] == 0x4B.toByte()
+            }
+        } catch (e: Exception) {
             false
+        }
+    }
+
+    private fun sha256Of(file: File): String {
+        val md = MessageDigest.getInstance("SHA-256")
+        file.inputStream().use { input ->
+            val buf = ByteArray(1 shl 16)
+            while (true) {
+                val n = input.read(buf)
+                if (n <= 0) break
+                md.update(buf, 0, n)
+            }
+        }
+        return md.digest().joinToString("") { "%02x".format(it) }
+    }
+
+    /**
+     * 回退到浏览器下载。
+     *
+     * 当 DownloadManager 在这台机器上不工作（部分 ROM 对 Android/data
+     * 有额外限制，或下载一直卡在 0%）时用这条路。此时没有完整性校验，
+     * 调用方必须在界面上明确告知用户。
+     */
+    fun openInBrowser(url: String) {
+        try {
+            context.startActivity(
+                Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "openInBrowser failed", e)
         }
     }
 

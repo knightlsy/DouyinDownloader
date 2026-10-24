@@ -77,6 +77,8 @@ import com.knightlsy.douyin.data.ApkUpdater
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import android.widget.Toast
+import com.knightlsy.douyin.data.ForceUpdateGuard
 
 class MainActivity : ComponentActivity() {
 
@@ -118,13 +120,16 @@ class MainActivity : ComponentActivity() {
             var isRechecking by remember { mutableStateOf(false) }
             var stage by remember { mutableStateOf<UpdateStage>(UpdateStage.Idle) }
             var selectedLine by remember { mutableStateOf<String?>(null) }
+            var selectedUrl by remember { mutableStateOf<String?>(null) }
             var downloadId by remember { mutableStateOf<Long?>(null) }
+            // 本次会话里已经失败的线路，重试时排除，避免死循环选中同一条坏线
+            var failedEndpoints by remember { mutableStateOf<Set<String>>(emptySet()) }
+            var passRemaining by remember { mutableStateOf(0L) }
             val updateChecker = remember { UpdateChecker(context) }
             val apkUpdater = remember { ApkUpdater(context) }
             val scope = rememberCoroutineScope()
 
             LaunchedEffect(Unit) {
-                val prefs = context.getSharedPreferences("update_prefs", Context.MODE_PRIVATE)
                 val currentVersion = BuildConfig.VERSION_NAME
                 val result = updateChecker.checkForUpdate(currentVersion)
 
@@ -132,21 +137,57 @@ class MainActivity : ComponentActivity() {
                     updateResult = result
                     // 强制更新：检测到新版本就挡住整个应用，不更新不能使用。
                     // 不提供「稍后」入口 —— 有它就等于可选更新。
-                    showDialog = true
+                    //
+                    // 例外是逃生口：连续 3 次更新失败后放行 24 小时。
+                    // 否则更新链路本身坏掉（服务端异常 / 镜像全被劫持 /
+                    // DownloadManager 在这台机器上不工作）时，用户会被永久锁住 ——
+                    // 旧版进不去，新版装不上，没有任何退出路径。
+                    val passed = ForceUpdateGuard.isPassed(context, result.version)
+                    passRemaining = if (passed) ForceUpdateGuard.remainingMinutes(context) else 0L
+                    showDialog = !passed
+                    if (passed) {
+                        Toast.makeText(
+                            context,
+                            "更新多次失败，已暂时放行 ${passRemaining / 60} 小时。请尽快手动更新。",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
                 }
             }
 
-            // 下载进度轮询 → 完成后校验 SHA256 → 通过才拉起安装器。
-            // 强制更新场景下这一段是「用户被锁住」的全部时长，
-            // 所以每 500ms 刷一次进度，让等待有可见的进展。
+            // 下载进度轮询 → 校验 → 安装。
+            //
+            // 这里有三条退出路径，缺一条都可能导致用户被锁死：
+            //   1. 正常下完 → 校验 → 安装
+            //   2. 下载器完全不动（部分 ROM 不让写 Android/data）→ 30 秒后回退浏览器
+            //   3. 校验不通过 → 排除这条线路 → 重试时换一条
             LaunchedEffect(downloadId) {
                 val id = downloadId ?: return@LaunchedEffect
-                val expected = updateResult?.sha256.orEmpty()
+                val expectedSha = updateResult?.sha256.orEmpty()
+                val expectedSize = updateResult?.size ?: 0L
+                val version = updateResult?.version.orEmpty()
+                val fallbackUrl = selectedUrl ?: updateResult?.downloadUrl.orEmpty()
+
+                var lastBytes = -1L
+                var stalledMs = 0L
+
+                // countAsFailure=false 用于「装不上不是系统的错」的场景
+                // （比如用户没授「未知来源」权限），那种不该消耗逃生口的次数。
+                fun fail(message: String, countAsFailure: Boolean = true) {
+                    if (countAsFailure) ForceUpdateGuard.recordFailure(context, version)
+                    stage = UpdateStage.Failed(message)
+                }
 
                 while (true) {
                     delay(500)
                     when (val st = apkUpdater.query(id)) {
                         is ApkUpdater.State.Running -> {
+                            if (st.downloaded == lastBytes) {
+                                stalledMs += 500L
+                            } else {
+                                stalledMs = 0L
+                                lastBytes = st.downloaded
+                            }
                             stage = UpdateStage.Downloading(
                                 st.percent,
                                 if (st.total > 0) {
@@ -158,37 +199,64 @@ class MainActivity : ComponentActivity() {
                                     "%.1f MB".format(st.downloaded / 1048576.0)
                                 }
                             )
+                            if (stalledMs >= STALL_LIMIT_MS) {
+                                ForceUpdateGuard.recordFailure(context, version)
+                                if (fallbackUrl.isNotBlank()) apkUpdater.openInBrowser(fallbackUrl)
+                                stage = UpdateStage.FallbackToBrowser(
+                                    "系统下载器 30 秒无进展（可能是这台机器不允许写应用私有目录），" +
+                                        "已切到浏览器下载。本次没有完整性校验。"
+                                )
+                                break
+                            }
                         }
+
                         is ApkUpdater.State.Ready -> {
                             stage = UpdateStage.Verifying
-                            val ok = withContext(Dispatchers.IO) {
-                                apkUpdater.verify(st.file, expected)
-                            }
-                            if (ok) {
-                                stage = UpdateStage.Installing
-                                val r = apkUpdater.install(st.file)
-                                if (r.isFailure) {
-                                    stage = UpdateStage.Failed(
-                                        r.exceptionOrNull()?.message ?: "无法打开安装器"
-                                    )
+                            when (val v = withContext(Dispatchers.IO) {
+                                apkUpdater.verify(st.file, expectedSha, expectedSize)
+                            }) {
+                                is ApkUpdater.VerifyResult.Verified -> {
+                                    stage = UpdateStage.Installing
+                                    val r = apkUpdater.install(st.file)
+                                    if (r.isFailure) {
+                                        fail(
+                                            r.exceptionOrNull()?.message ?: "无法打开安装器",
+                                            countAsFailure = false
+                                        )
+                                    } else {
+                                        ForceUpdateGuard.recordSuccess(context)
+                                    }
                                 }
-                            } else {
-                                // 校验不过 = 这条线路给的包不是我们发布的那个。
-                                // 立刻删掉，绝不留到用户手上。
-                                withContext(Dispatchers.IO) { st.file.delete() }
-                                stage = UpdateStage.Failed(
-                                    if (expected.isBlank())
-                                        "安装包为空或下载不完整，请重试"
-                                    else
-                                        "安装包校验失败（SHA256 不匹配），这条线路可能被劫持，请重试"
-                                )
+
+                                is ApkUpdater.VerifyResult.Degraded -> {
+                                    // 服务端没给哈希，只校了大小 —— 告知用户但不拦
+                                    Toast.makeText(context, v.reason, Toast.LENGTH_LONG).show()
+                                    stage = UpdateStage.Installing
+                                    val r = apkUpdater.install(st.file)
+                                    if (r.isFailure) {
+                                        fail(
+                                            r.exceptionOrNull()?.message ?: "无法打开安装器",
+                                            countAsFailure = false
+                                        )
+                                    }
+                                }
+
+                                is ApkUpdater.VerifyResult.Rejected -> {
+                                    // 这条线路给的包不是我们发的，立刻删掉并排除它
+                                    withContext(Dispatchers.IO) { st.file.delete() }
+                                    selectedUrl?.let { failedEndpoints = failedEndpoints + it }
+                                    fail(v.reason)
+                                }
                             }
                             break
                         }
+
                         is ApkUpdater.State.Failed -> {
-                            stage = UpdateStage.Failed(st.reason)
+                            selectedUrl?.let { failedEndpoints = failedEndpoints + it }
+                            fail(st.reason)
                             break
                         }
+
                         else -> Unit
                     }
                 }
@@ -214,7 +282,11 @@ class MainActivity : ComponentActivity() {
                                 selectedLine = null
                                 downloadId = null
                                 scope.launch {
-                                    val ep = updateChecker.resolveFastest(result.downloadUrl)
+                                    val ep = updateChecker.resolveFastest(
+                                        result.downloadUrl,
+                                        failedEndpoints,
+                                    )
+                                    selectedUrl = ep.url
                                     selectedLine = if (ep.latencyMs >= 0) {
                                         "${ep.name} · ${ep.latencyMs}ms"
                                     } else {
@@ -233,6 +305,9 @@ class MainActivity : ComponentActivity() {
                         stage = stage,
                         selectedLine = selectedLine,
                         isChecking = isRechecking,
+                        passAllowed = passRemaining > 0L,
+                        passRemainingMinutes = passRemaining,
+                        onPass = { showDialog = false },
                         onRetry = {
                             // 只重新检查，不跳过：检查到更新仍然停在这个界面
                             isRechecking = true
@@ -261,6 +336,9 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+/** 系统下载器多久没有任何进展就判定它在这台机器上不工作。 */
+private const val STALL_LIMIT_MS = 30_000L
+
 /**
  * 强制更新的进度阶段。
  *
@@ -280,11 +358,16 @@ sealed interface UpdateStage {
     object Verifying : UpdateStage
     /** 校验通过，已拉起系统安装器。 */
     object Installing : UpdateStage
+    /**
+     * DownloadManager 在这台机器上不工作，已回退到浏览器下载。
+     * 这条路径没有完整性校验，界面必须明说。
+     */
+    data class FallbackToBrowser(val reason: String) : UpdateStage
     data class Failed(val message: String) : UpdateStage
 
     /** 这个阶段能不能再点「立即更新」。 */
     val canStart: Boolean
-        get() = this is Idle || this is Failed
+        get() = this is Idle || this is Failed || this is FallbackToBrowser
 }
 
 /**
@@ -313,6 +396,9 @@ fun ForceUpdateDialog(
     isChecking: Boolean = false,
     stage: UpdateStage = UpdateStage.Idle,
     selectedLine: String? = null,
+    passAllowed: Boolean = false,
+    passRemainingMinutes: Long = 0L,
+    onPass: () -> Unit = {},
 ) {
     val c = LocalBgColors.current
 
@@ -330,6 +416,7 @@ fun ForceUpdateDialog(
         is UpdateStage.Verifying -> "正在校验安装包…"
         is UpdateStage.Installing -> "正在打开安装器…"
         is UpdateStage.Failed -> "↻  重试下载"
+        is UpdateStage.FallbackToBrowser -> "↻  重新尝试应用内下载"
     }
 
     Dialog(
@@ -527,6 +614,41 @@ fun ForceUpdateDialog(
                         color = c.accent,
                         modifier = Modifier.padding(bottom = 6.dp),
                     )
+                }
+
+                if (stage is UpdateStage.FallbackToBrowser) {
+                    Text(
+                        text = stage.reason,
+                        fontSize = 11.sp,
+                        lineHeight = 17.sp,
+                        color = c.accent,
+                        modifier = Modifier.padding(bottom = 6.dp),
+                    )
+                }
+
+                // 逃生口：连续 3 次失败后才会出现。正常情况下这段永远不渲染。
+                if (passAllowed) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(40.dp)
+                            .clip(RoundedCornerShape(BgRadius.r2))
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                                onClick = onPass,
+                            ),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = "更新多次失败，暂时继续使用（剩 ${passRemainingMinutes / 60} 小时）",
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 10.sp,
+                            letterSpacing = 0.4.sp,
+                            color = c.ink3,
+                        )
+                    }
+                    Spacer(Modifier.height(4.dp))
                 }
 
                 Text(

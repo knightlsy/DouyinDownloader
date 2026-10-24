@@ -239,11 +239,26 @@ class UpdateChecker(private val context: Context) {
      *
      * 全部失败时回退到原始地址 —— 不阻断用户，让浏览器自己去报错。
      */
-    suspend fun resolveFastest(downloadUrl: String): DownloadEndpoint = coroutineScope {
+    suspend fun resolveFastest(
+        downloadUrl: String,
+        exclude: Set<String> = emptySet(),
+    ): DownloadEndpoint = coroutineScope {
         val ghUrl = extractGithubUrl(downloadUrl)
-        val candidates = buildCandidates(ghUrl, downloadUrl)
+        val all = buildCandidates(ghUrl, downloadUrl)
 
-        Log.d(TAG, "Probing ${candidates.size} endpoints concurrently")
+        // 排除本次会话里已经失败过的线路。
+        //
+        // 不加这个的话会死循环：某个镜像持续返回篡改包 → 校验失败 → 重试
+        // → 它测速依然最快 → 又选中它 → 再失败。用户会看到「校验失败，
+        // 请重试」重试无数次都装不上。
+        val candidates = all.filterNot { it.second in exclude }
+
+        Log.d(TAG, "Probing ${candidates.size}/${all.size} endpoints (excluded ${exclude.size})")
+
+        if (candidates.isEmpty()) {
+            Log.w(TAG, "All endpoints excluded, falling back to original URL")
+            return@coroutineScope DownloadEndpoint("原始地址", downloadUrl, -1L)
+        }
 
         if (candidates.size == 1) {
             val (name, url) = candidates.first()
