@@ -1,5 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 应用图标背景层：抖音粉渐变（对角），配合整体品牌色 -->
+<!--
+  应用图标背景层：A+D 混合的粉→紫→青对角渐变。
+
+  色值由 OKLCH 精确转换：
+    #FE4F75  oklch(0.68 0.21 12)   抖音粉的同族，稍沉
+    #D354B0  oklch(0.64 0.19 340)  中间过渡
+    #2AD7D7  oklch(0.80 0.13 195)  抖音青的同族，降饱和
+
+  旧版是从 #FE2C55 到 #FF7A94 的纯粉三段渐变 —— 全程同一色相，
+  在小尺寸下看起来就是一块粉色，没有品牌辨识度也没有层次。
+  换成跨色相的对角渐变后，24px 上也能看出这是一条斜向的光谱。
+
+  渐变方向 0,0 → 108,108（左上到右下），与前景箭头同轴，
+  视觉上像光从左上打下来。
+-->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
@@ -13,9 +27,9 @@
                 android:type="linear"
                 android:startX="0" android:startY="0"
                 android:endX="108" android:endY="108">
-                <item android:offset="0" android:color="#FFFE2C55"/>
-                <item android:offset="0.5" android:color="#FFFF4064"/>
-                <item android:offset="1" android:color="#FFFF7A94"/>
+                <item android:offset="0" android:color="#FFFE4F75"/>
+                <item android:offset="0.48" android:color="#FFD354B0"/>
+                <item android:offset="1" android:color="#FF2AD7D7"/>
             </gradient>
         </aapt:attr>
     </path>
