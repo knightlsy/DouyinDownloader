@@ -128,6 +128,39 @@ imm?.hideSoftInputFromWindow(view.windowToken, 0)
 
 ---
 
+## 签名密钥与覆盖升级
+
+**问题**：v1.6.9 及更早的 Release，每个版本的签名都不一样。
+
+根因是 CI 上没有固定的 keystore，`signingConfigs.release` 不存在时回退到 debug 签名，
+而 GitHub Actions 每个 runner 的 `~/.android/debug.keystore` 都是新生成的 ——
+所以 v1.6.9 的证书指纹是 `1549a11d…`，v1.7.0 第一次构建出来变成 `1b074e46…`，两者无法互相覆盖。
+
+**修复**（v1.7.0 起）：
+
+1. 生成固定的 `release-key.jks`（RSA 4096，有效期 10950 天，DN 与 BgCamera 一致）
+2. base64 后存进三个 GitHub Secrets：
+   - `DOUYIN_KEYSTORE_B64`
+   - `DOUYIN_STORE_PASSWORD`
+   - `DOUYIN_KEY_PASSWORD`
+3. `build.yml` 在构建前把 base64 还原成 `release-key.jks`
+4. `build.gradle.kts` 一旦检测到 keystore + 两个口令都存在，就用 release 签名
+
+**当前正式签名**（可用于校验下载到的 APK）：
+
+```
+DN      : CN=DouyinDownloader, OU=Mobile, O=knightlsy, L=Mianyang, ST=Sichuan, C=CN
+SHA-256 : E8:EA:E2:6F:FE:F2:55:85:A8:EA:A9:32:BE:06:5F:90:50:BB:13:23:0A:D3:AF:76:F3:2B:7E:0A:16:B9:A1:C7
+有效期  : 2026-10-24 → 2056-10-16
+```
+
+**代价**：v1.7.0 是切换签名的分界点，**必须先卸载 v1.6.9 再装**。
+从 v1.7.0 往后，所有版本都能直接覆盖升级。
+
+密钥文件不入库（`.gitignore` 里已排除 `*.jks`），本地副本在项目根目录。
+
+---
+
 ## 功能特点
 
 ### 核心功能

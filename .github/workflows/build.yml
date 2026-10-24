@@ -27,11 +27,28 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      - name: Restore signing key
+        env:
+          # 固定签名密钥：base64 存在 Secrets 里，构建时还原成 release-key.jks。
+          # 不这么做的话，每个 runner 都会生成新的 ~/.android/debug.keystore，
+          # 导致每个版本的签名都不同 —— 用户每次升级都得先卸载重装。
+          DOUYIN_KEYSTORE_B64: ${{ secrets.DOUYIN_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$DOUYIN_KEYSTORE_B64" ]; then
+            echo "$DOUYIN_KEYSTORE_B64" | base64 -d > release-key.jks
+            echo "::notice::已恢复固定签名密钥（$(stat -c%s release-key.jks) 字节）"
+          else
+            echo "::warning::DOUYIN_KEYSTORE_B64 未配置 —— 本次将使用 debug 签名，产物无法覆盖升级"
+          fi
+
       - name: Build release APK
         env:
           # 云端同步接口密钥：不写进源码，从仓库 Secrets 注入 BuildConfig
           DOUYIN_SYNC_API_URL: ${{ secrets.DOUYIN_SYNC_API_URL }}
           DOUYIN_SYNC_API_KEY: ${{ secrets.DOUYIN_SYNC_API_KEY }}
+          # 签名密钥口令（build.gradle.kts 从这两个环境变量读）
+          DOUYIN_STORE_PASSWORD: ${{ secrets.DOUYIN_STORE_PASSWORD }}
+          DOUYIN_KEY_PASSWORD: ${{ secrets.DOUYIN_KEY_PASSWORD }}
         run: |
           set -o pipefail
           if [ -z "$DOUYIN_SYNC_API_KEY" ]; then
@@ -77,7 +94,23 @@ jobs:
           # 手写更新日志：不使用自动生成（避免把内部实现细节带进用户可见的说明里）
           generate_release_notes: false
           body: |
+          body: |
             更新内容：
+
+            · 界面全部重写：影院感的排版骨架 + 克制的粉青配色，深浅双主题都重新调过
+            · 修复：播放器看不见播放/暂停按钮 —— media3 的 Player 没有 showControls 参数，
+              控制层显隐由 centerControls 的 visible 参数控制，默认是「隐」；现在改为常驻
+            · 修复：点「解析」后键盘不收起，挡住下面的结果
+            · 修复：长分享文案在输入框里被横向裁切，看不到粘对了没
+            · 修复：任务卡整卡可点，和内部的取消/重试图标抢点击
+            · 修复：图标触摸区只有 32dp，容易点不中
+            · 播放器新增「下载此视频」，不用关掉回首页重点
+            · 下载任务改为一根细线进度，一屏能多看几条
+            · 图集支持逐张挑选，实况图会连同动态一起保存
+
+            ⚠️ 重要：从本版起使用固定签名密钥。
+            由于之前每个版本的签名都是 CI 临时生成的（每次都不一样），
+            **本版需要先卸载旧版再安装**。之后的所有版本都可以直接覆盖升级。
 
             · 播放器全新升级：进度条、播放控制、时间显示改为统一风格，操作更顺手
             · 播放界面更沉浸：全屏黑底，控制条自动隐藏，不遮挡画面
