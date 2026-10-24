@@ -153,6 +153,7 @@ data class BgColors(
     val ink: Color,       // 主文字
     val ink2: Color,      // 次要文字
     val ink3: Color,      // 三级文字 / 标签
+    val ink4: Color,      // 四级文字：禁用态 / 极弱提示
     val paper: Color,     // 页面底色
     val surface: Color,   // 卡片底
     val raise: Color,     // 次级块（输入框、错误带）
@@ -166,6 +167,7 @@ private val LightTokens = BgColors(
     ink = OnBackgroundLight,
     ink2 = OnSurfaceVariantLight,
     ink3 = Color(0xFF8C8B92),
+    ink4 = Color(0xFFB0AFB6),
     paper = BackgroundLight,
     surface = SurfaceLight,
     raise = SurfaceVariantLight,
@@ -179,6 +181,7 @@ private val DarkTokens = BgColors(
     ink = OnBackgroundDark,
     ink2 = OnSurfaceVariantDark,
     ink3 = Color(0xFF58575F),
+    ink4 = Color(0xFF3D3C43),
     paper = BackgroundDark,
     surface = SurfaceDark,
     raise = SurfaceVariantDark,
