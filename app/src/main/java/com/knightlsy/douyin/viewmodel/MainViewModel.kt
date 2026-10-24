@@ -130,6 +130,37 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         return fallbackPattern.find(text)?.value
     }
 
+
+    /**
+     * 把技术异常翻译成人话。
+     *
+     * 之前是 `error = "解析失败: ${e.message}"`，直接把异常原文甩给用户 ——
+     * 视频被作者删掉、设成私密、或者链接过期时，用户看到的是
+     * 「HTTP响应状态异常」「HTTP 403」这种，既不知道发生了什么，也不知道要不要重试。
+     *
+     * 这里只翻译能确定的几种（403/404/410 = 内容侧没了；超时/DNS = 网络侧），
+     * 其余统一收敛成一句「稍后重试」，不再暴露原始异常文本 ——
+     * 原文仍然通过 ParseDiag 进诊断（复制到剪贴板），排查能力不受影响。
+     */
+    private fun humanizeParseError(raw: String?): String {
+        if (raw.isNullOrBlank()) return "解析失败，请稍后重试"
+        val m = raw.lowercase()
+        return when {
+            // 抖音对已删除/私密内容常见的几种返回
+            m.contains("403") || m.contains("404") || m.contains("410") ->
+                "视频已被作者删除，或已设为私密"
+            m.contains("http") && (m.contains("状态") || m.contains("status") || m.contains("code")) ->
+                "视频已被作者删除，或已设为私密"
+            m.contains("timeout") || m.contains("timed out") || m.contains("超时") ->
+                "请求超时，请检查网络后重试"
+            m.contains("unable to resolve host") || m.contains("unknownhost") || m.contains("dns") ->
+                "网络不可用，请检查网络连接"
+            m.contains("connect") || m.contains("socket") || m.contains("network") ->
+                "网络连接失败，请检查网络后重试"
+            else -> "解析失败，请稍后重试"
+        }
+    }
+
     fun parseAndPreview() {
         val url = _uiState.value.inputUrl.trim()
         if (url.isEmpty()) { _uiState.value = _uiState.value.copy(error = "请输入视频链接"); return }
@@ -142,7 +173,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 if (contentInfo == null) {
                     // 失败时附带诊断信息（各环节耗时/结果），并自动复制到剪贴板，便于直接粘贴反馈
                     val diag = ParseDiag.dump()
-                    val msg = if (diag != null) "无法获取内容信息（诊断已复制到剪贴板）\n$diag" else "无法获取内容信息"
+                    // 主提示说人话，诊断信息折叠在后面（仍然可复制）
+                    val head = "视频可能已被作者删除，或已设为私密"
+                    val msg = if (diag != null) "$head\n\n$diag" else head
                     if (diag != null) {
                         val cm = getApplication<Application>().getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                         cm.setPrimaryClip(ClipData.newPlainText("parse_diag", "无法获取内容信息\n$diag"))
@@ -178,7 +211,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         Log.w("MainVM", "Cloud sync failed: ${e.message}")
                     }
                 }
-            } catch (e: Exception) { _uiState.value = _uiState.value.copy(isLoading = false, error = "解析失败: ${e.message}") }
+            } catch (e: Exception) {
+                // 原始异常留给诊断日志，界面上只说人话
+                ParseDiag.log("解析异常: ${e.message?.take(60)}")
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    error = humanizeParseError(e.message),
+                )
+            }
         }
     }
 
