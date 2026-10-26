@@ -21,15 +21,15 @@
     --f-mono: ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospace;
     --f-body: system-ui, -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
 
-    --t-hero: clamp(52px, 9vw, 118px);
-    --t-h2:   clamp(30px, 3.8vw, 52px);
-    --t-lead: clamp(17px, 1.6vw, 21px);
+    --t-hero: clamp(54px, 8.6vw, 112px);
+    --t-h2:   clamp(32px, 4vw, 56px);
+    --t-lead: clamp(16.5px, 1.5vw, 20px);
     --t-body: 16px;
     --t-sm:   13.5px;
     --t-xs:   11.5px;
 
     --pad-x: clamp(22px, 6vw, 128px);
-    --sec-y: clamp(72px, 10vw, 150px);
+    --sec-y: clamp(84px, 11vw, 160px);
   }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -50,143 +50,163 @@
 
   /* ══ 顶栏 ══ */
   header {
-    position: sticky; top: 0; z-index: 50;
+    position: sticky; top: 0; z-index: 60;
     background: rgba(10,10,12,.82);
     backdrop-filter: blur(18px) saturate(1.2);
     -webkit-backdrop-filter: blur(18px) saturate(1.2);
     border-bottom: 1px solid var(--hair);
   }
   .nav { display: flex; align-items: center; justify-content: space-between; height: 64px; }
-  .brand {
-    font-family: var(--f-mono); font-size: var(--t-sm);
-    letter-spacing: .18em; text-transform: uppercase; color: var(--ink);
-    text-decoration: none;
-  }
-  .brand i {
-    font-style: normal; display: inline-block; width: 8px; height: 8px;
-    background: var(--pink); border-radius: 50%; margin-right: 10px; vertical-align: 1px;
-  }
+  .brand { font-family: var(--f-mono); font-size: var(--t-sm); letter-spacing: .18em; text-transform: uppercase; text-decoration: none; }
+  .brand i { font-style: normal; display: inline-block; width: 8px; height: 8px; background: var(--pink); border-radius: 50%; margin-right: 10px; vertical-align: 1px; animation: pulse 2s ease-in-out infinite; }
   .nav-r { display: flex; gap: 34px; align-items: center; }
   .nav-r a { font-size: var(--t-sm); color: var(--ink-2); text-decoration: none; position: relative; transition: color .2s; }
   .nav-r a::after { content:""; position:absolute; left:0; bottom:-4px; width:0; height:1px; background: var(--pink); transition: width .25s cubic-bezier(.4,0,.2,1); }
   .nav-r a:hover { color: var(--ink); }
   .nav-r a:hover::after { width: 100%; }
-  .nav-cta {
-    font-family: var(--f-mono); font-size: var(--t-xs); letter-spacing: .12em;
-    padding: 10px 20px; background: var(--pink); color: #fff !important; text-decoration: none;
-    transition: background .2s, transform .2s;
-  }
-  .nav-cta::after { display: none; }
+  .nav-cta { font-family: var(--f-mono); font-size: var(--t-xs); letter-spacing: .12em; padding: 10px 20px; background: var(--pink); color:#fff !important; text-decoration:none; transition: background .2s, transform .2s; }
+  .nav-cta::after { display:none; }
   .nav-cta:hover { background: var(--pink-deep); transform: translateY(-1px); }
 
   /* ══ HERO ══ */
-  .hero { padding-top: clamp(80px, 10vw, 150px); padding-bottom: clamp(64px, 8vw, 110px); }
-  .eyebrow {
-    font-family: var(--f-mono); font-size: var(--t-xs); letter-spacing: .3em;
-    color: var(--cyan); text-transform: uppercase; margin-bottom: 26px;
-  }
-  .hero h1 {
-    font-family: var(--f-disp); font-weight: 400;
-    font-size: var(--t-hero); line-height: 1.06; letter-spacing: .01em;
-  }
+  .hero { padding-top: clamp(64px, 8vw, 120px); padding-bottom: clamp(40px, 5vw, 80px); overflow: hidden; }
+  .hero-grid { display: grid; grid-template-columns: 1.15fr .85fr; gap: clamp(40px, 5vw, 80px); align-items: center; }
+  .eyebrow { font-family: var(--f-mono); font-size: var(--t-xs); letter-spacing: .32em; color: var(--cyan); text-transform: uppercase; margin-bottom: 24px; opacity: 0; animation: rise .8s ease .1s forwards; }
+  .hero h1 { font-family: var(--f-disp); font-weight: 400; font-size: var(--t-hero); line-height: 1.04; letter-spacing: .01em; }
+  .hero h1 .ln { display: block; overflow: hidden; }
+  .hero h1 .ln span { display: inline-block; transform: translateY(110%); animation: rise 1s cubic-bezier(.22,.61,.36,1) forwards; }
+  .hero h1 .ln:nth-child(2) span { animation-delay: .14s; }
   .hero h1 em { font-style: italic; color: var(--pink); }
-  .hero .lead {
-    margin-top: 30px; max-width: 620px;
-    font-size: var(--t-lead); color: var(--ink-2); line-height: 1.75;
-  }
-  .hero-actions { margin-top: 46px; display: flex; gap: 16px; flex-wrap: wrap; align-items: center; }
-  .btn {
-    display: inline-flex; align-items: center; gap: 12px;
-    font-family: var(--f-mono); font-size: var(--t-sm); letter-spacing: .1em;
-    padding: 17px 34px; text-decoration: none; border: 1px solid transparent;
-    transition: transform .2s, background .2s, border-color .2s;
-  }
-  .btn-primary { background: var(--pink); color: #fff; }
-  .btn-primary:hover { background: var(--pink-deep); transform: translateY(-2px); }
+  .hero .lead { margin-top: 30px; max-width: 560px; font-size: var(--t-lead); color: var(--ink-2); line-height: 1.75; opacity: 0; animation: rise .9s ease .5s forwards; }
+  .hero-actions { margin-top: 42px; display: flex; gap: 16px; flex-wrap: wrap; align-items: center; opacity: 0; animation: rise .9s ease .7s forwards; }
+  .btn { display: inline-flex; align-items: center; gap: 12px; font-family: var(--f-mono); font-size: var(--t-sm); letter-spacing: .1em; padding: 17px 34px; text-decoration: none; border: 1px solid transparent; transition: transform .2s, background .2s, border-color .2s, box-shadow .2s; }
+  .btn-primary { background: var(--pink); color: #fff; box-shadow: 0 8px 28px rgba(254,79,117,.28); }
+  .btn-primary:hover { background: var(--pink-deep); transform: translateY(-2px); box-shadow: 0 14px 36px rgba(254,79,117,.38); }
   .btn-ghost { border-color: var(--hair); color: var(--ink-2); }
   .btn-ghost:hover { border-color: var(--ink-3); color: var(--ink); }
-  .btn .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: .9; }
-  .hero-meta {
-    margin-top: 40px; display: flex; gap: 28px; flex-wrap: wrap;
-    font-family: var(--f-mono); font-size: var(--t-xs); color: var(--ink-3);
-    letter-spacing: .06em;
-  }
+  .hero-meta { margin-top: 40px; display: flex; gap: 28px; flex-wrap: wrap; font-family: var(--f-mono); font-size: var(--t-xs); color: var(--ink-3); letter-spacing: .06em; opacity: 0; animation: rise .9s ease .9s forwards; }
   .hero-meta b { color: var(--ink); font-weight: 500; }
+
+  /* ══ 手机 mockup ══ */
+  .phone-wrap { position: relative; display: flex; justify-content: center; opacity: 0; animation: rise 1.1s ease .45s forwards; }
+  .phone {
+    width: min(290px, 72vw); background: #000; border-radius: 44px; padding: 10px;
+    box-shadow: 0 40px 90px rgba(0,0,0,.65), 0 0 0 1px rgba(255,255,255,.08);
+    animation: float 6s ease-in-out infinite;
+  }
+  .screen { background: #F5F4F6; border-radius: 34px; overflow: hidden; }
+  .s-status { background: linear-gradient(135deg, #FE4F75, #F75D74); color: #fff; display: flex; justify-content: space-between; align-items: center; padding: 10px 20px 0; font-size: 11px; font-family: var(--f-mono); }
+  .s-status .notch { width: 92px; height: 22px; background: #000; border-radius: 12px; margin-bottom: 8px; }
+  .s-nav { background: linear-gradient(135deg, #FE4F75, #FF7E9B); color: #fff; padding: 10px 16px 14px; display: flex; align-items: center; justify-content: space-between; }
+  .s-nav b { font-size: 15px; font-weight: 600; }
+  .s-nav .ic { width: 26px; height: 26px; border-radius: 8px; background: rgba(255,255,255,.25); }
+  .s-body { padding: 16px 14px 22px; }
+  .s-card { background: #fff; border-radius: 20px; padding: 18px 16px; box-shadow: 0 10px 26px rgba(120,40,60,.12); }
+  .s-card h5 { font-size: 14px; color: #18141A; display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+  .s-card h5 i { width: 16px; height: 16px; border-radius: 5px; background: var(--pink); }
+  .s-input { border: 1.5px solid #E8E4EA; border-radius: 12px; padding: 12px; font-size: 12px; color: #9A94A0; display: flex; align-items: center; gap: 8px; }
+  .s-input i { width: 14px; height: 14px; border-radius: 4px; background: var(--pink); }
+  .s-btn { margin-top: 14px; background: linear-gradient(135deg, #FE4F75, #FF6B8A); color: #fff; text-align: center; padding: 13px; border-radius: 14px; font-size: 14px; font-weight: 600; letter-spacing: .06em; }
+  .s-tags { display: flex; gap: 8px; margin-top: 16px; }
+  .s-tags span { flex: 1; text-align: center; font-size: 10px; padding: 8px 4px; border-radius: 10px; background: #ECE9EF; color: #6E6874; }
+  .s-tags span.on { background: var(--pink); color: #fff; }
+  .s-tags span.cyan { background: var(--cyan); color: #062; }
+  .glow { position: absolute; width: 420px; height: 420px; border-radius: 50%; background: radial-gradient(circle, rgba(254,79,117,.28), transparent 65%); filter: blur(50px); z-index: -1; animation: breathe 5s ease-in-out infinite; }
+
+  /* ══ 跑马灯 ══ */
+  .marquee { border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 18px 0; overflow: hidden; }
+  .marquee-track { display: flex; gap: 56px; white-space: nowrap; width: max-content; animation: marquee 26s linear infinite; }
+  .marquee-track span { font-family: var(--f-disp); font-size: clamp(20px, 2.4vw, 30px); color: var(--ink-3); font-style: italic; }
+  .marquee-track span b { color: var(--pink); font-weight: 400; }
 
   /* ══ 区块通用 ══ */
   section.block { padding: var(--sec-y) 0; }
-  .sec-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 56px; gap: 20px; flex-wrap: wrap; }
-  .sec-head h2 { font-family: var(--f-disp); font-weight: 400; font-size: var(--t-h2); }
-  .sec-head .no { font-family: var(--f-mono); font-size: var(--t-xs); color: var(--ink-3); letter-spacing: .2em; }
+  .sec-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: clamp(44px, 5vw, 72px); gap: 20px; flex-wrap: wrap; }
+  .sec-head h2 { font-family: var(--f-disp); font-weight: 400; font-size: var(--t-h2); line-height: 1.12; }
+  .sec-head h2 em { color: var(--pink); font-style: italic; }
+  .sec-head .no { font-family: var(--f-mono); font-size: var(--t-xs); color: var(--ink-3); letter-spacing: .24em; }
   .sec-head .no em { color: var(--cyan); font-style: normal; }
 
-  /* ══ 功能网格 ══ */
+  /* ══ 预览介绍（NO.01）══ */
+  .preview-grid { display: grid; grid-template-columns: .9fr 1.1fr; gap: clamp(40px, 5vw, 90px); align-items: center; }
+  .steps { display: flex; flex-direction: column; }
+  .step { display: flex; gap: 22px; padding: 26px 0; border-top: 1px solid var(--hair); }
+  .step:last-child { border-bottom: 1px solid var(--hair); }
+  .step .n { font-family: var(--f-disp); font-style: italic; font-size: 34px; color: var(--pink); min-width: 58px; line-height: 1; }
+  .step h3 { font-family: var(--f-disp); font-weight: 400; font-size: 21px; margin-bottom: 8px; }
+  .step p { font-size: var(--t-sm); color: var(--ink-2); max-width: 420px; }
+  .preview-phone { display: flex; justify-content: center; }
+  .preview-phone .phone { animation: float 7s ease-in-out infinite; }
+
+  /* ══ 数字统计 ══ */
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--hair); border: 1px solid var(--hair); margin-top: clamp(50px, 6vw, 80px); }
+  .stat { background: var(--bg-2); padding: 40px 34px; text-align: center; }
+  .stat .num { font-family: var(--f-disp); font-size: clamp(44px, 5vw, 72px); line-height: 1; color: var(--ink); }
+  .stat .num em { color: var(--pink); font-style: normal; }
+  .stat .num .cyan { color: var(--cyan); }
+  .stat .lab { margin-top: 14px; font-family: var(--f-mono); font-size: var(--t-xs); color: var(--ink-3); letter-spacing: .16em; text-transform: uppercase; }
+
+  /* ══ 功能网格（NO.02）══ */
   .feat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--hair); border: 1px solid var(--hair); }
-  .feat { background: var(--bg-2); padding: 40px 34px; transition: background .3s; position: relative; overflow: hidden; }
-  .feat:hover { background: var(--bg-3); }
+  .feat { background: var(--bg-2); padding: 40px 34px; position: relative; overflow: hidden; transition: background .35s, transform .35s; }
+  .feat:hover { background: var(--bg-3); transform: translateY(-4px); }
   .feat .idx { font-family: var(--f-mono); font-size: var(--t-xs); color: var(--ink-3); letter-spacing: .2em; }
-  .feat h3 { font-family: var(--f-disp); font-weight: 400; font-size: clamp(19px, 1.7vw, 23px); margin: 22px 0 14px; }
+  .feat h3 { font-family: var(--f-disp); font-weight: 400; font-size: clamp(19px, 1.7vw, 23px); margin: 22px 0 14px; transition: color .3s; }
+  .feat:hover h3 { color: var(--pink); }
   .feat p { font-size: var(--t-sm); color: var(--ink-2); line-height: 1.75; }
   .feat .tag { display: inline-block; margin-top: 20px; font-family: var(--f-mono); font-size: var(--t-xs); color: var(--cyan); letter-spacing: .1em; }
-  .feat::after {
-    content: ""; position: absolute; right: -30px; top: -30px; width: 90px; height: 90px;
-    border-radius: 50%; background: var(--pink); opacity: 0; filter: blur(30px); transition: opacity .4s;
-  }
-  .feat:hover::after { opacity: .12; }
+  .feat::after { content:""; position:absolute; right:-40px; top:-40px; width:120px; height:120px; border-radius:50%; background: var(--pink); opacity:0; filter: blur(34px); transition: opacity .5s; }
+  .feat:hover::after { opacity: .14; }
 
-  /* ══ 下载区 ══ */
-  .dl-panel {
-    background: var(--bg-2); border: 1px solid var(--hair);
-    display: grid; grid-template-columns: 1.4fr 1fr; gap: 0;
-  }
+  /* ══ 下载区（NO.03）══ */
+  .dl-panel { background: var(--bg-2); border: 1px solid var(--hair); display: grid; grid-template-columns: 1.4fr 1fr; }
   .dl-main { padding: clamp(36px, 4vw, 60px); }
   .dl-main h2 { font-family: var(--f-disp); font-weight: 400; font-size: clamp(26px, 3vw, 40px); margin-bottom: 14px; }
   .dl-main .ver { font-family: var(--f-mono); font-size: var(--t-sm); color: var(--cyan); letter-spacing: .1em; margin-bottom: 26px; }
   .dl-main p { color: var(--ink-2); font-size: var(--t-sm); max-width: 440px; }
   .dl-main .actions { margin-top: 34px; display: flex; gap: 14px; flex-wrap: wrap; }
-  .dl-side {
-    padding: clamp(36px, 4vw, 60px); border-left: 1px solid var(--hair);
-    display: flex; flex-direction: column; justify-content: center; gap: 22px;
-  }
+  .dl-side { padding: clamp(36px, 4vw, 60px); border-left: 1px solid var(--hair); display: flex; flex-direction: column; justify-content: center; gap: 22px; }
   .meta-row { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
   .meta-row .k { font-family: var(--f-mono); font-size: var(--t-xs); color: var(--ink-3); letter-spacing: .14em; text-transform: uppercase; }
   .meta-row .v { font-family: var(--f-mono); font-size: var(--t-sm); color: var(--ink); text-align: right; word-break: break-all; }
   .sha { cursor: pointer; position: relative; }
   .sha .v { color: var(--ink-2); font-size: 12.5px; line-height: 1.6; }
   .sha:hover .v { color: var(--cyan); }
-  .sha .copied {
-    position: absolute; right: 0; top: -26px; font-family: var(--f-mono); font-size: var(--t-xs);
-    color: var(--cyan); opacity: 0; transition: opacity .2s; pointer-events: none;
-  }
+  .sha .copied { position: absolute; right: 0; top: -26px; font-family: var(--f-mono); font-size: var(--t-xs); color: var(--cyan); opacity: 0; transition: opacity .2s; pointer-events: none; }
   .sha.copied-ok .copied { opacity: 1; }
-
-  /* ══ 安装提示 ══ */
-  .note {
-    margin-top: 34px; border-left: 2px solid var(--pink); padding: 18px 24px;
-    background: rgba(254,79,117,.06);
-  }
+  .note { margin-top: 34px; border-left: 2px solid var(--pink); padding: 18px 24px; background: rgba(254,79,117,.06); }
   .note h4 { font-family: var(--f-mono); font-size: var(--t-sm); letter-spacing: .1em; color: var(--pink); margin-bottom: 8px; }
   .note p { font-size: var(--t-sm); color: var(--ink-2); }
 
   /* ══ 页脚 ══ */
-  footer { border-top: 1px solid var(--hair); padding: 44px 0; }
+  footer { border-top: 1px solid var(--hair); padding: 46px 0; }
   .foot { display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap; font-family: var(--f-mono); font-size: var(--t-xs); color: var(--ink-3); letter-spacing: .08em; }
   .foot a { color: var(--ink-2); text-decoration: none; }
   .foot a:hover { color: var(--cyan); }
 
+  /* ══ 动效关键帧 ══ */
+  @keyframes rise { to { opacity: 1; transform: translateY(0); } }
+  @keyframes float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-14px); } }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+  @keyframes breathe { 0%,100% { opacity: .7; transform: scale(1); } 50% { opacity: 1; transform: scale(1.08); } }
+  @keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+
   /* ══ 滚动显现 ══ */
-  .reveal { opacity: 0; transform: translateY(26px); transition: opacity .7s ease, transform .7s cubic-bezier(.22,.61,.36,1); }
+  .reveal { opacity: 0; transform: translateY(30px); transition: opacity .8s ease, transform .8s cubic-bezier(.22,.61,.36,1); }
   .reveal.in { opacity: 1; transform: none; }
 
-  @media (max-width: 860px) {
+  @media (max-width: 920px) {
+    .hero-grid, .preview-grid { grid-template-columns: 1fr; }
+    .preview-grid { gap: 46px; }
     .feat-grid { grid-template-columns: 1fr; }
     .dl-panel { grid-template-columns: 1fr; }
     .dl-side { border-left: none; border-top: 1px solid var(--hair); }
     .nav-r a:not(.nav-cta) { display: none; }
+    .stats { grid-template-columns: 1fr; }
   }
   @media (prefers-reduced-motion: reduce) {
     * { animation: none !important; transition: none !important; }
-    .reveal { opacity: 1; transform: none; }
+    .reveal, .hero h1 .ln span, .hero .lead, .hero-actions, .hero-meta, .eyebrow, .phone-wrap { opacity: 1 !important; transform: none !important; }
   }
 </style>
 </head>
@@ -196,6 +216,7 @@
   <div class="wrap nav">
     <a class="brand" href="#top"><i></i>Douyin Downloader</a>
     <div class="nav-r">
+      <a href="#preview">预览</a>
       <a href="#features">功能</a>
       <a href="#download">下载</a>
       <a class="nav-cta" href="#download">立即下载</a>
@@ -205,71 +226,121 @@
 
 <!-- HERO -->
 <section class="hero" id="top">
-  <div class="wrap">
-    <div class="eyebrow">Android · 无水印工具</div>
-    <h1>抖音下载器<br><em>留下你喜欢的每一帧</em></h1>
-    <p class="lead">粘贴一段分享文案，自动识别链接，视频档位可选、图集逐张挑选、实况连同动态一起保存。全程本地解析，不经过任何第三方。</p>
-    <div class="hero-actions">
-      <a class="btn btn-primary" href="https://github.com/knightlsy/DouyinDownloader/releases/download/v1.7.7/app-release-v1.7.7.apk">
-        <span class="dot"></span>下载 APK
-      </a>
-      <a class="btn btn-ghost" href="#download">查看版本信息 ↓</a>
+  <div class="wrap hero-grid">
+    <div>
+      <div class="eyebrow">Android · 无水印工具 · 本地解析</div>
+      <h1>
+        <span class="ln"><span>抖音下载器</span></span>
+        <span class="ln"><span><em>留下你喜欢的</em>每一帧</span></span>
+      </h1>
+      <p class="lead">粘贴一段分享文案，自动识别链接。视频档位可选、图集逐张挑选、实况连同动态保存 —— 全程本地解析，不经过任何第三方。</p>
+      <div class="hero-actions">
+        <a class="btn btn-primary" href="https://github.com/knightlsy/DouyinDownloader/releases/download/v1.7.7/app-release-v1.7.7.apk">↓ 下载 APK</a>
+        <a class="btn btn-ghost" href="#preview">看界面预览</a>
+      </div>
+      <div class="hero-meta">
+        <span>版本 <b>v1.7.7</b></span>
+        <span>大小 <b>10.84 MB</b></span>
+        <span>系统 <b>Android 8.0+</b></span>
+        <span>发布 <b>2026-10-24</b></span>
+      </div>
     </div>
-    <div class="hero-meta">
-      <span>版本 <b>v1.7.7</b></span>
-      <span>大小 <b>10.84 MB</b></span>
-      <span>系统 <b>Android 8.0+</b></span>
-      <span>发布 <b>2026-10-24</b></span>
+    <div class="phone-wrap">
+      <div class="glow"></div>
+      <div class="phone">
+        <div class="screen">
+          <div class="s-status"><span>9:41</span><span class="notch"></span><span>5G ▮</span></div>
+          <div class="s-nav"><b>抖音下载器</b><span class="ic"></span><span class="ic"></span></div>
+          <div class="s-body">
+            <div class="s-card">
+              <h5><i></i>粘贴视频链接</h5>
+              <div class="s-input"><i></i>请输入或粘贴抖音视频链接</div>
+              <div class="s-btn">⬇ 解析视频</div>
+            </div>
+            <div class="s-tags">
+              <span class="on">输入</span><span>加载</span><span class="cyan">预览</span><span>下载</span>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </section>
 
-<div class="hair"></div>
+<!-- 跑马灯 -->
+<div class="marquee">
+  <div class="marquee-track">
+    <span>无水印 <b>·</b> 高清档位 <b>·</b> 图集导出 <b>·</b> 实况保存 <b>·</b> 沉浸播放 <b>·</b> 深浅主题 <b>·</b> 分享识别 <b>·</b> 环形进度</span>
+    <span>无水印 <b>·</b> 高清档位 <b>·</b> 图集导出 <b>·</b> 实况保存 <b>·</b> 沉浸播放 <b>·</b> 深浅主题 <b>·</b> 分享识别 <b>·</b> 环形进度</span>
+  </div>
+</div>
+
+<!-- 预览介绍 -->
+<section class="block" id="preview">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <h2>三步，<em>拿到视频</em></h2>
+      <span class="no"><em>NO.01</em> / 预览介绍</span>
+    </div>
+    <div class="preview-grid">
+      <div class="steps">
+        <div class="step reveal">
+          <span class="n">01</span>
+          <div><h3>粘贴链接</h3><p>把抖音分享给你的那段文字整段粘进来，不用删表情和符号，自动识别出视频链接。</p></div>
+        </div>
+        <div class="step reveal">
+          <span class="n">02</span>
+          <div><h3>点解析</h3><p>选想要的清晰度档位。图集作品可以逐张勾选，实况图会连同动态一起存下来。</p></div>
+        </div>
+        <div class="step reveal">
+          <span class="n">03</span>
+          <div><h3>下载保存</h3><p>原始画质直链下载，不带水印。任务卡一根细线进度，存系统相册，随时回看。</p></div>
+        </div>
+      </div>
+      <div class="preview-phone reveal">
+        <div class="phone" style="animation-delay:-2s">
+          <div class="screen">
+            <div class="s-status"><span>9:41</span><span class="notch"></span><span>5G ▮</span></div>
+            <div class="s-nav"><b>解析结果</b><span class="ic"></span></div>
+            <div class="s-body">
+              <div class="s-card">
+                <h5><i></i>视频已就绪</h5>
+                <div style="height:70px;border-radius:12px;background:linear-gradient(135deg,#2AD7D7,#FE4F75);opacity:.85;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px">▶ 00:00:15 · 1080P</div>
+                <div style="margin-top:12px;display:flex;gap:8px">
+                  <div style="flex:1;background:#ECE9EF;border-radius:8px;padding:8px;text-align:center;font-size:10px;color:#6E6874">1080P 原画</div>
+                  <div style="flex:1;background:var(--cyan);border-radius:8px;padding:8px;text-align:center;font-size:10px;color:#063">720P</div>
+                  <div style="flex:1;background:#ECE9EF;border-radius:8px;padding:8px;text-align:center;font-size:10px;color:#6E6874">540P</div>
+                </div>
+                <div class="s-btn">⬇ 下载此视频</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="stats">
+      <div class="stat reveal"><div class="num"><span class="cnt" data-target="100">0</span><em>%</em></div><div class="lab">本地解析 · 无第三方</div></div>
+      <div class="stat reveal"><div class="num"><span class="cnt" data-target="0">0</span></div><div class="lab">水印 · 原始画质</div></div>
+      <div class="stat reveal"><div class="num"><span class="cnt cyan" data-target="1">0</span></div><div class="lab">段文案即可识别</div></div>
+    </div>
+  </div>
+</section>
 
 <!-- 功能 -->
 <section class="block" id="features">
   <div class="wrap">
     <div class="sec-head reveal">
-      <h2>它能做什么</h2>
-      <span class="no"><em>01</em> / FEATURES</span>
+      <h2>它能做的，<em>不止下载</em></h2>
+      <span class="no"><em>NO.02</em> / 功能</span>
     </div>
     <div class="feat-grid">
-      <div class="feat reveal">
-        <span class="idx">01</span>
-        <h3>无水印下载</h3>
-        <p>视频清晰度档位可选，原始画质直链下载，不压画质、不带水印。</p>
-        <span class="tag">VIDEO · 档位可选</span>
-      </div>
-      <div class="feat reveal">
-        <span class="idx">02</span>
-        <h3>图集逐张挑选</h3>
-        <p>多图作品支持勾选导出；实况图会连同动态一起保存，一张都不少。</p>
-        <span class="tag">ALBUM · LIVE</span>
-      </div>
-      <div class="feat reveal">
-        <span class="idx">03</span>
-        <h3>沉浸式播放器</h3>
-        <p>全屏黑底、自动隐藏控制条，进度与时间显示统一，观影不被打扰。</p>
-        <span class="tag">PLAYER</span>
-      </div>
-      <div class="feat reveal">
-        <span class="idx">04</span>
-        <h3>整段分享文案识别</h3>
-        <p>带杂质的抖音分享文字也能自动抽出链接，不用手动清理表情和符号。</p>
-        <span class="tag">PARSE</span>
-      </div>
-      <div class="feat reveal">
-        <span class="idx">05</span>
-        <h3>深浅双主题</h3>
-        <p>跟随系统深色模式，也可手动锁定；切换带平滑过渡，不闪跳。</p>
-        <span class="tag">THEME</span>
-      </div>
-      <div class="feat reveal">
-        <span class="idx">06</span>
-        <h3>下载管理</h3>
-        <p>环形进度、单行任务卡、历史记录，下载状态一眼看清。</p>
-        <span class="tag">QUEUE</span>
-      </div>
+      <div class="feat reveal"><span class="idx">01</span><h3>无水印下载</h3><p>视频清晰度档位可选，原始画质直链下载，不压画质、不带水印。</p><span class="tag">VIDEO</span></div>
+      <div class="feat reveal"><span class="idx">02</span><h3>图集逐张挑选</h3><p>多图作品支持勾选导出；实况图会连同动态一起保存，一张都不少。</p><span class="tag">ALBUM · LIVE</span></div>
+      <div class="feat reveal"><span class="idx">03</span><h3>沉浸式播放器</h3><p>全屏黑底、自动隐藏控制条，进度与时间显示统一，观影不被打扰。</p><span class="tag">PLAYER</span></div>
+      <div class="feat reveal"><span class="idx">04</span><h3>整段分享文案识别</h3><p>带杂质的抖音分享文字也能自动抽出链接，不用手动清理表情和符号。</p><span class="tag">PARSE</span></div>
+      <div class="feat reveal"><span class="idx">05</span><h3>深浅双主题</h3><p>跟随系统深色模式，也可手动锁定；切换带平滑过渡，不闪跳。</p><span class="tag">THEME</span></div>
+      <div class="feat reveal"><span class="idx">06</span><h3>下载管理</h3><p>环形进度、单行任务卡、历史记录，下载状态一眼看清。</p><span class="tag">QUEUE</span></div>
     </div>
   </div>
 </section>
@@ -278,22 +349,17 @@
 <section class="block" id="download">
   <div class="wrap">
     <div class="sec-head reveal">
-      <h2>获取安装包</h2>
-      <span class="no"><em>02</em> / DOWNLOAD</span>
+      <h2>获取<em>安装包</em></h2>
+      <span class="no"><em>NO.03</em> / 下载</span>
     </div>
-
     <div class="dl-panel reveal">
       <div class="dl-main">
         <h2>抖音下载器 v1.7.7</h2>
         <div class="ver">VERSION 1.7.7 · 2026-10-24</div>
         <p>从本版起使用固定签名密钥，之后的版本可直接覆盖升级。GitHub 直链下载，国内网络可用下方备用线路。</p>
         <div class="actions">
-          <a class="btn btn-primary" href="https://github.com/knightlsy/DouyinDownloader/releases/download/v1.7.7/app-release-v1.7.7.apk">
-            <span class="dot"></span>GitHub 直链
-          </a>
-          <a class="btn btn-ghost" href="https://douyinapi.knightlsy.cn/api/download-apk?url=https%3A%2F%2Fgithub.com%2Fknightlsy%2FDouyinDownloader%2Freleases%2Fdownload%2Fv1.7.7%2Fapp-release-v1.7.7.apk">
-            备用线路
-          </a>
+          <a class="btn btn-primary" href="https://github.com/knightlsy/DouyinDownloader/releases/download/v1.7.7/app-release-v1.7.7.apk">↓ GitHub 直链</a>
+          <a class="btn btn-ghost" href="https://douyinapi.knightlsy.cn/api/download-apk?url=https%3A%2F%2Fgithub.com%2Fknightlsy%2FDouyinDownloader%2Freleases%2Fdownload%2Fv1.7.7%2Fapp-release-v1.7.7.apk">备用线路</a>
         </div>
         <div class="note">
           <h4>⚠ 从旧版升级请注意</h4>
@@ -304,11 +370,7 @@
         <div class="meta-row"><span class="k">文件名</span><span class="v">app-release-v1.7.7.apk</span></div>
         <div class="meta-row"><span class="k">大小</span><span class="v">10.84 MB</span></div>
         <div class="meta-row"><span class="k">最低系统</span><span class="v">Android 8.0 (API 26)</span></div>
-        <div class="meta-row sha" id="shaRow">
-          <span class="k">SHA-256</span>
-          <span class="v" id="shaVal">219193adec482704dafe98830915fd3be6c2ac726984f52c1126e6b91d635e81</span>
-          <span class="copied">已复制 ✓</span>
-        </div>
+        <div class="meta-row sha" id="shaRow"><span class="k">SHA-256</span><span class="v" id="shaVal">219193adec482704dafe98830915fd3be6c2ac726984f52c1126e6b91d635e81</span><span class="copied">已复制 ✓</span></div>
         <div class="meta-row"><span class="k">签名指纹</span><span class="v">e8eae26f…a1c7（固定）</span></div>
       </div>
     </div>
@@ -324,14 +386,31 @@
 
 <script>
   // 滚动显现
-  const io = new IntersectionObserver((entries) => {
-    entries.forEach(e => {
-      if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
-    });
+  const io = new IntersectionObserver((es) => {
+    es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
   }, { threshold: 0.12, rootMargin: "0px 0px -40px 0px" });
   document.querySelectorAll('.reveal').forEach(el => io.observe(el));
 
-  // SHA256 点击复制
+  // 数字滚动
+  const nio = new IntersectionObserver((es) => {
+    es.forEach(e => {
+      if (!e.isIntersecting) return;
+      nio.unobserve(e.target);
+      const el = e.target;
+      const target = parseInt(el.dataset.target || '0', 10);
+      const dur = 1100; const t0 = performance.now();
+      (function tick(now) {
+        const p = Math.min((now - t0) / dur, 1);
+        const eased = 1 - Math.pow(1 - p, 3);
+        el.textContent = Math.round(target * eased);
+        if (p < 1) requestAnimationFrame(tick);
+        else el.textContent = target;
+      })(t0);
+    });
+  }, { threshold: 0.5 });
+  document.querySelectorAll('.cnt').forEach(el => nio.observe(el));
+
+  // SHA256 复制
   const shaRow = document.getElementById('shaRow');
   const shaVal = document.getElementById('shaVal').textContent.trim();
   shaRow.addEventListener('click', async () => {
@@ -340,7 +419,6 @@
       shaRow.classList.add('copied-ok');
       setTimeout(() => shaRow.classList.remove('copied-ok'), 1600);
     } catch (e) {
-      // 回退：选中文本
       const r = document.createRange();
       r.selectNodeContents(document.getElementById('shaVal'));
       const sel = window.getSelection();
