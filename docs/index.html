@@ -6,16 +6,16 @@
 <title>抖音下载器 — 无水印保存你喜欢的视频</title>
 <style>
   :root {
-    --bg:      #0A0A0C;
-    --bg-2:    #111116;
-    --bg-3:    #17171E;
-    --ink:     #F5F5F4;
-    --ink-2:   #A8A8B0;
-    --ink-3:   #6E6E78;
-    --hair:    #26262E;
-    --pink:    #FE4F75;
-    --pink-deep:#CE1750;
-    --cyan:    #2AD7D7;
+    --bg:      #F7F6FA;
+    --bg-2:    #FFFFFF;
+    --bg-3:    #F1EFF5;
+    --ink:     #0E0C13;
+    --ink-2:   #5E5C64;
+    --ink-3:   #8C8B92;
+    --hair:    #DFDDE3;
+    --pink:    #CE1750;
+    --pink-deep:#A8113E;
+    --cyan:    #009798;
 
     --f-disp: Georgia, "Times New Roman", "Songti SC", "STSong", serif;
     --f-mono: ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospace;
@@ -51,7 +51,7 @@
   /* ══ 顶栏 ══ */
   header {
     position: sticky; top: 0; z-index: 60;
-    background: rgba(10,10,12,.82);
+    background: rgba(247,246,250,.85);
     backdrop-filter: blur(18px) saturate(1.2);
     -webkit-backdrop-filter: blur(18px) saturate(1.2);
     border-bottom: 1px solid var(--hair);
@@ -80,8 +80,8 @@
   .hero .lead { margin-top: 30px; max-width: 560px; font-size: var(--t-lead); color: var(--ink-2); line-height: 1.75; opacity: 0; animation: rise .9s ease .5s forwards; }
   .hero-actions { margin-top: 42px; display: flex; gap: 16px; flex-wrap: wrap; align-items: center; opacity: 0; animation: rise .9s ease .7s forwards; }
   .btn { display: inline-flex; align-items: center; gap: 12px; font-family: var(--f-mono); font-size: var(--t-sm); letter-spacing: .1em; padding: 17px 34px; text-decoration: none; border: 1px solid transparent; transition: transform .2s, background .2s, border-color .2s, box-shadow .2s; }
-  .btn-primary { background: var(--pink); color: #fff; box-shadow: 0 8px 28px rgba(254,79,117,.28); }
-  .btn-primary:hover { background: var(--pink-deep); transform: translateY(-2px); box-shadow: 0 14px 36px rgba(254,79,117,.38); }
+  .btn-primary { background: var(--pink); color: #fff; box-shadow: 0 8px 28px rgba(206,23,80,.20); }
+  .btn-primary:hover { background: var(--pink-deep); transform: translateY(-2px); box-shadow: 0 14px 36px rgba(206,23,80,.28); }
   .btn-ghost { border-color: var(--hair); color: var(--ink-2); }
   .btn-ghost:hover { border-color: var(--ink-3); color: var(--ink); }
   .hero-meta { margin-top: 40px; display: flex; gap: 28px; flex-wrap: wrap; font-family: var(--f-mono); font-size: var(--t-xs); color: var(--ink-3); letter-spacing: .06em; opacity: 0; animation: rise .9s ease .9s forwards; }
@@ -89,7 +89,7 @@
 
   /* ══ 手机截图容器 ══ */
   .phone-wrap { position: relative; display: flex; justify-content: center; opacity: 0; animation: rise 1.1s ease .45s forwards; }
-  .glow { position: absolute; width: 420px; height: 420px; border-radius: 50%; background: radial-gradient(circle, rgba(254,79,117,.28), transparent 65%); filter: blur(50px); z-index: -1; animation: breathe 5s ease-in-out infinite; }
+  .glow { position: absolute; width: 420px; height: 420px; border-radius: 50%; background: radial-gradient(circle, rgba(206,23,80,.14), transparent 65%); filter: blur(50px); z-index: -1; animation: breathe 5s ease-in-out infinite; }
 
   /* ══ 跑马灯 ══ */
   .marquee { border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 18px 0; overflow: hidden; }
@@ -124,7 +124,7 @@
 
 
   /* ══ 真实界面截图 ══ */
-  .shot-img { width: min(300px, 74vw); border-radius: 38px; display: block; box-shadow: 0 40px 90px rgba(0,0,0,.65), 0 0 0 1px rgba(255,255,255,.08); }
+  .shot-img { width: min(300px, 74vw); border-radius: 38px; display: block; box-shadow: 0 30px 70px rgba(20,10,30,.16), 0 0 0 1px rgba(0,0,0,.06); }
   .preview-phone .shot-img { width: min(320px, 78vw); }
 
   /* ══ 功能卡 hover 浮现对应界面 ══ */
@@ -167,7 +167,7 @@
   .sha:hover .v { color: var(--cyan); }
   .sha .copied { position: absolute; right: 0; top: -26px; font-family: var(--f-mono); font-size: var(--t-xs); color: var(--cyan); opacity: 0; transition: opacity .2s; pointer-events: none; }
   .sha.copied-ok .copied { opacity: 1; }
-  .note { margin-top: 34px; border-left: 2px solid var(--pink); padding: 18px 24px; background: rgba(254,79,117,.06); }
+  .note { margin-top: 34px; border-left: 2px solid var(--pink); padding: 18px 24px; background: rgba(206,23,80,.05); }
   .note h4 { font-family: var(--f-mono); font-size: var(--t-sm); letter-spacing: .1em; color: var(--pink); margin-bottom: 8px; }
   .note p { font-size: var(--t-sm); color: var(--ink-2); }
 
@@ -239,7 +239,7 @@
     </div>
     <div class="phone-wrap">
       <div class="glow"></div>
-      <img class="shot-img" src="screens/tasks-dark-big.jpg" alt="抖音下载器主界面">
+      <img class="shot-img" src="screens/tasks-big.jpg" alt="抖音下载器主界面">
     </div>
   </div>
 </section>
@@ -275,7 +275,7 @@
         </div>
       </div>
       <div class="preview-phone reveal">
-        <img class="shot-img" src="screens/tasks-light-big.jpg" alt="解析结果界面">
+        <img class="shot-img" src="screens/parsing-big.jpg" alt="解析结果界面">
       </div>
     </div>
 
@@ -295,12 +295,12 @@
       <span class="no"><em>NO.02</em> / 功能</span>
     </div>
     <div class="feat-grid">
-      <div class="feat reveal"><span class="idx">01</span><div class="feat-shot"><img src="screens/tasks-light.jpg" alt="下载任务 · 已存入相册"><span class="cap">下载任务 · 已存入相册</span></div><h3>无水印下载</h3><p>视频清晰度档位可选，原始画质直链下载，不压画质、不带水印。</p><span class="tag">VIDEO</span></div>
-      <div class="feat reveal"><span class="idx">02</span><div class="feat-shot"><img src="screens/history-dark.jpg" alt="历史记录 · 图集"><span class="cap">历史记录 · 图集</span></div><h3>图集逐张挑选</h3><p>多图作品支持勾选导出；实况图会连同动态一起保存，一张都不少。</p><span class="tag">ALBUM · LIVE</span></div>
-      <div class="feat reveal"><span class="idx">03</span><div class="feat-shot"><img src="screens/history-light.jpg" alt="历史记录 · 视频"><span class="cap">历史记录 · 视频</span></div><h3>沉浸式播放器</h3><p>全屏黑底、自动隐藏控制条，进度与时间显示统一，观影不被打扰。</p><span class="tag">PLAYER</span></div>
+      <div class="feat reveal"><span class="idx">01</span><div class="feat-shot"><img src="screens/tasks.jpg" alt="下载任务 · 已存入相册"><span class="cap">下载任务 · 已存入相册</span></div><h3>无水印下载</h3><p>视频清晰度档位可选，原始画质直链下载，不压画质、不带水印。</p><span class="tag">VIDEO</span></div>
+      <div class="feat reveal"><span class="idx">02</span><div class="feat-shot"><img src="screens/history.jpg" alt="历史记录 · 图集"><span class="cap">历史记录 · 图集</span></div><h3>图集逐张挑选</h3><p>多图作品支持勾选导出；实况图会连同动态一起保存，一张都不少。</p><span class="tag">ALBUM · LIVE</span></div>
+      <div class="feat reveal"><span class="idx">03</span><div class="feat-shot"><img src="screens/tasks.jpg" alt="历史记录 · 视频"><span class="cap">下载任务 · 视频</span></div><h3>沉浸式播放器</h3><p>全屏黑底、自动隐藏控制条，进度与时间显示统一，观影不被打扰。</p><span class="tag">PLAYER</span></div>
       <div class="feat reveal"><span class="idx">04</span><div class="feat-shot"><img src="screens/parsing.jpg" alt="解析中 · 识别链接"><span class="cap">解析中 · 识别链接</span></div><h3>整段分享文案识别</h3><p>带杂质的抖音分享文字也能自动抽出链接，不用手动清理表情和符号。</p><span class="tag">PARSE</span></div>
       <div class="feat reveal"><span class="idx">05</span><div class="feat-shot"><img src="screens/settings.jpg" alt="设置 · 深浅主题"><span class="cap">设置 · 深浅主题</span></div><h3>深浅双主题</h3><p>跟随系统深色模式，也可手动锁定；切换带平滑过渡，不闪跳。</p><span class="tag">THEME</span></div>
-      <div class="feat reveal"><span class="idx">06</span><div class="feat-shot"><img src="screens/tasks-dark.jpg" alt="下载任务 · 进度"><span class="cap">下载任务 · 进度</span></div><h3>下载管理</h3><p>环形进度、单行任务卡、历史记录，下载状态一眼看清。</p><span class="tag">QUEUE</span></div>
+      <div class="feat reveal"><span class="idx">06</span><div class="feat-shot"><img src="screens/history.jpg" alt="下载任务 · 进度"><span class="cap">历史记录 · 下载</span></div><h3>下载管理</h3><p>环形进度、单行任务卡、历史记录，下载状态一眼看清。</p><span class="tag">QUEUE</span></div>
     </div>
   </div>
 </section>
