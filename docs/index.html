@@ -183,9 +183,16 @@
   @keyframes breathe { 0%,100% { opacity: .7; transform: scale(1); } 50% { opacity: 1; transform: scale(1.08); } }
   @keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 
+
+  /* ══ 弥散色彩背景 ══ */
+  .aurora { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }
+  .aurora span { position: absolute; border-radius: 50%; filter: blur(90px); opacity: .55; will-change: transform; }
+  .aurora .a1 { width: 520px; height: 520px; background: rgba(206,23,80,.13); top: -160px; left: -120px; }
+  .aurora .a2 { width: 440px; height: 440px; background: rgba(0,151,152,.11); top: 28%; right: -140px; }
+  .aurora .a3 { width: 480px; height: 480px; background: rgba(138,79,255,.09); bottom: -180px; left: 26%; }
   /* ══ 滚动显现 ══ */
-  .reveal { opacity: 0; transform: translateY(30px); transition: opacity .8s ease, transform .8s cubic-bezier(.22,.61,.36,1); }
-  .reveal.in { opacity: 1; transform: none; }
+  .reveal { opacity: 0; transform: translateY(36px) scale(.97); transition: opacity .85s ease, transform .85s cubic-bezier(.22,.61,.36,1); }
+  .reveal.in { opacity: 1; transform: translateY(0) scale(1); }
 
   @media (max-width: 920px) {
     .hero-grid, .preview-grid { grid-template-columns: 1fr; }
@@ -203,6 +210,7 @@
 </style>
 </head>
 <body>
+<div class="aurora"><span class="a1"></span><span class="a2"></span><span class="a3"></span></div>
 
 <header>
   <div class="wrap nav">
@@ -350,6 +358,22 @@
     es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
   }, { threshold: 0.12, rootMargin: "0px 0px -40px 0px" });
   document.querySelectorAll('.reveal').forEach(el => io.observe(el));
+
+  // 弥散背景滚动视差（不同速度，滑动有层次）
+  const auroraSpans = document.querySelectorAll('.aurora span');
+  const speeds = [0.06, 0.10, 0.14];
+  window.addEventListener('scroll', () => {
+    const y = window.scrollY;
+    auroraSpans.forEach((el, i) => {
+      el.style.transform = 'translate3d(0,' + (y * speeds[i]) + 'px,0)';
+    });
+  }, { passive: true });
+
+  // reveal 交错入场
+  document.querySelectorAll('.reveal').forEach((el, i) => {
+    el.style.transitionDelay = ((i % 3) * 0.09) + 's';
+  });
+
 
   // 数字滚动
   const nio = new IntersectionObserver((es) => {
