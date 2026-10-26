@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>抖音下载器 — 无水印保存你喜欢的视频</title>
+<style>
+  :root {
+    --bg:      #0A0A0C;
+    --bg-2:    #111116;
+    --bg-3:    #17171E;
+    --ink:     #F5F5F4;
+    --ink-2:   #A8A8B0;
+    --ink-3:   #6E6E78;
+    --hair:    #26262E;
+    --pink:    #FE4F75;
+    --pink-deep:#CE1750;
+    --cyan:    #2AD7D7;
+
+    --f-disp: Georgia, "Times New Roman", "Songti SC", "STSong", serif;
+    --f-mono: ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospace;
+    --f-body: system-ui, -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+
+    --t-hero: clamp(52px, 9vw, 118px);
+    --t-h2:   clamp(30px, 3.8vw, 52px);
+    --t-lead: clamp(17px, 1.6vw, 21px);
+    --t-body: 16px;
+    --t-sm:   13.5px;
+    --t-xs:   11.5px;
+
+    --pad-x: clamp(22px, 6vw, 128px);
+    --sec-y: clamp(72px, 10vw, 150px);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+  body {
+    font-family: var(--f-body);
+    background: var(--bg);
+    color: var(--ink);
+    font-size: var(--t-body);
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    overflow-x: hidden;
+  }
+  a { color: inherit; }
+  .wrap { max-width: 1240px; margin: 0 auto; padding: 0 var(--pad-x); }
+  .hair { height: 1px; background: var(--hair); }
+
+  /* ══ 顶栏 ══ */
+  header {
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(10,10,12,.82);
+    backdrop-filter: blur(18px) saturate(1.2);
+    -webkit-backdrop-filter: blur(18px) saturate(1.2);
+    border-bottom: 1px solid var(--hair);
+  }
+  .nav { display: flex; align-items: center; justify-content: space-between; height: 64px; }
+  .brand {
+    font-family: var(--f-mono); font-size: var(--t-sm);
+    letter-spacing: .18em; text-transform: uppercase; color: var(--ink);
+    text-decoration: none;
+  }
+  .brand i {
+    font-style: normal; display: inline-block; width: 8px; height: 8px;
+    background: var(--pink); border-radius: 50%; margin-right: 10px; vertical-align: 1px;
+  }
+  .nav-r { display: flex; gap: 34px; align-items: center; }
+  .nav-r a { font-size: var(--t-sm); color: var(--ink-2); text-decoration: none; position: relative; transition: color .2s; }
+  .nav-r a::after { content:""; position:absolute; left:0; bottom:-4px; width:0; height:1px; background: var(--pink); transition: width .25s cubic-bezier(.4,0,.2,1); }
+  .nav-r a:hover { color: var(--ink); }
+  .nav-r a:hover::after { width: 100%; }
+  .nav-cta {
+    font-family: var(--f-mono); font-size: var(--t-xs); letter-spacing: .12em;
+    padding: 10px 20px; background: var(--pink); color: #fff !important; text-decoration: none;
+    transition: background .2s, transform .2s;
+  }
+  .nav-cta::after { display: none; }
+  .nav-cta:hover { background: var(--pink-deep); transform: translateY(-1px); }
+
+  /* ══ HERO ══ */
+  .hero { padding-top: clamp(80px, 10vw, 150px); padding-bottom: clamp(64px, 8vw, 110px); }
+  .eyebrow {
+    font-family: var(--f-mono); font-size: var(--t-xs); letter-spacing: .3em;
+    color: var(--cyan); text-transform: uppercase; margin-bottom: 26px;
+  }
+  .hero h1 {
+    font-family: var(--f-disp); font-weight: 400;
+    font-size: var(--t-hero); line-height: 1.06; letter-spacing: .01em;
+  }
+  .hero h1 em { font-style: italic; color: var(--pink); }
+  .hero .lead {
+    margin-top: 30px; max-width: 620px;
+    font-size: var(--t-lead); color: var(--ink-2); line-height: 1.75;
+  }
+  .hero-actions { margin-top: 46px; display: flex; gap: 16px; flex-wrap: wrap; align-items: center; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 12px;
+    font-family: var(--f-mono); font-size: var(--t-sm); letter-spacing: .1em;
+    padding: 17px 34px; text-decoration: none; border: 1px solid transparent;
+    transition: transform .2s, background .2s, border-color .2s;
+  }
+  .btn-primary { background: var(--pink); color: #fff; }
+  .btn-primary:hover { background: var(--pink-deep); transform: translateY(-2px); }
+  .btn-ghost { border-color: var(--hair); color: var(--ink-2); }
+  .btn-ghost:hover { border-color: var(--ink-3); color: var(--ink); }
+  .btn .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: .9; }
+  .hero-meta {
+    margin-top: 40px; display: flex; gap: 28px; flex-wrap: wrap;
+    font-family: var(--f-mono); font-size: var(--t-xs); color: var(--ink-3);
+    letter-spacing: .06em;
+  }
+  .hero-meta b { color: var(--ink); font-weight: 500; }
+
+  /* ══ 区块通用 ══ */
+  section.block { padding: var(--sec-y) 0; }
+  .sec-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 56px; gap: 20px; flex-wrap: wrap; }
+  .sec-head h2 { font-family: var(--f-disp); font-weight: 400; font-size: var(--t-h2); }
+  .sec-head .no { font-family: var(--f-mono); font-size: var(--t-xs); color: var(--ink-3); letter-spacing: .2em; }
+  .sec-head .no em { color: var(--cyan); font-style: normal; }
+
+  /* ══ 功能网格 ══ */
+  .feat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--hair); border: 1px solid var(--hair); }
+  .feat { background: var(--bg-2); padding: 40px 34px; transition: background .3s; position: relative; overflow: hidden; }
+  .feat:hover { background: var(--bg-3); }
+  .feat .idx { font-family: var(--f-mono); font-size: var(--t-xs); color: var(--ink-3); letter-spacing: .2em; }
+  .feat h3 { font-family: var(--f-disp); font-weight: 400; font-size: clamp(19px, 1.7vw, 23px); margin: 22px 0 14px; }
+  .feat p { font-size: var(--t-sm); color: var(--ink-2); line-height: 1.75; }
+  .feat .tag { display: inline-block; margin-top: 20px; font-family: var(--f-mono); font-size: var(--t-xs); color: var(--cyan); letter-spacing: .1em; }
+  .feat::after {
+    content: ""; position: absolute; right: -30px; top: -30px; width: 90px; height: 90px;
+    border-radius: 50%; background: var(--pink); opacity: 0; filter: blur(30px); transition: opacity .4s;
+  }
+  .feat:hover::after { opacity: .12; }
+
+  /* ══ 下载区 ══ */
+  .dl-panel {
+    background: var(--bg-2); border: 1px solid var(--hair);
+    display: grid; grid-template-columns: 1.4fr 1fr; gap: 0;
+  }
+  .dl-main { padding: clamp(36px, 4vw, 60px); }
+  .dl-main h2 { font-family: var(--f-disp); font-weight: 400; font-size: clamp(26px, 3vw, 40px); margin-bottom: 14px; }
+  .dl-main .ver { font-family: var(--f-mono); font-size: var(--t-sm); color: var(--cyan); letter-spacing: .1em; margin-bottom: 26px; }
+  .dl-main p { color: var(--ink-2); font-size: var(--t-sm); max-width: 440px; }
+  .dl-main .actions { margin-top: 34px; display: flex; gap: 14px; flex-wrap: wrap; }
+  .dl-side {
+    padding: clamp(36px, 4vw, 60px); border-left: 1px solid var(--hair);
+    display: flex; flex-direction: column; justify-content: center; gap: 22px;
+  }
+  .meta-row { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+  .meta-row .k { font-family: var(--f-mono); font-size: var(--t-xs); color: var(--ink-3); letter-spacing: .14em; text-transform: uppercase; }
+  .meta-row .v { font-family: var(--f-mono); font-size: var(--t-sm); color: var(--ink); text-align: right; word-break: break-all; }
+  .sha { cursor: pointer; position: relative; }
+  .sha .v { color: var(--ink-2); font-size: 12.5px; line-height: 1.6; }
+  .sha:hover .v { color: var(--cyan); }
+  .sha .copied {
+    position: absolute; right: 0; top: -26px; font-family: var(--f-mono); font-size: var(--t-xs);
+    color: var(--cyan); opacity: 0; transition: opacity .2s; pointer-events: none;
+  }
+  .sha.copied-ok .copied { opacity: 1; }
+
+  /* ══ 安装提示 ══ */
+  .note {
+    margin-top: 34px; border-left: 2px solid var(--pink); padding: 18px 24px;
+    background: rgba(254,79,117,.06);
+  }
+  .note h4 { font-family: var(--f-mono); font-size: var(--t-sm); letter-spacing: .1em; color: var(--pink); margin-bottom: 8px; }
+  .note p { font-size: var(--t-sm); color: var(--ink-2); }
+
+  /* ══ 页脚 ══ */
+  footer { border-top: 1px solid var(--hair); padding: 44px 0; }
+  .foot { display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap; font-family: var(--f-mono); font-size: var(--t-xs); color: var(--ink-3); letter-spacing: .08em; }
+  .foot a { color: var(--ink-2); text-decoration: none; }
+  .foot a:hover { color: var(--cyan); }
+
+  /* ══ 滚动显现 ══ */
+  .reveal { opacity: 0; transform: translateY(26px); transition: opacity .7s ease, transform .7s cubic-bezier(.22,.61,.36,1); }
+  .reveal.in { opacity: 1; transform: none; }
+
+  @media (max-width: 860px) {
+    .feat-grid { grid-template-columns: 1fr; }
+    .dl-panel { grid-template-columns: 1fr; }
+    .dl-side { border-left: none; border-top: 1px solid var(--hair); }
+    .nav-r a:not(.nav-cta) { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+    .reveal { opacity: 1; transform: none; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap nav">
+    <a class="brand" href="#top"><i></i>Douyin Downloader</a>
+    <div class="nav-r">
+      <a href="#features">功能</a>
+      <a href="#download">下载</a>
+      <a class="nav-cta" href="#download">立即下载</a>
+    </div>
+  </div>
+</header>
+
+<!-- HERO -->
+<section class="hero" id="top">
+  <div class="wrap">
+    <div class="eyebrow">Android · 无水印工具</div>
+    <h1>抖音下载器<br><em>留下你喜欢的每一帧</em></h1>
+    <p class="lead">粘贴一段分享文案，自动识别链接，视频档位可选、图集逐张挑选、实况连同动态一起保存。全程本地解析，不经过任何第三方。</p>
+    <div class="hero-actions">
+      <a class="btn btn-primary" href="https://github.com/knightlsy/DouyinDownloader/releases/download/v1.7.7/app-release-v1.7.7.apk">
+        <span class="dot"></span>下载 APK
+      </a>
+      <a class="btn btn-ghost" href="#download">查看版本信息 ↓</a>
+    </div>
+    <div class="hero-meta">
+      <span>版本 <b>v1.7.7</b></span>
+      <span>大小 <b>10.84 MB</b></span>
+      <span>系统 <b>Android 8.0+</b></span>
+      <span>发布 <b>2026-10-24</b></span>
+    </div>
+  </div>
+</section>
+
+<div class="hair"></div>
+
+<!-- 功能 -->
+<section class="block" id="features">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <h2>它能做什么</h2>
+      <span class="no"><em>01</em> / FEATURES</span>
+    </div>
+    <div class="feat-grid">
+      <div class="feat reveal">
+        <span class="idx">01</span>
+        <h3>无水印下载</h3>
+        <p>视频清晰度档位可选，原始画质直链下载，不压画质、不带水印。</p>
+        <span class="tag">VIDEO · 档位可选</span>
+      </div>
+      <div class="feat reveal">
+        <span class="idx">02</span>
+        <h3>图集逐张挑选</h3>
+        <p>多图作品支持勾选导出；实况图会连同动态一起保存，一张都不少。</p>
+        <span class="tag">ALBUM · LIVE</span>
+      </div>
+      <div class="feat reveal">
+        <span class="idx">03</span>
+        <h3>沉浸式播放器</h3>
+        <p>全屏黑底、自动隐藏控制条，进度与时间显示统一，观影不被打扰。</p>
+        <span class="tag">PLAYER</span>
+      </div>
+      <div class="feat reveal">
+        <span class="idx">04</span>
+        <h3>整段分享文案识别</h3>
+        <p>带杂质的抖音分享文字也能自动抽出链接，不用手动清理表情和符号。</p>
+        <span class="tag">PARSE</span>
+      </div>
+      <div class="feat reveal">
+        <span class="idx">05</span>
+        <h3>深浅双主题</h3>
+        <p>跟随系统深色模式，也可手动锁定；切换带平滑过渡，不闪跳。</p>
+        <span class="tag">THEME</span>
+      </div>
+      <div class="feat reveal">
+        <span class="idx">06</span>
+        <h3>下载管理</h3>
+        <p>环形进度、单行任务卡、历史记录，下载状态一眼看清。</p>
+        <span class="tag">QUEUE</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 下载 -->
+<section class="block" id="download">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <h2>获取安装包</h2>
+      <span class="no"><em>02</em> / DOWNLOAD</span>
+    </div>
+
+    <div class="dl-panel reveal">
+      <div class="dl-main">
+        <h2>抖音下载器 v1.7.7</h2>
+        <div class="ver">VERSION 1.7.7 · 2026-10-24</div>
+        <p>从本版起使用固定签名密钥，之后的版本可直接覆盖升级。GitHub 直链下载，国内网络可用下方备用线路。</p>
+        <div class="actions">
+          <a class="btn btn-primary" href="https://github.com/knightlsy/DouyinDownloader/releases/download/v1.7.7/app-release-v1.7.7.apk">
+            <span class="dot"></span>GitHub 直链
+          </a>
+          <a class="btn btn-ghost" href="https://douyinapi.knightlsy.cn/api/download-apk?url=https%3A%2F%2Fgithub.com%2Fknightlsy%2FDouyinDownloader%2Freleases%2Fdownload%2Fv1.7.7%2Fapp-release-v1.7.7.apk">
+            备用线路
+          </a>
+        </div>
+        <div class="note">
+          <h4>⚠ 从旧版升级请注意</h4>
+          <p>v1.7.7 起签名固定化，与之前每版临时生成的签名不兼容。若你现在装的是 v1.7.6 及更早版本，<b style="color:var(--ink)">请先卸载旧版再安装</b>，之后所有版本都能覆盖升级。</p>
+        </div>
+      </div>
+      <div class="dl-side">
+        <div class="meta-row"><span class="k">文件名</span><span class="v">app-release-v1.7.7.apk</span></div>
+        <div class="meta-row"><span class="k">大小</span><span class="v">10.84 MB</span></div>
+        <div class="meta-row"><span class="k">最低系统</span><span class="v">Android 8.0 (API 26)</span></div>
+        <div class="meta-row sha" id="shaRow">
+          <span class="k">SHA-256</span>
+          <span class="v" id="shaVal">219193adec482704dafe98830915fd3be6c2ac726984f52c1126e6b91d635e81</span>
+          <span class="copied">已复制 ✓</span>
+        </div>
+        <div class="meta-row"><span class="k">签名指纹</span><span class="v">e8eae26f…a1c7（固定）</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap foot">
+    <span>DouyinDownloader · 仅供个人学习与内容备份</span>
+    <span><a href="https://github.com/knightlsy/DouyinDownloader" target="_blank" rel="noopener">GitHub 仓库 ↗</a></span>
+  </div>
+</footer>
+
+<script>
+  // 滚动显现
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
+    });
+  }, { threshold: 0.12, rootMargin: "0px 0px -40px 0px" });
+  document.querySelectorAll('.reveal').forEach(el => io.observe(el));
+
+  // SHA256 点击复制
+  const shaRow = document.getElementById('shaRow');
+  const shaVal = document.getElementById('shaVal').textContent.trim();
+  shaRow.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(shaVal);
+      shaRow.classList.add('copied-ok');
+      setTimeout(() => shaRow.classList.remove('copied-ok'), 1600);
+    } catch (e) {
+      // 回退：选中文本
+      const r = document.createRange();
+      r.selectNodeContents(document.getElementById('shaVal'));
+      const sel = window.getSelection();
+      sel.removeAllRanges(); sel.addRange(r);
+    }
+  });
+</script>
+</body>
+</html>
