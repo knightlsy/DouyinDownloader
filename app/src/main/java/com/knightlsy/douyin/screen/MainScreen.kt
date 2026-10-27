@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -44,6 +45,9 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.knightlsy.douyin.data.ContentInfo
+import com.knightlsy.douyin.data.DownloadHistoryItem
+import com.knightlsy.douyin.data.HistoryRepository
+import com.knightlsy.douyin.data.ContentType
 import com.knightlsy.douyin.ui.components.BgHair
 import com.knightlsy.douyin.ui.components.BgMonoLabel
 import com.knightlsy.douyin.ui.components.BgSectionLabel
@@ -55,10 +59,13 @@ import com.knightlsy.douyin.ui.screen.components.StatsBar
 import com.knightlsy.douyin.ui.screen.components.TaskCard
 import com.knightlsy.douyin.ui.screen.components.VideoPlayerDialog
 import com.knightlsy.douyin.ui.screen.components.VideoPreviewCard
+import com.knightlsy.douyin.ui.theme.BgRadius
 import com.knightlsy.douyin.ui.theme.BgSpace
 import com.knightlsy.douyin.ui.theme.LocalBgColors
 import com.knightlsy.douyin.viewmodel.MainViewModel
 import com.knightlsy.douyin.data.DownloadStatus
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * 主页。
@@ -92,6 +99,17 @@ fun MainScreen(
     var playingUrl by remember { mutableStateOf<String?>(null) }
     // 看图：图片列表 + 起始序号（null = 没在看）
     var viewer by remember { mutableStateOf<Pair<List<String>, Int>?>(null) }
+
+    // 空状态填充：无解析内容时，首次显示引导、有历史则显示最近解析
+    var recentHistory by remember { mutableStateOf<List<DownloadHistoryItem>>(emptyList()) }
+    LaunchedEffect(Unit) {
+        recentHistory = withContext(Dispatchers.IO) {
+            runCatching { HistoryRepository(context).getAll() }
+                .getOrDefault(emptyList())
+                .sortedByDescending { it.downloadTime }
+                .take(3)
+        }
+    }
 
     // 自动填链接改由 MainActivity.onResume() 触发 —— 不能只用 LaunchedEffect(Unit)：
     // 核心路径是「抖音里复制 → 切回本应用」，此时 App 只是从后台恢复，
@@ -221,6 +239,21 @@ fun MainScreen(
                 }
             }
 
+            // 空状态填充：首次引导 / 最近解析
+            if (uiState.contentInfo == null && tasks.isEmpty()) {
+                item {
+                    Spacer(Modifier.height(20.dp))
+                    if (recentHistory.isEmpty()) {
+                        OnboardingGuideCard()
+                    } else {
+                        RecentParsesCard(
+                            items = recentHistory,
+                            onReparse = { item -> viewModel.downloadFromUrl(item.originalUrl) },
+                        )
+                    }
+                }
+            }
+
             // 任务列表
             if (tasks.isNotEmpty()) {
                 item {
@@ -334,5 +367,139 @@ private fun TopAction(text: String, onClick: () -> Unit) {
             letterSpacing = 0.6.sp,
             color = c.ink2,
         )
+    }
+}
+
+/**
+ * 首次使用引导卡：无解析历史时填在输入框下方。
+ * 三步说明让用户知道核心用法是「抖音复制 → 切回本 App 自动识别」。
+ */
+@Composable
+private fun OnboardingGuideCard() {
+    val c = LocalBgColors.current
+    Column {
+        BgSectionLabel("开始使用", accent = null)
+        Spacer(Modifier.height(10.dp))
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(BgRadius.r2))
+                .background(c.surface)
+                .padding(horizontal = 16.dp, vertical = 14.dp)
+        ) {
+            GuideStep("01", "复制抖音分享链接", "在抖音里点分享 → 复制链接")
+            Spacer(Modifier.height(10.dp))
+            GuideStep("02", "切回本 App", "链接会自动识别，无需手动粘贴")
+            Spacer(Modifier.height(10.dp))
+            GuideStep("03", "点「解析」下载", "视频、图集、实况图都能保存")
+        }
+    }
+}
+
+@Composable
+private fun GuideStep(index: String, title: String, desc: String) {
+    val c = LocalBgColors.current
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            text = index,
+            fontFamily = FontFamily.Monospace,
+            fontSize = 10.sp,
+            color = c.accent,
+            letterSpacing = 0.5.sp,
+        )
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = title,
+                fontFamily = FontFamily.SansSerif,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                color = c.ink,
+            )
+            Text(
+                text = desc,
+                fontFamily = FontFamily.SansSerif,
+                fontSize = 11.sp,
+                color = c.ink3,
+                lineHeight = 16.sp,
+            )
+        }
+    }
+}
+
+/**
+ * 最近解析卡：有历史但当前无解析内容时显示最近 3 条，
+ * 点击直接重新解析那条链接。
+ */
+@Composable
+private fun RecentParsesCard(
+    items: List<DownloadHistoryItem>,
+    onReparse: (DownloadHistoryItem) -> Unit,
+) {
+    val c = LocalBgColors.current
+    val fmt = remember { java.text.SimpleDateFormat("MM-dd", java.util.Locale.getDefault()) }
+    Column {
+        BgSectionLabel("最近解析", accent = "点击重新解析")
+        Spacer(Modifier.height(10.dp))
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(BgRadius.r2))
+                .background(c.surface)
+        ) {
+            items.forEachIndexed { i, item ->
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            onClick = { onReparse(item) },
+                        )
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            text = item.title.ifBlank { "(无标题)" },
+                            fontFamily = FontFamily.SansSerif,
+                            fontSize = 13.sp,
+                            color = c.ink,
+                            maxLines = 1,
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            text = if (item.contentType == ContentType.VIDEO) "视频" else "图集",
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 9.5.sp,
+                            letterSpacing = 0.5.sp,
+                            color = c.ink3,
+                        )
+                    }
+                    Text(
+                        text = fmt.format(java.util.Date(item.downloadTime)),
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 10.sp,
+                        color = c.ink3,
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        text = "›",
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 13.sp,
+                        color = c.ink3,
+                    )
+                }
+                if (i < items.lastIndex) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(start = 16.dp, end = 16.dp)
+                            .height(1.dp)
+                            .background(c.hair)
+                    )
+                }
+            }
+        }
     }
 }
