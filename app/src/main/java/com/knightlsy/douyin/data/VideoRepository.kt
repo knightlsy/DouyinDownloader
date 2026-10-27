@@ -718,7 +718,10 @@ class VideoRepository {
                             val r = downloadVideoWithRetry(context, u, "Douyin_Video_${contentInfo.id}", onProgress)
                             if (r != null) { saved = r; break }
                         } catch (e: Exception) { lastErr = e.message }
-                        if (i < candidates.size - 1) Log.w(TAG, "清晰度降级: ${u.take(60)} 失败，尝试下一档")
+                        if (i < candidates.size - 1) {
+                            Log.w(TAG, "清晰度降级: ${u.take(60)} 失败，尝试下一档")
+                            LogStore.log("dl", "清晰度降级: 第${i + 1}档失败(${lastErr?.take(40) ?: "无错误信息"})，尝试下一档")
+                        }
                     }
                     if (saved != null) { onFileSaved(saved); DownloadResult(true, listOf(saved)) }
                     else DownloadResult(false, error = lastErr ?: "下载视频失败")

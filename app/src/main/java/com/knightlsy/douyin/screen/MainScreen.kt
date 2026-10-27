@@ -80,7 +80,7 @@ import com.knightlsy.douyin.data.ThemeMode
 fun MainScreen(
     viewModel: MainViewModel = viewModel(),
     onNavigateToHistory: () -> Unit = {},
-    onNavigateToAbout: () -> Unit = {},
+    onNavigateToSettings: () -> Unit = {},
 ) {
     val c = LocalBgColors.current
     val context = LocalContext.current
@@ -160,7 +160,7 @@ fun MainScreen(
                 }
             ) { viewModel.toggleDarkMode() }
             TopAction("历史", onNavigateToHistory)
-            TopAction("关于", onNavigateToAbout)
+            TopAction("设置", onNavigateToSettings)
         }
 
         BgHair()

@@ -24,6 +24,8 @@ object ParseDiag {
         val t = ((System.currentTimeMillis() - sessionStart) / 100) / 10.0
         lines.addLast("${t}s $msg")
         while (lines.size > 12) lines.removeFirst()
+        // 同步写入应用级日志仓库，供「设置 → 日志」页面查看完整流水
+        LogStore.log("parse", msg)
     }
 
     /** 取全部诊断文本（换行分隔），空会话返回 null */

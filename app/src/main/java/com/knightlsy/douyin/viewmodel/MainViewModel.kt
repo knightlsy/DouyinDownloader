@@ -16,6 +16,7 @@ import com.knightlsy.douyin.data.DownloadStatus
 import com.knightlsy.douyin.data.DownloadTask
 import com.knightlsy.douyin.data.HistoryRepository
 import com.knightlsy.douyin.data.ParseDiag
+import com.knightlsy.douyin.data.LogStore
 import com.knightlsy.douyin.data.ParseRecord
 import com.knightlsy.douyin.data.ThemeMode
 import com.knightlsy.douyin.data.ThemePreferences
@@ -187,6 +188,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     is ContentInfo.Video -> ContentType.VIDEO; is ContentInfo.ImageCollection -> ContentType.IMAGE_COLLECTION
                 }
                 _uiState.value = _uiState.value.copy(isLoading = false, contentInfo = contentInfo, contentType = contentType)
+                LogStore.log("parse", "解析成功: ${contentInfo.title} (${contentType.name})")
 
                 // 云端同步记录
                 launch(Dispatchers.IO) {
@@ -280,6 +282,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         _stats.value = _stats.value.copy(totalDownloads = _stats.value.totalDownloads + 1, successDownloads = _stats.value.successDownloads + 1)
                         _uiState.value = _uiState.value.copy(successMessage = "下载完成！已保存到相册")
                         notificationHelper.showCompleted(taskId, contentInfo.title, result.filePaths.size)
+                        LogStore.log("dl", "成功: ${contentInfo.title} (${result.filePaths.size}个文件)")
                         val contentType = when (contentInfo) {
                             is ContentInfo.Video -> ContentType.VIDEO
                             is ContentInfo.ImageCollection -> ContentType.IMAGE_COLLECTION
@@ -298,11 +301,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         updateTaskStatus(taskId, DownloadStatus.FAILED, error = result.error)
                         _stats.value = _stats.value.copy(totalDownloads = _stats.value.totalDownloads + 1, failedDownloads = _stats.value.failedDownloads + 1)
                         notificationHelper.showError(taskId, result.error ?: "下载失败")
+                        LogStore.log("dl", "失败: ${contentInfo.title} → ${result.error ?: "未知错误"}")
                     }
                 } catch (e: Exception) {
                     updateTaskStatus(taskId, DownloadStatus.FAILED, error = e.message ?: "下载出错")
                     _stats.value = _stats.value.copy(totalDownloads = _stats.value.totalDownloads + 1, failedDownloads = _stats.value.failedDownloads + 1)
                     notificationHelper.showError(taskId, e.message ?: "下载出错")
+                    LogStore.log("dl", "异常: ${contentInfo.title} → ${e.message ?: "未知异常"}")
                 } finally { activeJobs.remove(taskId) }
             }
         }

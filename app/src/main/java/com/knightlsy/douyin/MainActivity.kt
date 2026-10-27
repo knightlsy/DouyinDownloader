@@ -40,7 +40,9 @@ import com.knightlsy.douyin.data.UpdateChecker
 import com.knightlsy.douyin.data.UpdateResult
 import com.knightlsy.douyin.screen.AboutScreen
 import com.knightlsy.douyin.screen.HistoryScreen
+import com.knightlsy.douyin.screen.LogScreen
 import com.knightlsy.douyin.screen.MainScreen
+import com.knightlsy.douyin.screen.SettingsScreen
 import com.knightlsy.douyin.ui.theme.DouyinDownloaderTheme
 import com.knightlsy.douyin.viewmodel.HistoryViewModel
 import com.knightlsy.douyin.viewmodel.MainViewModel
@@ -671,10 +673,12 @@ fun AppNavigation(mainViewModel: MainViewModel) {
     var currentScreen by remember { mutableStateOf("main") }
     var pendingReparseUrl by remember { mutableStateOf<String?>(null) }
     val historyViewModel: HistoryViewModel = viewModel()
+    val themeMode by mainViewModel.themeMode.collectAsState()
 
-    val nonMainScreens = listOf("history", "about")
+    val nonMainScreens = listOf("history", "about", "settings", "logs")
     BackHandler(enabled = currentScreen in nonMainScreens) {
-        currentScreen = "main"
+        // logs 的上级是 settings，其余页面上级都是 main
+        currentScreen = if (currentScreen == "logs") "settings" else "main"
     }
 
     // 历史页点「重新解析」时会把 url 放进 pendingReparseUrl。
@@ -708,9 +712,17 @@ fun AppNavigation(mainViewModel: MainViewModel) {
                 MainScreen(
                     viewModel = mainViewModel,
                     onNavigateToHistory = { currentScreen = "history" },
-                    onNavigateToAbout = { currentScreen = "about" }
+                    onNavigateToSettings = { currentScreen = "settings" }
                 )
             }
+            "settings" -> SettingsScreen(
+                themeMode = themeMode,
+                onCycleTheme = { mainViewModel.toggleDarkMode() },
+                onNavigateToLogs = { currentScreen = "logs" },
+                onNavigateToAbout = { currentScreen = "about" },
+                onBack = { currentScreen = "main" }
+            )
+            "logs" -> LogScreen(onBack = { currentScreen = "settings" })
             "history" -> HistoryScreen(
                 viewModel = historyViewModel,
                 onBack = { currentScreen = "main" },
