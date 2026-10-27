@@ -59,7 +59,6 @@ import com.knightlsy.douyin.ui.theme.BgSpace
 import com.knightlsy.douyin.ui.theme.LocalBgColors
 import com.knightlsy.douyin.viewmodel.MainViewModel
 import com.knightlsy.douyin.data.DownloadStatus
-import com.knightlsy.douyin.data.ThemeMode
 
 /**
  * 主页。
@@ -86,7 +85,6 @@ fun MainScreen(
     val context = LocalContext.current
 
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
     val tasks by viewModel.downloadTasks.collectAsStateWithLifecycle()
     val stats by viewModel.stats.collectAsStateWithLifecycle()
 
@@ -150,15 +148,6 @@ fun MainScreen(
                 color = c.ink,
             )
             Spacer(Modifier.weight(1f))
-            // 显示当前模式：三态循环如果只靠颜色变化，用户从浅色系统
-            // 点一下就变「浅色」，看到没变化会以为按钮坏了。
-            TopAction(
-                text = when (themeMode) {
-                    ThemeMode.SYSTEM -> "主题·自动"
-                    ThemeMode.LIGHT -> "主题·浅"
-                    ThemeMode.DARK -> "主题·深"
-                }
-            ) { viewModel.toggleDarkMode() }
             TopAction("历史", onNavigateToHistory)
             TopAction("设置", onNavigateToSettings)
         }

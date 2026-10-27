@@ -14,6 +14,8 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
@@ -696,13 +698,25 @@ fun AppNavigation(mainViewModel: MainViewModel) {
     AnimatedContent(
         targetState = currentScreen,
         transitionSpec = {
-            val duration = 300
+            val duration = 350
             if (targetState == "main") {
-                (slideInHorizontally(tween(duration)) { -it / 4 } + fadeIn(tween(duration)))
-                    .togetherWith(slideOutHorizontally(tween(duration)) { it } + fadeOut(tween(duration)))
+                // 返回主界面：主界面从 92% 放大回全屏、从左边滑回原位；
+                // 二级页面缩到 92% 并向右滑出屏幕。
+                (scaleIn(initialScale = 0.92f, animationSpec = tween(duration)) +
+                    slideInHorizontally(tween(duration)) { -it / 3 } + fadeIn(tween(duration)))
+                    .togetherWith(
+                        scaleOut(targetScale = 0.92f, animationSpec = tween(duration)) +
+                            slideOutHorizontally(tween(duration)) { it } + fadeOut(tween(duration))
+                    )
             } else {
-                (slideInHorizontally(tween(duration)) { it } + fadeIn(tween(duration)))
-                    .togetherWith(slideOutHorizontally(tween(duration)) { -it / 4 } + fadeOut(tween(duration)))
+                // 进入二级页：二级页面从右边滑入，92% 放大到 100% 铺满；
+                // 主界面缩到 92% 并向左退后一层。
+                (scaleIn(initialScale = 0.92f, animationSpec = tween(duration)) +
+                    slideInHorizontally(tween(duration)) { it } + fadeIn(tween(duration)))
+                    .togetherWith(
+                        scaleOut(targetScale = 0.92f, animationSpec = tween(duration)) +
+                            slideOutHorizontally(tween(duration)) { -it / 3 } + fadeOut(tween(duration))
+                    )
             }
         },
         label = "screen_transition"
