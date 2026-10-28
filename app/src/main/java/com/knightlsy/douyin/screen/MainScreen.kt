@@ -7,6 +7,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -181,9 +182,27 @@ fun MainScreen(
             // 统计
             item { StatsBar(stats) }
 
+            // 细线分隔：统计读数与输入区之间
+            item {
+                Spacer(Modifier.height(16.dp))
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = BgSpace.gutter)
+                        .height(1.dp)
+                        .background(c.hair)
+                )
+            }
+
             // 链接输入
             item {
-                Spacer(Modifier.height(20.dp))
+                Spacer(Modifier.height(18.dp))
+                BgSectionLabel(
+                    text = "链接解析",
+                    modifier = Modifier.padding(horizontal = BgSpace.gutter),
+                    accent = "PARSE",
+                )
+                Spacer(Modifier.height(10.dp))
                 LinkInputCard(
                     url = uiState.inputUrl,
                     isLoading = uiState.isLoading,
@@ -378,19 +397,25 @@ private fun TopAction(text: String, onClick: () -> Unit) {
 private fun OnboardingGuideCard() {
     val c = LocalBgColors.current
     Column {
-        BgSectionLabel("开始使用", accent = null)
+        BgSectionLabel(
+            "开始使用",
+            accent = "START",
+            modifier = Modifier.padding(horizontal = BgSpace.gutter),
+        )
         Spacer(Modifier.height(10.dp))
         Column(
             Modifier
                 .fillMaxWidth()
+                .padding(horizontal = BgSpace.gutter)
                 .clip(RoundedCornerShape(BgRadius.r2))
-                .background(c.surface)
-                .padding(horizontal = 16.dp, vertical = 14.dp)
+                .background(c.raise)
+                .border(1.dp, c.hair, RoundedCornerShape(BgRadius.r2))
+                .padding(horizontal = 16.dp, vertical = 16.dp)
         ) {
             GuideStep("01", "复制抖音分享链接", "在抖音里点分享 → 复制链接")
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(12.dp))
             GuideStep("02", "切回本 App", "链接会自动识别，无需手动粘贴")
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(12.dp))
             GuideStep("03", "点「解析」下载", "视频、图集、实况图都能保存")
         }
     }
@@ -439,13 +464,19 @@ private fun RecentParsesCard(
     val c = LocalBgColors.current
     val fmt = remember { java.text.SimpleDateFormat("MM-dd", java.util.Locale.getDefault()) }
     Column {
-        BgSectionLabel("最近解析", accent = "点击重新解析")
+        BgSectionLabel(
+            "最近解析",
+            accent = "RECENT · 点击重新解析",
+            modifier = Modifier.padding(horizontal = BgSpace.gutter),
+        )
         Spacer(Modifier.height(10.dp))
         Column(
             Modifier
                 .fillMaxWidth()
+                .padding(horizontal = BgSpace.gutter)
                 .clip(RoundedCornerShape(BgRadius.r2))
-                .background(c.surface)
+                .background(c.raise)
+                .border(1.dp, c.hair, RoundedCornerShape(BgRadius.r2))
         ) {
             items.forEachIndexed { i, item ->
                 Row(
