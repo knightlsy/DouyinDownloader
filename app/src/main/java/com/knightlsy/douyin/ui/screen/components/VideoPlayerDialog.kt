@@ -1,5 +1,8 @@
 package com.knightlsy.douyin.ui.screen.components
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -21,7 +24,11 @@ import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -47,6 +54,7 @@ import androidx.media3.ui.compose.material3.indicator.ProgressSlider
 import androidx.media3.ui.compose.material3.indicator.RemainingDurationText
 import com.knightlsy.douyin.ui.theme.BgRadius
 import com.knightlsy.douyin.ui.theme.LocalBgColors
+import kotlinx.coroutines.delay
 
 /** 与 VideoRepository.baseHeaders 的 UA 保持一致，避免播放/下载两个链路口径不一。 */
 private const val PLAYER_UA =
@@ -127,6 +135,34 @@ fun VideoPlayerDialog(
         onDispose { exoPlayer.release() }
     }
 
+    // ── 控制层显隐（必须自己管）──
+    // media3 的 Player 只是个布局容器：showControls 默认 false，且它自己不维护状态，
+    // 只把值透传给 top/center/bottom 三个 slot（见 1.11.1 源码 PlayerImpl）。
+    // 于是只有两种坏结果：
+    //   · 写死 true（旧版）→ 三颗按钮永远压在画面正中，全程挡内容
+    //   · 直接透传 false   → 永远看不见按钮，用户以为播放器坏了
+    // 正确做法是调用方维护「播放中 3 秒自动隐藏 / 暂停立即显示 / 点画面唤出」。
+    var isPlaying by remember { mutableStateOf(false) }
+    var controlsVisible by remember { mutableStateOf(true) }
+
+    DisposableEffect(exoPlayer) {
+        val listener = object : androidx.media3.common.Player.Listener {
+            override fun onIsPlayingChanged(playing: Boolean) { isPlaying = playing }
+        }
+        exoPlayer.addListener(listener)
+        onDispose { exoPlayer.removeListener(listener) }
+    }
+
+    LaunchedEffect(isPlaying) {
+        if (isPlaying) {
+            delay(3_000)
+            controlsVisible = false
+        } else {
+            // 暂停 / 缓冲 / 播完时重新显示 —— 这几个时刻用户往往正要操作
+            controlsVisible = true
+        }
+    }
+
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
@@ -139,46 +175,67 @@ fun VideoPlayerDialog(
         ) {
             Player(
                 player = exoPlayer,
+                showControls = controlsVisible,
                 modifier = Modifier.fillMaxSize(),
-                centerControls = { p, _ ->
-                    // 注意第二参数被丢弃 —— 控制层常驻
+                centerControls = { p, show ->
                     PlayerDefaults.CenterControls(
                         player = p,
-                        visible = true,
+                        visible = show,
                         modifier = Modifier.fillMaxWidth(),
                         back = { SeekBackButton(p, Modifier.size(44.dp), tint = Color.White) },
                         central = { pp -> PlayPauseButton(pp, Modifier.size(64.dp), tint = Color.White) },
                         forward = { SeekForwardButton(p, Modifier.size(44.dp), tint = Color.White) },
                     )
                 },
-                bottomControls = { p, _ ->
-                    Column(
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                bottomControls = { p, show ->
+                    // 底部进度条跟着一起显隐。加淡入淡出，避免"啪"地消失显得生硬。
+                    AnimatedVisibility(
+                        visible = show,
+                        enter = fadeIn(),
+                        exit = fadeOut(),
                     ) {
-                        ProgressSlider(
-                            player = p,
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = SliderDefaults.colors(
-                                thumbColor = c.accent,
-                                activeTrackColor = c.accent,
-                                inactiveTrackColor = Color.White.copy(alpha = 0.25f),
-                            ),
-                        )
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
+                        Column(
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalArrangement = Arrangement.spacedBy(2.dp),
                         ) {
-                            PositionText(p, Modifier, color = Color.White.copy(alpha = 0.8f))
-                            RemainingDurationText(p, Modifier, color = Color.White.copy(alpha = 0.8f))
+                            ProgressSlider(
+                                player = p,
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = SliderDefaults.colors(
+                                    thumbColor = c.accent,
+                                    activeTrackColor = c.accent,
+                                    inactiveTrackColor = Color.White.copy(alpha = 0.25f),
+                                ),
+                            )
+                            Row(
+                                Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                            ) {
+                                PositionText(p, Modifier, color = Color.White.copy(alpha = 0.8f))
+                                RemainingDurationText(p, Modifier, color = Color.White.copy(alpha = 0.8f))
+                            }
                         }
                     }
                 },
             )
 
-            // 左上：关闭
+            // 控制层隐藏时，铺一层全屏点击唤出。
+            // 只在隐藏态铺：显示态若也铺，会盖在播放/快进/快退按钮上，点了没反应。
+            if (!controlsVisible) {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                        ) { controlsVisible = true }
+                )
+            }
+
+            // 左上：关闭（始终显示 —— 它是唯一退出路径，
+            // 且不挡画面正中，所以不跟控制层一起淡出）
             Box(
                 Modifier
                     .align(Alignment.TopStart)
