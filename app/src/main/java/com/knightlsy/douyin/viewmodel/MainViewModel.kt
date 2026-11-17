@@ -21,8 +21,10 @@ import com.knightlsy.douyin.data.ParseRecord
 import com.knightlsy.douyin.data.ThemeMode
 import com.knightlsy.douyin.data.ThemePreferences
 import com.knightlsy.douyin.data.VideoRepository
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -32,6 +34,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withTimeout
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
@@ -43,6 +46,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val cloudSyncRepository = CloudSyncRepository(application)
     private val activeJobs = ConcurrentHashMap<String, Job>()
     private val downloadSemaphore = Semaphore(5)
+
+    /** 解析任务的句柄。没有它就无法中断正在跑的解析 —— 网络卡住时用户只能杀 App。 */
+    private var parseJob: Job? = null
+
+    private companion object {
+        /** 解析超时：超过这个时间基本可判定网络或链接有问题，不该让用户干等。 */
+        const val PARSE_TIMEOUT_MS = 25_000L
+    }
 
     private val _uiState = MutableStateFlow(MainUiState())
     val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
@@ -165,12 +176,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun parseAndPreview() {
         val url = _uiState.value.inputUrl.trim()
         if (url.isEmpty()) { _uiState.value = _uiState.value.copy(error = "请输入视频链接"); return }
-        viewModelScope.launch {
+        // 上一次还没结束就先掐掉：否则两次解析并行跑，state 会互相覆盖
+        parseJob?.cancel()
+        parseJob = viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null, contentInfo = null, contentType = null)
             try {
                 val contentId = repository.extractVideoId(url)
                 if (contentId == null) { _uiState.value = _uiState.value.copy(isLoading = false, error = "无法识别链接"); return@launch }
-                val contentInfo = repository.getContentInfo(getApplication<Application>(), contentId)
+                // 这一步走网络。加超时是为了「卡死时自己会结束」，不至于永远停在"解析中"；
+                // 用户也可以随时点取消主动打断。
+                val contentInfo = withTimeout(PARSE_TIMEOUT_MS) {
+                    repository.getContentInfo(getApplication<Application>(), contentId)
+                }
                 if (contentInfo == null) {
                     // 失败时附带诊断信息（各环节耗时/结果），并自动复制到剪贴板，便于直接粘贴反馈
                     val diag = ParseDiag.dump()
@@ -213,6 +230,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         Log.w("MainVM", "Cloud sync failed: ${e.message}")
                     }
                 }
+            } catch (e: TimeoutCancellationException) {
+                // 必须排在 CancellationException 之前 —— 它是 CancellationException 的子类
+                ParseDiag.log("解析超时: ${PARSE_TIMEOUT_MS}ms")
+                LogStore.log("parse", "解析超时 ${PARSE_TIMEOUT_MS}ms")
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    error = "解析超时（${PARSE_TIMEOUT_MS / 1000} 秒）。可能是网络不通，或视频已失效 —— 换个链接或稍后重试",
+                )
+            } catch (e: CancellationException) {
+                // 用户点了取消：静默复位。这不是失败，不该弹错误
+                LogStore.log("parse", "用户取消解析")
+                _uiState.value = _uiState.value.copy(isLoading = false)
+                throw e
             } catch (e: Exception) {
                 // 原始异常留给诊断日志，界面上只说人话
                 ParseDiag.log("解析异常: ${e.message?.take(60)}")
@@ -222,6 +252,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 )
             }
         }
+    }
+
+    /**
+     * 取消正在进行的解析。
+     *
+     * 即使 job 已经不活跃也照样把 isLoading 复位 —— 这个按钮是用户在网络卡死时的
+     * 唯一出口，不能因为"job 看起来已经结束"就什么都不做，那样界面会一直卡在解析中。
+     */
+    fun cancelParse() {
+        val wasActive = parseJob?.isActive == true
+        parseJob?.cancel()
+        parseJob = null
+        _uiState.value = _uiState.value.copy(
+            isLoading = false,
+            // 只有真的打断了任务才提示，空点一下不弹 toast 烦人
+            successMessage = if (wasActive) "已取消解析" else null,
+        )
     }
 
     fun startDownload() {

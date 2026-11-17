@@ -27,7 +27,11 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -43,6 +47,7 @@ import com.knightlsy.douyin.ui.components.BgGhostButton
 import com.knightlsy.douyin.ui.theme.BgRadius
 import com.knightlsy.douyin.ui.theme.BgSpace
 import com.knightlsy.douyin.ui.theme.LocalBgColors
+import kotlinx.coroutines.delay
 
 /**
  * 链接输入卡。
@@ -72,6 +77,7 @@ fun LinkInputCard(
     onUrlChange: (String) -> Unit,
     onPaste: () -> Unit,
     onParse: () -> Unit,
+    onCancel: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val c = LocalBgColors.current
@@ -90,6 +96,19 @@ fun LinkInputCard(
         if (url.isBlank() || isLoading) return
         dismissKeyboard()
         onParse()
+    }
+
+    // 解析计时。超过 8 秒才把秒数显示出来：
+    // 界面长时间毫无变化时，用户第一反应是"卡死了"，然后去杀 App。
+    // 数字在跳，至少证明还活着 —— 同时左侧「取消」随时能打断。
+    var elapsedSec by remember { mutableStateOf(0) }
+    LaunchedEffect(isLoading) {
+        elapsedSec = 0
+        if (!isLoading) return@LaunchedEffect
+        while (true) {
+            delay(1_000)
+            elapsedSec++
+        }
     }
 
     Column(
@@ -169,15 +188,29 @@ fun LinkInputCard(
             horizontalArrangement = Arrangement.spacedBy(9.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            BgGhostButton(
-                text = "粘贴",
-                enabled = !isLoading,
-                height = 46.dp,
-                onClick = {
-                    dismissKeyboard()
-                    onPaste()
-                },
-            )
+            if (isLoading) {
+                // 解析中：粘贴键让位给「取消」。
+                // 网络或链接有问题时解析会一直挂着，这里是唯一出口 ——
+                // 之前只能把 App 杀掉重开。
+                BgGhostButton(
+                    text = "取消",
+                    height = 46.dp,
+                    color = c.ink,
+                    onClick = {
+                        dismissKeyboard()
+                        onCancel()
+                    },
+                )
+            } else {
+                BgGhostButton(
+                    text = "粘贴",
+                    height = 46.dp,
+                    onClick = {
+                        dismissKeyboard()
+                        onPaste()
+                    },
+                )
+            }
 
             Box(
                 Modifier
@@ -205,7 +238,9 @@ fun LinkInputCard(
                         )
                         Spacer(Modifier.width(9.dp))
                         Text(
-                            text = "解析中",
+                            // 8 秒内只显示"解析中"（多数请求本来就这么快，加秒数反而吵）；
+                            // 超过 8 秒才带上秒数，提示"还在跑，不是死了"
+                            text = if (elapsedSec >= 8) "解析中 ${elapsedSec}s" else "解析中",
                             fontFamily = FontFamily.Monospace,
                             fontSize = 11.sp,
                             letterSpacing = 1.2.sp,

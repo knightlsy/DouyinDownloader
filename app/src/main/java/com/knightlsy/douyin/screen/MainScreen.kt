@@ -209,6 +209,7 @@ fun MainScreen(
                     onUrlChange = viewModel::onUrlChanged,
                     onPaste = viewModel::pasteFromClipboard,
                     onParse = viewModel::parseAndPreview,
+                    onCancel = viewModel::cancelParse,
                 )
             }
 
