@@ -73,6 +73,60 @@ fun CollectionPreviewCard(
 
     Column(modifier.fillMaxWidth().padding(horizontal = BgSpace.gutter)) {
 
+        // ── 工具栏：类型 + 已选数 + 全选 ──
+        // 这几个必须放在网格外面。网格是 3 列，浮层若叠在 Box 的 TopEnd 上，
+        // 正好压住第 3 张图的勾选框（GridCell 的 BgCheckBox 也在 TopEnd），
+        // 用户点不到；同理，左上角标会压住第 1 张图的序号。
+        Row(
+            Modifier.fillMaxWidth().padding(bottom = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                Modifier
+                    .clip(RoundedCornerShape(BgRadius.r1))
+                    .background(c.raise)
+                    .padding(horizontal = 7.dp, vertical = 3.dp)
+            ) {
+                Text(
+                    text = if (liveCount > 0) "▦ 图集 · ${liveCount}张实况" else "▦ 图集",
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 8.5.sp,
+                    letterSpacing = 0.6.sp,
+                    color = c.ink3,
+                )
+            }
+            Spacer(Modifier.weight(1f))
+            Text(
+                text = "已选 ${selected.size}/${total}",
+                fontFamily = FontFamily.Monospace,
+                fontSize = 9.sp,
+                letterSpacing = 0.3.sp,
+                color = if (selected.isEmpty()) c.ink3 else c.accent,
+            )
+            Spacer(Modifier.width(8.dp))
+            Box(
+                Modifier
+                    .clip(RoundedCornerShape(BgRadius.r1))
+                    .background(c.raise)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = {
+                            selected = if (selected.size == total) emptySet() else collection.imageUrls.indices.toSet()
+                        },
+                    )
+                    .padding(horizontal = 9.dp, vertical = 4.dp)
+            ) {
+                Text(
+                    text = if (selected.size == total) "取消全选" else "全选",
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 9.sp,
+                    letterSpacing = 0.6.sp,
+                    color = c.ink,
+                )
+            }
+        }
+
         // ── 网格 ──
         Column(
             Modifier
@@ -111,67 +165,6 @@ fun CollectionPreviewCard(
                         }
                     }
                 }
-
-                // 左上：类型 + 实况数
-                Box(
-                    Modifier
-                        .align(Alignment.TopStart)
-                        .padding(7.dp)
-                        .clip(RoundedCornerShape(BgRadius.r1))
-                        .background(Color.Black.copy(alpha = 0.6f))
-                        .padding(horizontal = 7.dp, vertical = 3.dp)
-                ) {
-                    Text(
-                        text = if (liveCount > 0) "▦ 图集 · ${liveCount}张实况" else "▦ 图集",
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 8.5.sp,
-                        letterSpacing = 0.6.sp,
-                        color = Color.White.copy(alpha = 0.92f),
-                    )
-                }
-
-                // 右上：已选 + 全选
-                Column(
-                    Modifier.align(Alignment.TopEnd).padding(7.dp),
-                    horizontalAlignment = Alignment.End,
-                ) {
-                    Box(
-                        Modifier
-                            .clip(RoundedCornerShape(BgRadius.r1))
-                            .background(c.accent)
-                            .padding(horizontal = 7.dp, vertical = 3.dp)
-                    ) {
-                        Text(
-                            text = "已选 ${selected.size} 张",
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 8.5.sp,
-                            letterSpacing = 0.6.sp,
-                            color = c.accentInk,
-                        )
-                    }
-                    Spacer(Modifier.height(4.dp))
-                    Box(
-                        Modifier
-                            .clip(RoundedCornerShape(BgRadius.r1))
-                            .background(Color.Black.copy(alpha = 0.6f))
-                            .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null,
-                                onClick = {
-                                    selected = if (selected.size == total) emptySet() else collection.imageUrls.indices.toSet()
-                                },
-                            )
-                            .padding(horizontal = 7.dp, vertical = 3.dp)
-                    ) {
-                        Text(
-                            text = if (selected.size == total) "取消全选" else "全选",
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 8.5.sp,
-                            letterSpacing = 0.6.sp,
-                            color = Color.White.copy(alpha = 0.88f),
-                        )
-                    }
-                }
             }
         }
 
@@ -190,7 +183,7 @@ fun CollectionPreviewCard(
         // ── 选择状态 ──
         Text(
             text = when {
-                selected.isEmpty() -> "未选择 · 点右上角全选，或逐张点选"
+                selected.isEmpty() -> "未选择 · 点上方全选，或逐张点选"
                 selected.size == total -> "全部 $total 张已选择"
                 else -> "已选 ${selected.size} / $total 张"
             },
