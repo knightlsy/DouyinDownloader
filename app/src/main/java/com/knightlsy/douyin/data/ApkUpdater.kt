@@ -64,14 +64,28 @@ class ApkUpdater(private val context: Context) {
     private fun targetFile(): File = File(downloadDir(), fileName)
 
     /** 清掉历史残留的安装包（所有 update-*.apk），避免校验时读到旧文件或占用空间。 */
-    fun clearStale() {
+    fun clearStale(keep: File? = null) {
         try {
             downloadDir().listFiles()
                 ?.filter { it.name.startsWith("update") && it.name.endsWith(".apk") }
+                // keep 用于保住「已经下载并校验通过、正等着用户去授权」的那个包。
+                // 不排除它的话，用户从授权页回来再点更新会把包删掉重下。
+                ?.filter { keep == null || it.absolutePath != keep.absolutePath }
                 ?.forEach { it.delete() }
         } catch (e: Exception) {
             Log.w(TAG, "clearStale failed: ${e.message}")
         }
+    }
+
+    /**
+     * 找已经下载好的同版本安装包。
+     *
+     * 「安装未知应用」的授权页会离开本 App，回来时如果一切从头再来，
+     * 用户要白等几十兆 —— 包其实还在私有目录里，直接复用就行。
+     */
+    fun findExisting(version: String): File? {
+        val name = "update-" + version.ifBlank { "latest" } + ".apk"
+        return File(downloadDir(), name).takeIf { it.exists() && it.length() > 0L }
     }
 
     /**
@@ -280,13 +294,37 @@ class ApkUpdater(private val context: Context) {
 
     /**
      * 交给系统安装器。
-     * 未授权时会先跳授权页并返回失败 —— 用户授权后回到应用再次点安装即可。
+     *
+     * 注意这里**不再自己跳授权页** —— 因为用 startActivity 跳出去，App 拿不到「用户回来了」的回调，
+     * 只能停在失败态让用户重新点一次，而重新点通常意味着重新下载。
+     * 现在改为抛 [NeedsInstallPermission]，由 UI 用 ActivityResultLauncher 启动授权页，
+     * 返回后自动继续安装。
      */
     fun install(file: File): Result<Unit> {
         if (!canInstall()) {
-            openInstallPermissionSettings()
-            return Result.failure(IllegalStateException("请先允许本应用安装未知来源的应用"))
+            return Result.failure(NeedsInstallPermission())
         }
+        return performInstall(file)
+    }
+
+    /** 未授予「安装未知应用」时返回这个，UI 据此拉起授权页。 */
+    class NeedsInstallPermission : Exception("请先允许本应用安装未知来源的应用")
+
+    /** 授权页 Intent。返回 null 表示这台机器没有这个设置页，只能让用户手动去系统设置里开。 */
+    fun installPermissionIntent(): Intent? = try {
+        Intent(
+            Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+            Uri.parse("package:${context.packageName}")
+        ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    } catch (e: Exception) {
+        Log.w(TAG, "build install-permission intent failed: ${e.message}")
+        null
+    }
+
+    /**
+     * 真正拉起系统安装器。调用方必须先确认 [canInstall]（或刚拿到授权返回）。
+     */
+    fun performInstall(file: File): Result<Unit> {
         return try {
             val uri = FileProvider.getUriForFile(
                 context,

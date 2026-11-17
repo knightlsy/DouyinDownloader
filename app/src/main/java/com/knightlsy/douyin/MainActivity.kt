@@ -7,6 +7,7 @@ import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
@@ -38,6 +39,7 @@ import androidx.activity.compose.BackHandler
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.knightlsy.douyin.data.ThemeMode
+import java.io.File
 import com.knightlsy.douyin.data.UpdateChecker
 import com.knightlsy.douyin.data.UpdateResult
 import com.knightlsy.douyin.screen.AboutScreen
@@ -133,6 +135,106 @@ class MainActivity : ComponentActivity() {
             val apkUpdater = remember { ApkUpdater(context) }
             val scope = rememberCoroutineScope()
 
+            // 等着用户去系统里授权「安装未知应用」的那个包。
+            // 授权页会离开 App，回来必须能接着装 —— 不能重新下载几十兆。
+            var pendingInstall by remember { mutableStateOf<File?>(null) }
+
+            val installPermLauncher = rememberLauncherForActivityResult(
+                ActivityResultContracts.StartActivityForResult()
+            ) {
+                // 不管用户点是、点否还是直接按返回键，这个回调都会来，
+                // 所以不用管 resultCode，直接以 canInstall() 的实际结果为准。
+                val f = pendingInstall
+                pendingInstall = null
+                if (f != null && f.exists()) {
+                    if (apkUpdater.canInstall()) {
+                        stage = UpdateStage.Installing
+                        val r = apkUpdater.performInstall(f)
+                        if (r.isFailure) {
+                            stage = UpdateStage.Failed(
+                                r.exceptionOrNull()?.message ?: "无法打开安装器"
+                            )
+                        } else {
+                            ForceUpdateGuard.recordSuccess(context)
+                        }
+                    } else {
+                        // 用户没给权限：停在 NeedsPermission，再点按钮还能再跳一次授权
+                        stage = UpdateStage.NeedsPermission(f)
+                    }
+                } else if (f != null) {
+                    stage = UpdateStage.Failed("安装包已被清理，请重新下载")
+                }
+            }
+
+            // 已经校验通过的包。从授权页回来会再走一遍安装流程，
+            // SHA256 要读几十兆，没必要重算。
+            var verifiedFile by remember { mutableStateOf<File?>(null) }
+
+            /**
+             * 统一的安装入口。
+             *
+             * 有「安装未知应用」权限 → 直接拉起系统安装器。
+             * 没有 → 记下待装包 + 用 launcher 拉起授权页，
+             * 用户回来由 installPermLauncher 回调自动续上（包还在，不重下）。
+             */
+            fun startInstall(file: File) {
+                stage = UpdateStage.Installing
+                val r = apkUpdater.install(file)
+                val err = r.exceptionOrNull()
+                when {
+                    err is ApkUpdater.NeedsInstallPermission -> {
+                        pendingInstall = file
+                        stage = UpdateStage.NeedsPermission(file)
+                        val intent = apkUpdater.installPermissionIntent()
+                        if (intent != null) {
+                            installPermLauncher.launch(intent)
+                        } else {
+                            // 这台机器没有授权页，只能让用户自己去系统设置里开
+                            apkUpdater.openInstallPermissionSettings()
+                            stage = UpdateStage.Failed(
+                                "请到系统设置里允许本应用安装未知来源应用，然后点重试"
+                            )
+                        }
+                    }
+                    r.isFailure -> stage = UpdateStage.Failed(
+                        err?.message ?: "无法打开安装器"
+                    )
+                    else -> ForceUpdateGuard.recordSuccess(context)
+                }
+            }
+
+            /**
+             * 校验 + 安装。返回 true 表示已进入安装流程（含"等用户授权"）。
+             * 同一个文件只校验一次，避免授权返回后重算 SHA256（要读几十兆）。
+             */
+            suspend fun verifyThenInstall(file: File, sha: String, size: Long): Boolean {
+                if (verifiedFile?.absolutePath == file.absolutePath) {
+                    startInstall(file)
+                    return true
+                }
+                stage = UpdateStage.Verifying
+                return when (val v = withContext(Dispatchers.IO) { apkUpdater.verify(file, sha, size) }) {
+                    is ApkUpdater.VerifyResult.Verified -> {
+                        verifiedFile = file
+                        startInstall(file)
+                        true
+                    }
+                    is ApkUpdater.VerifyResult.Degraded -> {
+                        Toast.makeText(context, v.reason, Toast.LENGTH_LONG).show()
+                        verifiedFile = file
+                        startInstall(file)
+                        true
+                    }
+                    is ApkUpdater.VerifyResult.Rejected -> {
+                        withContext(Dispatchers.IO) { file.delete() }
+                        verifiedFile = null
+                        stage = UpdateStage.Failed(v.reason)
+                        false
+                    }
+                }
+            }
+
+
             LaunchedEffect(Unit) {
                 val currentVersion = BuildConfig.VERSION_NAME
                 val result = updateChecker.checkForUpdate(currentVersion)
@@ -215,42 +317,11 @@ class MainActivity : ComponentActivity() {
                         }
 
                         is ApkUpdater.State.Ready -> {
-                            stage = UpdateStage.Verifying
-                            when (val v = withContext(Dispatchers.IO) {
-                                apkUpdater.verify(st.file, expectedSha, expectedSize)
-                            }) {
-                                is ApkUpdater.VerifyResult.Verified -> {
-                                    stage = UpdateStage.Installing
-                                    val r = apkUpdater.install(st.file)
-                                    if (r.isFailure) {
-                                        fail(
-                                            r.exceptionOrNull()?.message ?: "无法打开安装器",
-                                            countAsFailure = false
-                                        )
-                                    } else {
-                                        ForceUpdateGuard.recordSuccess(context)
-                                    }
-                                }
-
-                                is ApkUpdater.VerifyResult.Degraded -> {
-                                    // 服务端没给哈希，只校了大小 —— 告知用户但不拦
-                                    Toast.makeText(context, v.reason, Toast.LENGTH_LONG).show()
-                                    stage = UpdateStage.Installing
-                                    val r = apkUpdater.install(st.file)
-                                    if (r.isFailure) {
-                                        fail(
-                                            r.exceptionOrNull()?.message ?: "无法打开安装器",
-                                            countAsFailure = false
-                                        )
-                                    }
-                                }
-
-                                is ApkUpdater.VerifyResult.Rejected -> {
-                                    // 这条线路给的包不是我们发的，立刻删掉并排除它
-                                    withContext(Dispatchers.IO) { st.file.delete() }
-                                    selectedUrl?.let { failedEndpoints = failedEndpoints + it }
-                                    fail(v.reason)
-                                }
+                            val ok = verifyThenInstall(st.file, expectedSha, expectedSize)
+                            if (!ok) {
+                                // 这条线路给的包不是我们发的：删掉并排除它，下次换一条
+                                selectedUrl?.let { failedEndpoints = failedEndpoints + it }
+                                ForceUpdateGuard.recordFailure(context, version)
                             }
                             break
                         }
@@ -280,28 +351,40 @@ class MainActivity : ComponentActivity() {
                         version = result.version,
                         releaseNotes = result.releaseNotes,
                         onUpdate = {
-                            // 测速挑最快线路 → 交给 DownloadManager 下到私有目录
                             if (stage.canStart) {
-                                stage = UpdateStage.Probing
-                                selectedLine = null
-                                downloadId = null
-                                scope.launch {
-                                    val ep = updateChecker.resolveFastest(
-                                        result.downloadUrl,
-                                        failedEndpoints,
-                                    )
-                                    selectedUrl = ep.url
-                                    selectedLine = if (ep.latencyMs >= 0) {
-                                        "${ep.name} · ${ep.latencyMs}ms"
-                                    } else {
-                                        "全部线路不可达，已用原始地址"
+                                // ① 已经有这一版的安装包了？
+                                //    —— 刚从授权页回来（NeedsPermission 里记着文件），
+                                //    或上次下完没装成（findExisting 扫私有目录）。
+                                //    直接校验 + 安装，不重新下载。
+                                val existing = (stage as? UpdateStage.NeedsPermission)?.file
+                                    ?: apkUpdater.findExisting(result.version)
+                                if (existing != null && existing.exists()) {
+                                    scope.launch {
+                                        verifyThenInstall(existing, result.sha256, result.size)
                                     }
-                                    val id = apkUpdater.startDownload(ep.url, result.version)
-                                    if (id == null) {
-                                        stage = UpdateStage.Failed("无法创建下载任务")
-                                    } else {
-                                        downloadId = id
-                                        stage = UpdateStage.Downloading(0, "")
+                                } else {
+                                    // ② 没有现成的包 → 测速挑最快线路，交给 DownloadManager
+                                    stage = UpdateStage.Probing
+                                    selectedLine = null
+                                    downloadId = null
+                                    scope.launch {
+                                        val ep = updateChecker.resolveFastest(
+                                            result.downloadUrl,
+                                            failedEndpoints,
+                                        )
+                                        selectedUrl = ep.url
+                                        selectedLine = if (ep.latencyMs >= 0) {
+                                            "${ep.name} · ${ep.latencyMs}ms"
+                                        } else {
+                                            "全部线路不可达，已用原始地址"
+                                        }
+                                        val id = apkUpdater.startDownload(ep.url, result.version)
+                                        if (id == null) {
+                                            stage = UpdateStage.Failed("无法创建下载任务")
+                                        } else {
+                                            downloadId = id
+                                            stage = UpdateStage.Downloading(0, "")
+                                        }
                                     }
                                 }
                             }
@@ -369,9 +452,17 @@ sealed interface UpdateStage {
     data class FallbackToBrowser(val reason: String) : UpdateStage
     data class Failed(val message: String) : UpdateStage
 
+    /**
+     * 包已经下载并校验通过，只差系统没给「安装未知应用」权限。
+     *
+     * 这个状态必须能再次点按钮 —— 用户从授权页回来后要么自动继续（launcher 回调），
+     * 要么手动再点一次，两条路都不能重新下载。
+     */
+    data class NeedsPermission(val file: File) : UpdateStage
+
     /** 这个阶段能不能再点「立即更新」。 */
     val canStart: Boolean
-        get() = this is Idle || this is Failed || this is FallbackToBrowser
+        get() = this is Idle || this is Failed || this is FallbackToBrowser || this is NeedsPermission
 }
 
 /**
@@ -421,6 +512,8 @@ fun ForceUpdateDialog(
         is UpdateStage.Installing -> "正在打开安装器…"
         is UpdateStage.Failed -> "↻  重试下载"
         is UpdateStage.FallbackToBrowser -> "↻  重新尝试应用内下载"
+        // 包已下载并校验通过，只差系统授权 —— 点这里直接进安装，不会重新下载
+        is UpdateStage.NeedsPermission -> "↓  安装包已就绪 · 点此安装"
     }
 
     Dialog(
@@ -626,6 +719,17 @@ fun ForceUpdateDialog(
                         fontSize = 11.sp,
                         lineHeight = 17.sp,
                         color = c.accent,
+                        modifier = Modifier.padding(bottom = 6.dp),
+                    )
+                }
+
+                if (stage is UpdateStage.NeedsPermission) {
+                    Text(
+                        text = "安装包已下载并校验完成。系统还没有允许本应用安装应用 —— " +
+                            "点下面的按钮去开启授权，返回后会自动继续安装，不用重新下载。",
+                        fontSize = 11.sp,
+                        lineHeight = 17.sp,
+                        color = c.ink3,
                         modifier = Modifier.padding(bottom = 6.dp),
                     )
                 }
