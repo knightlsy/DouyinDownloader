@@ -13,7 +13,9 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.withPermit
 import okhttp3.ConnectionPool
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -31,8 +33,20 @@ class VideoRepository {
         private const val TAG = "VideoRepo"
         private const val MAX_RETRY = 3
         private const val RETRY_DELAY = 1000L
-        private const val BUFFER_SIZE = 65536
+        // 256KB：64KB 时一次 write 要走 4 遍系统调用，视频下载会白占 CPU 时间片；
+        // 256KB 把 write() 次数压到 1/4，对 UFS/eMMC 更友好。
+        private const val BUFFER_SIZE = 262_144
     }
+
+    /**
+     * 图集并发上限。
+     *
+     * 原实现是 `imageUrls.mapIndexed { async(Dispatchers.IO) { … } }.awaitAll()` ——
+     * async 不限并发，20 张图会同时开 20 条连接。三个后果：
+     * 抖音 CDN 限流、每张 `body.bytes()` 全量驻留导致内存峰值、单张超时拖慢整体。
+     * 但完全串行又慢。4 路是均衡点：带宽能吃满，连接数和内存也压得住。
+     */
+    private val imageSemaphore = Semaphore(4)
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
@@ -50,6 +64,7 @@ class VideoRepository {
         "Accept-Language" to "zh-CN,zh;q=0.9,en;q=0.8",
         "Accept-Encoding" to "identity",
         "Connection" to "keep-alive",
+        "Referer" to "https://www.douyin.com/",
         "Sec-Fetch-Dest" to "document",
         "Sec-Fetch-Mode" to "navigate",
         "Sec-Fetch-Site" to "none",
@@ -747,7 +762,10 @@ class VideoRepository {
                     addHeader("Accept", "image/jpeg,image/*;q=0.9,*/*;q=0.8")
                 }.build()
                 val result = client.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) return@use null
+                    if (!response.isSuccessful) {
+                        lastError = java.io.IOException("HTTP ${response.code}")
+                        return@use null
+                    }
                     val body = response.body ?: return@use null
                     saveVideoFile(context, body.byteStream(), body.contentLength(), fileName, onProgress)
                 }
@@ -791,10 +809,25 @@ class VideoRepository {
 
     private fun writeWithProgress(inputStream: InputStream, outputStream: OutputStream, totalSize: Long, onProgress: (Float) -> Unit) {
         val buffer = ByteArray(BUFFER_SIZE)
-        var totalRead = 0L; var lastUpdate = 0f; var bytesRead: Int
+        var totalRead = 0L
+        var lastPct = -1
+        var lastEmitMs = 0L
+        var bytesRead: Int
         while (inputStream.read(buffer).also { bytesRead = it } != -1) {
-            outputStream.write(buffer, 0, bytesRead); totalRead += bytesRead
-            if (totalSize > 0) { val p = totalRead.toFloat() / totalSize.toFloat(); if (p - lastUpdate >= 0.01f || totalRead == totalSize) { onProgress(p); lastUpdate = p } }
+            outputStream.write(buffer, 0, bytesRead)
+            totalRead += bytesRead
+            if (totalSize > 0) {
+                val pct = (totalRead * 100 / totalSize).toInt().coerceAtMost(100)
+                val now = System.currentTimeMillis()
+                // 双闸：进度至少 +1% 且距上次回调 ≥120ms，才上报一次。
+                // 原来只按 1% 节流：一个 5MB 短视频 1 秒下完会连发 100 次进度，
+                // 每次都触发 Compose 状态更新 —— 下载时界面发飘就是这么来的。
+                if (pct != lastPct && (now - lastEmitMs >= 120 || totalRead >= totalSize)) {
+                    onProgress(pct / 100f)
+                    lastPct = pct
+                    lastEmitMs = now
+                }
+            }
         }
         outputStream.flush(); onProgress(1f)
     }
@@ -813,12 +846,14 @@ class VideoRepository {
         val ttwid = fetchTtwid()
         imageUrls.mapIndexed { index, url ->
             async(Dispatchers.IO) {
-                try {
-                    val liveUrl = animatedUrls.getOrNull(index)
-                    val r = downloadSingleImage(context, url, "${baseName}_${index + 1}", ttwid, liveUrl)
-                    r?.let { synchronized(results) { results.add(it) }; onFileSaved(it) }
-                    onProgress((index + 1).toFloat() / imageUrls.size); r
-                } catch (_: Exception) { null }
+                imageSemaphore.withPermit {
+                    try {
+                        val liveUrl = animatedUrls.getOrNull(index)
+                        val r = downloadSingleImage(context, url, "${baseName}_${index + 1}", ttwid, liveUrl)
+                        r?.let { synchronized(results) { results.add(it) }; onFileSaved(it) }
+                        onProgress((index + 1).toFloat() / imageUrls.size); r
+                    } catch (_: Exception) { null }
+                }
             }
         }.awaitAll(); results.toList()
     }

@@ -33,7 +33,10 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.media3.common.MediaItem
+import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.compose.material3.Player
 import androidx.media3.ui.compose.material3.PlayerDefaults
 import androidx.media3.ui.compose.material3.buttons.PlayPauseButton
@@ -44,6 +47,10 @@ import androidx.media3.ui.compose.material3.indicator.ProgressSlider
 import androidx.media3.ui.compose.material3.indicator.RemainingDurationText
 import com.knightlsy.douyin.ui.theme.BgRadius
 import com.knightlsy.douyin.ui.theme.LocalBgColors
+
+/** 与 VideoRepository.baseHeaders 的 UA 保持一致，避免播放/下载两个链路口径不一。 */
+private const val PLAYER_UA =
+    "Mozilla/5.0 (Linux; Android 14; Xiaomi 14 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
 
 /**
  * 全屏播放器。
@@ -80,11 +87,39 @@ fun VideoPlayerDialog(
     val context = LocalContext.current
 
     val exoPlayer = remember(videoUrl) {
-        ExoPlayer.Builder(context).build().apply {
-            setMediaItem(MediaItem.fromUri(videoUrl))
-            prepare()
-            playWhenReady = true
-        }
+        // ── 起播优化 ──
+        // DefaultLoadControl 默认要缓冲 2500ms 才开播、卡顿后要 5000ms 才恢复。
+        // 对抖音这种 15~60 秒的短视频太保守：网络起来的那半秒其实已经够播了。
+        // 这里把起播门槛压到 500ms、卡顿恢复压到 1000ms。
+        // 权衡：极弱网下可能刚播就转一下圈，但 1 秒就能恢复，比空屏等 2.5 秒好。
+        val loadControl = DefaultLoadControl.Builder()
+            .setBufferDurationsMs(
+                2_000,   // minBufferMs
+                15_000,  // maxBufferMs
+                500,     // bufferForPlaybackMs —— 起播门槛（默认 2500）
+                1_000,   // bufferForPlaybackAfterRebufferMs —— 卡顿恢复（默认 5000）
+            )
+            .build()
+
+        // ── 取流优化 ──
+        // 抖音 CDN 按 Referer 判断来源，不带时偶发限速。下载链路早就补了这个头，
+        // 播放链路一直漏着 —— 这正是「同一个视频下载很快、预览却慢」的直接原因。
+        val httpFactory = DefaultHttpDataSource.Factory()
+            .setUserAgent(PLAYER_UA)
+            .setDefaultRequestProperties(mapOf("Referer" to "https://www.douyin.com/"))
+            .setConnectTimeoutMs(15_000)
+            .setReadTimeoutMs(30_000)
+            .setAllowCrossProtocolRedirects(true)
+
+        ExoPlayer.Builder(context)
+            .setMediaSourceFactory(DefaultMediaSourceFactory(httpFactory))
+            .setLoadControl(loadControl)
+            .build()
+            .apply {
+                setMediaItem(MediaItem.fromUri(videoUrl))
+                prepare()
+                playWhenReady = true
+            }
     }
 
     // 唯一的释放点
