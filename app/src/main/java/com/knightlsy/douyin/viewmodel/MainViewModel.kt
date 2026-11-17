@@ -4,6 +4,8 @@ import android.app.Application
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -173,9 +175,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * 有没有可用网络。
+     *
+     * 拿不到 ConnectivityManager 或能力信息时保守放行（返回 true）——
+     * 宁可让请求自己失败，也不要因为系统接口异常把正常用户挡在外面。
+     */
+    private fun hasNetwork(): Boolean {
+        val cm = getApplication<Application>()
+            .getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return true
+        val net = cm.activeNetwork ?: return false
+        val caps = cm.getNetworkCapabilities(net) ?: return true
+        return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+    }
+
     fun parseAndPreview() {
         val url = _uiState.value.inputUrl.trim()
         if (url.isEmpty()) { _uiState.value = _uiState.value.copy(error = "请输入视频链接"); return }
+        // 没网时直接说清楚，别让用户对着"解析中"干等 25 秒才发现是断网了
+        if (!hasNetwork()) {
+            _uiState.value = _uiState.value.copy(isLoading = false, error = "当前没有网络连接，检查一下 WiFi 或流量再试")
+            return
+        }
         // 上一次还没结束就先掐掉：否则两次解析并行跑，state 会互相覆盖
         parseJob?.cancel()
         parseJob = viewModelScope.launch {
