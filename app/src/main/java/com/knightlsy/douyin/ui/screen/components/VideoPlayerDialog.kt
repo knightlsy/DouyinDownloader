@@ -5,6 +5,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -33,6 +34,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
@@ -47,8 +49,6 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.compose.material3.Player
 import androidx.media3.ui.compose.material3.PlayerDefaults
 import androidx.media3.ui.compose.material3.buttons.PlayPauseButton
-import androidx.media3.ui.compose.material3.buttons.SeekBackButton
-import androidx.media3.ui.compose.material3.buttons.SeekForwardButton
 import androidx.media3.ui.compose.material3.indicator.PositionText
 import androidx.media3.ui.compose.material3.indicator.ProgressSlider
 import androidx.media3.ui.compose.material3.indicator.RemainingDurationText
@@ -172,19 +172,33 @@ fun VideoPlayerDialog(
                 .fillMaxSize()
                 .background(Color.Black)
                 .systemBarsPadding()
+                .pointerInput(Unit) {
+                    // 点画面切换控制层显隐。
+                    // 用 pointerInput 而不是铺一层 clickable：按钮自己会消费点击事件，
+                    // Compose 不会再把事件冒泡到父级，所以点播放键不会顺带把控制层收起；
+                    // 点空白处才落到这里触发 toggle。
+                    detectTapGestures { controlsVisible = !controlsVisible }
+                }
         ) {
             Player(
                 player = exoPlayer,
                 showControls = controlsVisible,
                 modifier = Modifier.fillMaxSize(),
                 centerControls = { p, show ->
+                    // 只留播放/暂停。
+                    // CenterControls 的五个 slot 全都带默认按钮
+                    // （PreviousButton / SeekBackButton / PlayPauseButton / SeekForwardButton / NextButton），
+                    // 不传就会把默认按钮画出来，所以其余四个必须显式给空 lambda。
+                    // 它内部已有 AnimatedVisibility，这里不用再包动画。
                     PlayerDefaults.CenterControls(
                         player = p,
                         visible = show,
                         modifier = Modifier.fillMaxWidth(),
-                        back = { SeekBackButton(p, Modifier.size(44.dp), tint = Color.White) },
+                        backSecondary = {},
+                        back = {},
                         central = { pp -> PlayPauseButton(pp, Modifier.size(64.dp), tint = Color.White) },
-                        forward = { SeekForwardButton(p, Modifier.size(44.dp), tint = Color.White) },
+                        forward = {},
+                        forwardSecondary = {},
                     )
                 },
                 bottomControls = { p, show ->
@@ -220,19 +234,6 @@ fun VideoPlayerDialog(
                     }
                 },
             )
-
-            // 控制层隐藏时，铺一层全屏点击唤出。
-            // 只在隐藏态铺：显示态若也铺，会盖在播放/快进/快退按钮上，点了没反应。
-            if (!controlsVisible) {
-                Box(
-                    Modifier
-                        .fillMaxSize()
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null,
-                        ) { controlsVisible = true }
-                )
-            }
 
             // 左上：关闭（始终显示 —— 它是唯一退出路径，
             // 且不挡画面正中，所以不跟控制层一起淡出）
