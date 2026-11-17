@@ -28,13 +28,40 @@ class UpdateChecker(private val context: Context) {
         private const val CHECK_TIMEOUT_MS = 12_000L
         /** 测速总预算（毫秒）。全部线路都没应答时，到点回退原始地址。 */
         private const val PROBE_BUDGET_MS = 5_000L
-        // GitHub 下载加速镜像，按优先级排序；GitHub 直连作为最后兜底
+        /**
+         * GitHub 下载加速镜像，按实测速度排序。
+         *
+         * 2026-11 实测（同一 APK，拉 1MB）：
+         *   gh-proxy.com    1.34 MB/s   ← 比 GitHub 直连快一倍
+         *   GitHub 直连     0.69 MB/s
+         *   自建代理        0.66 MB/s
+         *   ghproxy.net     0.17 MB/s
+         *   gh.jesd.top / gh.horsey.top / gh.chenx264.top  已全部失效，移除
+         *
+         * 这份列表会腐烂（公共镜像死亡率很高），所以测速逻辑不能依赖"顺序"，
+         * 必须靠实测速度选路；这里只是候选集。
+         */
         private val MIRRORS = listOf(
+            "https://gh-proxy.com/",
             "https://ghproxy.net/",
-            "https://gh.jesd.top/",
-            "https://gh.horsey.top/",
-            "https://gh.chenx264.top/"
         )
+
+        /**
+         * 镜像优先阈值：镜像速度只要达到最快直连的这个百分比，就选镜像。
+         *
+         * 为什么不是"无条件优先镜像"：实测里镜像和直连互有胜负，无条件优先可能挑到慢的。
+         * 为什么不是"只选最快的"：国内移动网络下直连 GitHub 容易中途断流，
+         * 同一测速窗口内快一点不代表下载 10MB 的全程都稳。留 20% 余量做这个权衡。
+         */
+        private const val MIRROR_PREFER_RATIO = 80L
+
+        /**
+         * 拿到第一条测速结果后再多等这么久，收集其余线路。
+         *
+         * 只靠"先到先得"会选中响应最快的线路 —— 但响应快不等于下载快。
+         * 用户要下的是 10MB，值得多等这一小会儿拿真实速度做对比。
+         */
+        private const val PROBE_SECOND_WAVE_MS = 1_200L
     }
 
     private val client = OkHttpClient.Builder()
@@ -214,13 +241,19 @@ class UpdateChecker(private val context: Context) {
     }
 
     /**
-     * 下载端点：名字 + 地址 + 实测延迟。给界面显示"从哪条线路下"用。
+     * 下载端点：名字 + 地址 + 实测速度。给界面显示"从哪条线路下"用。
      */
     data class DownloadEndpoint(
         val name: String,
         val url: String,
-        val latencyMs: Long,
+        /** 实测下载速度（KB/s）。-1 表示没测出任何线路，退回了原始地址。 */
+        val speedKbps: Long,
+        /** 自建代理和公共镜像算镜像；GitHub 直连不算。用于"速度接近时镜像优先"。 */
+        val isMirror: Boolean,
     )
+
+    /** 候选线路。 */
+    private data class Candidate(val name: String, val url: String, val isMirror: Boolean)
 
     /**
      * 并发测速，挑最快的可用地址。
@@ -251,40 +284,68 @@ class UpdateChecker(private val context: Context) {
         // 不加这个的话会死循环：某个镜像持续返回篡改包 → 校验失败 → 重试
         // → 它测速依然最快 → 又选中它 → 再失败。用户会看到「校验失败，
         // 请重试」重试无数次都装不上。
-        val candidates = all.filterNot { it.second in exclude }
+        val candidates = all.filterNot { it.url in exclude }
 
         Log.d(TAG, "Probing ${candidates.size}/${all.size} endpoints (excluded ${exclude.size})")
 
         if (candidates.isEmpty()) {
             Log.w(TAG, "All endpoints excluded, falling back to original URL")
-            return@coroutineScope DownloadEndpoint("原始地址", downloadUrl, -1L)
+            return@coroutineScope DownloadEndpoint("原始地址", downloadUrl, -1L, false)
         }
 
         if (candidates.size == 1) {
-            val (name, url) = candidates.first()
-            return@coroutineScope DownloadEndpoint(name, url, probeLatency(url) ?: -1L)
+            val one = candidates.first()
+            return@coroutineScope DownloadEndpoint(
+                one.name, one.url, probeSpeed(one.url) ?: -1L, one.isMirror
+            )
         }
 
-        // 先到先得：谁先测出延迟，谁就是当前最快的，立刻用它，不等其余线路。
-        //
-        // 上一版用 awaitAll()，语义是「等全部完成再挑最小」——
-        // 总耗时 = 最慢那条的超时（4~5 秒）。即使大多数时候最快线路
-        // 200ms 就回来了，用户仍要干等满 5 秒。
-        // 而这段代码跑在强制更新弹窗里，等待时间直接等于「被锁住的时长」。
+        // 并发测真实速度（不再是首字节延迟）。
         val channel = Channel<DownloadEndpoint>(Channel.UNLIMITED)
-        val jobs = candidates.map { (name, url) ->
+        val jobs = candidates.map { cand ->
             launch(Dispatchers.IO) {
-                probeLatency(url)?.let { ms -> channel.send(DownloadEndpoint(name, url, ms)) }
+                probeSpeed(cand.url)?.let { kbps ->
+                    channel.send(DownloadEndpoint(cand.name, cand.url, kbps, cand.isMirror))
+                }
             }
         }
 
-        val fastest = withTimeoutOrNull(PROBE_BUDGET_MS) { channel.receive() }
+        val results = mutableListOf<DownloadEndpoint>()
+        val first = withTimeoutOrNull(PROBE_BUDGET_MS) { channel.receive() }
+        if (first != null) {
+            results.add(first)
+            // 再给其余线路一个翻盘窗口：响应最快的未必下载最快
+            withTimeoutOrNull(PROBE_SECOND_WAVE_MS) {
+                while (results.size < candidates.size) {
+                    results.add(channel.receive())
+                }
+            }
+        }
         jobs.forEach { it.cancel() }
         channel.close()
 
-        fastest ?: DownloadEndpoint("原始地址", downloadUrl, -1L).also {
+        if (results.isEmpty()) {
             Log.w(TAG, "No endpoint answered within ${PROBE_BUDGET_MS}ms, using original URL")
+            return@coroutineScope DownloadEndpoint("原始地址", downloadUrl, -1L, false)
         }
+
+        // 选路：镜像优先，但只在速度不吃亏的前提下。
+        val bestMirror = results.filter { it.isMirror }.maxByOrNull { it.speedKbps }
+        val bestDirect = results.filterNot { it.isMirror }.maxByOrNull { it.speedKbps }
+        val chosen = when {
+            bestMirror == null -> bestDirect ?: results.maxByOrNull { it.speedKbps }!!
+            bestDirect == null -> bestMirror
+            // 镜像只要达到最快直连的 MIRROR_PREFER_RATIO% 就用镜像
+            bestMirror.speedKbps * 100L >= bestDirect.speedKbps * MIRROR_PREFER_RATIO -> bestMirror
+            else -> bestDirect
+        }
+        Log.d(
+            TAG,
+            "Chosen: ${chosen.name} ${chosen.speedKbps}KB/s " +
+                "(mirror=${bestMirror?.speedKbps ?: -1}, direct=${bestDirect?.speedKbps ?: -1}, " +
+                "tested=${results.size})"
+        )
+        chosen
     }
 
     /** 从代理地址里还原出 GitHub 直链；不是代理地址就原样返回。 */
@@ -299,42 +360,63 @@ class UpdateChecker(private val context: Context) {
     }
 
     /** 构造候选：GitHub 直连 + 自建代理 + 公共镜像。 */
-    private fun buildCandidates(ghUrl: String, originalUrl: String): List<Pair<String, String>> {
+    private fun buildCandidates(ghUrl: String, originalUrl: String): List<Candidate> {
         if (!ghUrl.contains("github.com")) {
             // 不是 GitHub 的地址（理论上不会发生），只测它自己
-            return listOf("原始地址" to originalUrl)
+            return listOf(Candidate("原始地址", originalUrl, false))
         }
-        val list = mutableListOf<Pair<String, String>>()
-        list.add("GitHub 直连" to ghUrl)
-        // 自建 Worker 代理：域名是自己控的，国内一般比 GitHub 直连稳
+        val list = mutableListOf<Candidate>()
+        list.add(Candidate("GitHub 直连", ghUrl, false))
+        // 自建 Worker 代理：域名自己控，国内一般比 GitHub 直连稳
         val proxy = "https://douyinapi.knightlsy.cn/api/download-apk?url=" +
             java.net.URLEncoder.encode(ghUrl, "UTF-8")
-        list.add("自建代理" to proxy)
-        // 公共加速镜像
-        MIRRORS.forEach { mirror -> list.add(mirror to (mirror + ghUrl)) }
+        list.add(Candidate("自建代理", proxy, true))
+        // 公共加速镜像（名字取域名，界面上好认是哪条）
+        MIRRORS.forEach { mirror ->
+            val shortName = mirror.trimEnd('/').substringAfter("//")
+            list.add(Candidate(shortName, mirror + ghUrl, true))
+        }
         return list
     }
 
     /**
-     * 测一次延迟（毫秒）。失败返回 null。
-     * 只拉 1 字节，耗时基本等于 TLS 握手 + 首字节，这正是「打开下载页有多快」的近似。
+     * 测一小段真实传输速度（KB/s）。失败返回 null。
+     *
+     * 旧版只拉 1 字节测首字节延迟 —— 那测的是「TLS 握手 + 首包」，不是下载速度。
+     * 实测能说明问题：gh-proxy.com 首字节 0.59s / 实际 1.34MB/s，
+     * ghproxy.net 首字节 1.41s / 实际 0.17MB/s。
+     * 只要出现「握手快、限速狠」的镜像，按首字节选就会挑错 —— 而用户下的是 10MB。
+     *
+     * 拉 128KB 做样本：够区分快慢，单条线路只多花约 0.1MB 流量。
      */
-    private fun probeLatency(url: String): Long? {
+    private fun probeSpeed(url: String): Long? {
         return try {
             val req = Request.Builder()
                 .url(url)
-                .header("Range", "bytes=0-0")
+                .header("Range", "bytes=0-131071")
                 .build()
             val t0 = System.nanoTime()
             probeClient.newCall(req).execute().use { resp ->
                 val ms = (System.nanoTime() - t0) / 1_000_000
-                when {
-                    resp.code == 206 || resp.code in 200..299 || resp.code in 300..399 -> ms
-                    else -> {
-                        Log.d(TAG, "probe fail ${resp.code}: ${url.take(60)}")
-                        null
-                    }
+                if (resp.code != 206 && resp.code !in 200..299 && resp.code !in 300..399) {
+                    Log.d(TAG, "probe fail ${resp.code}: ${url.take(60)}")
+                    return null
                 }
+                // 只读最多 128KB。有些镜像不认 Range（回 200 + 整个文件），
+                // 这时候 body.bytes() 会把 10MB 全读进内存，既费流量又拖慢测速 ——
+                // 所以这里手动截断，读够样本就断开。
+                val bytes = resp.body?.byteStream()?.use { ins ->
+                    val buf = ByteArray(131_072)
+                    var total = 0
+                    while (total < buf.size) {
+                        val n = ins.read(buf, total, buf.size - total)
+                        if (n < 0) break
+                        total += n
+                    }
+                    total.toLong()
+                } ?: 0L
+                if (bytes <= 0L || ms <= 0L) return null
+                (bytes / 1024L) * 1000L / ms
             }
         } catch (e: Exception) {
             Log.d(TAG, "probe error: ${e.message?.take(40)} | ${url.take(60)}")

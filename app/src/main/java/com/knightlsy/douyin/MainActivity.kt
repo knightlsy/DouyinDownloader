@@ -373,8 +373,9 @@ class MainActivity : ComponentActivity() {
                                             failedEndpoints,
                                         )
                                         selectedUrl = ep.url
-                                        selectedLine = if (ep.latencyMs >= 0) {
-                                            "${ep.name} · ${ep.latencyMs}ms"
+                                        selectedLine = if (ep.speedKbps >= 0) {
+                                            // 显示实测速度而不是毫秒：用户能自己判断 10MB 大概要多久
+                                            "${ep.name} · %.2f MB/s".format(ep.speedKbps / 1024.0)
                                         } else {
                                             "全部线路不可达，已用原始地址"
                                         }

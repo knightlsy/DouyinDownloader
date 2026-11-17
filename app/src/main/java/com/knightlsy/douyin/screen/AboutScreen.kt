@@ -309,7 +309,7 @@ fun AboutScreen(onBack: () -> Unit) {
                         fontSize = 11.5.sp,
                         color = c.ink3,
                     )
-                    if (info != null && info.version.isNotBlank()) {
+                    if (info != null && info.version.isNotBlank() && info.hasUpdate) {
                         Spacer(Modifier.height(4.dp))
                         Text(
                             text = "最新版本: v${info.version}",
@@ -327,9 +327,17 @@ fun AboutScreen(onBack: () -> Unit) {
                             color = c.ink3,
                         )
                     }
-                    if (info != null && info.releaseNotes.isNotBlank() && info.hasUpdate) {
+                    // 已是最新版本时也要显示内容：用户点「检查更新」往往就是想确认
+                    // 自己装的这版改了什么，或者核对是不是最新。
+                    // 这里 releaseNotes 来自 latest Release 的 body，无更新时它正是「本版内容」。
+                    if (info != null && info.releaseNotes.isNotBlank()) {
                         Spacer(Modifier.height(12.dp))
-                        Text("更新内容：", fontSize = 12.5.sp, fontWeight = FontWeight.Medium, color = c.ink)
+                        Text(
+                            text = if (info.hasUpdate) "更新内容：" else "本版更新内容：",
+                            fontSize = 12.5.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = c.ink
+                        )
                         Spacer(Modifier.height(4.dp))
                         Text(
                             text = info.releaseNotes.take(600),
