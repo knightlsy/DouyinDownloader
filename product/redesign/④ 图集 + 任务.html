@@ -1,0 +1,84 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{font-family:-apple-system,"PingFang SC","Noto Sans SC",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+.screen{width:393px;height:852px;display:flex;flex-direction:column;background:#0E1A1C;color:#EDF4F4;overflow:hidden}
+.sb{display:flex;justify-content:space-between;padding:14px 20px 6px;font-size:13px;font-weight:600;flex:none}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:4px 20px 14px;flex:none}
+.title{font-size:20px;font-weight:700;letter-spacing:-.3px}
+.subtitle{font-size:12px;color:#8FA6AA;margin-top:3px}
+.iconbtn{width:48px;height:48px;display:flex;align-items:center;justify-content:center;border-radius:14px;color:#8FA6AA;font-size:18px}
+.content{flex:1;overflow:hidden;padding:0 20px;display:flex;flex-direction:column;gap:16px;min-height:0}
+.card{background:#152427;border:1px solid #274045;border-radius:12px;padding:16px}
+.section{font-size:12px;font-weight:600;color:#8FA6AA;letter-spacing:.5px;margin-bottom:10px}
+.inputwrap{background:#152427;border:1.5px solid #274045;border-radius:12px;padding:0 4px 0 16px;
+            display:flex;align-items:center;gap:8px;min-height:56px}
+.inputwrap.focus{border-color:#FF6F2C}
+.inputwrap.err{border-color:#FF5A5F}
+.urltext{flex:1;font-size:14px;color:#EDF4F4;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.urlph{flex:1;font-size:14px;color:#6E868B}
+.clearx{width:44px;height:44px;display:flex;align-items:center;justify-content:center;color:#8FA6AA;font-size:17px;flex:none}
+.pastebtn{font-size:13px;font-weight:600;color:#A1E6DD;padding:12px;white-space:nowrap}
+.btn{width:100%;min-height:52px;border:none;border-radius:14px;font-size:16px;font-weight:700;
+      display:flex;align-items:center;justify-content:center;gap:8px}
+.btn-primary{background:#FF6F2C;color:#111111}
+.btn-disabled{background:#1C3034;color:#6E868B;border:1px solid #274045}
+.btn-ghost{background:transparent;border:1.5px solid #274045;color:#EDF4F4}
+.btn-danger{background:#FF5A5F;color:#111111}
+.btn-row{display:flex;gap:10px}
+.btn-row .btn{flex:1}
+.cover{width:100%;aspect-ratio:16/9;border-radius:6px;background:linear-gradient(135deg,#1C3034,#0E1A1C);
+        border:1px solid #274045;position:relative;display:flex;align-items:center;justify-content:center}
+.playbtn{width:56px;height:56px;border-radius:50%;background:#0009;border:1.5px solid #ffffff44;
+          display:flex;align-items:center;justify-content:center;color:#fff;font-size:20px}
+.badge{position:absolute;right:8px;bottom:8px;background:#000b;color:#fff;font-size:11px;font-weight:600;
+        padding:3px 7px;border-radius:6px;font-variant-numeric:tabular-nums}
+.vtitle{font-size:15px;font-weight:600;line-height:1.45;margin-top:12px}
+.vmeta{font-size:12px;color:#8FA6AA;margin-top:6px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.dot{width:3px;height:3px;border-radius:50%;background:#6E868B;display:inline-block}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:12px}
+.cell{aspect-ratio:1;background:#1C3034;border-radius:6px;position:relative;border:1px solid #274045}
+.cell.on{border:2px solid #A1E6DD}
+.check{position:absolute;right:5px;top:5px;width:22px;height:22px;border-radius:6px;background:#A1E6DD;
+        color:#111111;font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:center}
+.livetag{position:absolute;left:5px;bottom:5px;background:#000b;color:#A1E6DD;font-size:11px;font-weight:600;padding:2px 5px;border-radius:4px}
+.selbar{display:flex;justify-content:space-between;align-items:center;margin-top:12px}
+.task{display:flex;align-items:center;gap:12px;padding:12px 0}
+.task+.task{border-top:1px solid #274045}
+.thumb{width:48px;height:48px;border-radius:6px;background:#1C3034;border:1px solid #274045;flex:none}
+.tinfo{flex:1;min-width:0}
+.tname{font-size:14px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.tstate{font-size:12px;margin-top:3px;display:flex;align-items:center;gap:5px}
+.progress{height:4px;background:#1C3034;border-radius:2px;margin-top:7px;overflow:hidden}
+.progress i{display:block;height:100%;background:#A1E6DD;border-radius:2px}
+.taction{width:44px;height:44px;display:flex;align-items:center;justify-content:center;color:#8FA6AA;font-size:16px;flex:none}
+.navbar{flex:none;display:flex;padding:8px 0 22px;border-top:1px solid #274045;background:#152427}
+.navitem{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;padding:6px 0;min-height:52px;justify-content:center}
+.navicon{font-size:19px;line-height:1;color:#6E868B}
+.navlabel{font-size:11px;color:#6E868B;font-weight:500}
+.navitem.on .navicon,.navitem.on .navlabel{color:#FF6F2C}
+.navitem.on .navlabel{font-weight:600}
+.recentrow{display:flex;align-items:center;gap:12px;padding:13px 0;min-height:56px}
+.recentrow+.recentrow{border-top:1px solid #274045}
+.errbox{background:#FF5A5F14;border:1px solid #FF5A5F55;border-radius:12px;padding:14px;display:flex;gap:10px}
+.spinner{width:20px;height:20px;border:2px solid #274045;border-top-color:#FF6F2C;border-radius:50%}
+</style></head>
+<body style="margin:0;background:#000;display:flex;justify-content:center;padding:20px"><div class="screen"><div class="sb"><span>9:41</span><span>▮▮▮ ⌁ ▰</span></div><div class="topbar"><div><div class="title">抖音下载器</div><div class="subtitle">已解析 · 图集 9 张</div></div><div class="iconbtn">☰</div></div>
+<div class="content">
+  <div class="inputwrap"><span class="urltext">v.douyin.com/iRbN2mTz/</span><span class="clearx">✕</span></div>
+  <div class="card" style="padding-bottom:14px">
+    <div class="grid"><div class="cell on"><div class="check">✓</div></div><div class="cell on"><div class="check">✓</div><div class="livetag">实况</div></div><div class="cell on"><div class="check">✓</div></div><div class="cell on"><div class="check">✓</div></div><div class="cell on"><div class="check">✓</div><div class="livetag">实况</div></div><div class="cell on"><div class="check">✓</div></div><div class="cell on"><div class="check">✓</div></div><div class="cell "></div><div class="cell "></div></div>
+    <div class="selbar"><span style="font-size:13px;color:#8FA6AA">已选 <b style="color:#A1E6DD">7</b> / 9</span>
+      <span style="font-size:13px;font-weight:600;color:#A1E6DD;padding:10px">全选</span></div>
+    <button class="btn btn-primary" style="margin-top:6px">下载选中 7 张</button>
+  </div>
+  <div><div class="section">下载任务</div>
+    <div class="card" style="padding:2px 16px">
+      <div class="task"><div class="thumb"></div><div class="tinfo"><div class="tname">图集 7 张.jpg</div>
+        <div class="tstate" style="color:#A1E6DD">进行中 4/7</div><div class="progress"><i style="width:57%"></i></div></div>
+        <div class="taction">✕</div></div>
+      <div class="task"><div class="thumb"></div><div class="tinfo"><div class="tname">熊猫基地.mp4</div>
+        <div class="tstate" style="color:#8FA6AA">✓ 已保存到相册</div></div><div class="taction">✕</div></div>
+      <div class="task"><div class="thumb"></div><div class="tinfo"><div class="tname">春熙路夜市.mp4</div>
+        <div class="tstate" style="color:#FF5A5F">✕ 网络中断，点击重试</div></div><div class="taction">⟳</div></div>
+    </div></div>
+</div><div class="navbar"><div class="navitem on"><div class="navicon">⌂</div><div class="navlabel">首页</div></div><div class="navitem "><div class="navicon">◷</div><div class="navlabel">历史</div></div><div class="navitem "><div class="navicon">⚙</div><div class="navlabel">设置</div></div></div></div></body></html>

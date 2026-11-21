@@ -1,0 +1,116 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>重新设计 · 1-空态</title><style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{font-family:-apple-system,"PingFang SC","Noto Sans SC",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+.screen{width:393px;height:852px;display:flex;flex-direction:column;background:#0E1A1C;color:#EDF4F4;position:relative;overflow:hidden}
+
+/* 状态栏 */
+.sb{display:flex;justify-content:space-between;padding:14px 20px 6px;font-size:13px;font-weight:600;color:#EDF4F4;flex:none}
+
+/* 顶栏 */
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:4px 20px 14px;flex:none}
+.title{font-size:20px;font-weight:700;letter-spacing:-.3px;color:#EDF4F4}
+.subtitle{font-size:12px;color:#8FA6AA;margin-top:3px}
+.iconbtn{width:48px;height:48px;display:flex;align-items:center;justify-content:center;
+         border-radius:14px;color:#8FA6AA;font-size:18px}
+
+/* 内容滚动区 */
+.content{flex:1;overflow:hidden;padding:0 20px;display:flex;flex-direction:column;gap:16px}
+
+/* 卡片 */
+.card{background:#152427;border:1px solid #274045;border-radius:12px;padding:16px}
+.section{font-size:12px;font-weight:600;color:#8FA6AA;letter-spacing:.5px;margin-bottom:10px}
+
+/* 输入区 */
+.inputwrap{background:#152427;border:1.5px solid #274045;border-radius:12px;padding:0 4px 0 16px;
+            display:flex;align-items:center;gap:8px;min-height:56px}
+.inputwrap.focus{border-color:#FF6F2C}
+.urltext{flex:1;font-size:14px;color:#EDF4F4;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;line-height:1.4}
+.urlph{flex:1;font-size:14px;color:#6E868B}
+.clearx{width:44px;height:44px;display:flex;align-items:center;justify-content:center;color:#8FA6AA;font-size:17px;flex:none}
+.pastebtn{font-size:13px;font-weight:600;color:#A1E6DD;padding:12px;white-space:nowrap}
+
+/* 按钮 */
+.btn{width:100%;min-height:52px;border:none;border-radius:14px;font-size:16px;font-weight:700;
+      letter-spacing:.2px;display:flex;align-items:center;justify-content:center;gap:8px}
+.btn-primary{background:#FF6F2C;color:#111111}
+.btn-ghost{background:transparent;border:1.5px solid #274045;color:#EDF4F4}
+.btn-sub{background:#1C3034;color:#EDF4F4;border:1px solid #274045}
+.btn-row{display:flex;gap:10px}
+.btn-row .btn{flex:1}
+
+/* 视频预览 */
+.cover{width:100%;aspect-ratio:16/9;border-radius:6px;background:linear-gradient(135deg,#1C3034,#0E1A1C);
+        border:1px solid #274045;position:relative;display:flex;align-items:center;justify-content:center}
+.playbtn{width:56px;height:56px;border-radius:50%;background:#0009;border:1.5px solid #ffffff44;
+          display:flex;align-items:center;justify-content:center;color:#fff;font-size:20px}
+.badge{position:absolute;right:8px;bottom:8px;background:#000b;color:#fff;font-size:11px;font-weight:600;
+        padding:3px 7px;border-radius:6px;font-variant-numeric:tabular-nums}
+.vtitle{font-size:15px;font-weight:600;line-height:1.45;color:#EDF4F4;margin-top:12px}
+.vmeta{font-size:12px;color:#8FA6AA;margin-top:6px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.dot{width:3px;height:3px;border-radius:50%;background:#6E868B;display:inline-block}
+
+/* 图集 */
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:12px}
+.cell{aspect-ratio:1;background:#1C3034;border-radius:6px;position:relative;border:1px solid #274045}
+.cell.on{border:2px solid #A1E6DD}
+.check{position:absolute;right:5px;top:5px;width:22px;height:22px;border-radius:6px;background:#A1E6DD;
+        color:#111111;font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:center}
+.livetag{position:absolute;left:5px;bottom:5px;background:#000b;color:#A1E6DD;font-size:11px;font-weight:600;
+          padding:2px 5px;border-radius:4px}
+.selbar{display:flex;justify-content:space-between;align-items:center;margin-top:12px}
+
+/* 任务 */
+.task{display:flex;align-items:center;gap:12px;padding:12px 0}
+.task+.task{border-top:1px solid #274045}
+.thumb{width:48px;height:48px;border-radius:6px;background:#1C3034;border:1px solid #274045;flex:none}
+.tinfo{flex:1;min-width:0}
+.tname{font-size:14px;color:#EDF4F4;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.tstate{font-size:12px;margin-top:3px;display:flex;align-items:center;gap:5px}
+.progress{height:4px;background:#1C3034;border-radius:2px;margin-top:7px;overflow:hidden}
+.progress i{display:block;height:100%;background:#FF6F2C;border-radius:2px}
+.taction{width:44px;height:44px;display:flex;align-items:center;justify-content:center;color:#8FA6AA;font-size:16px;flex:none}
+
+/* 底部导航 */
+.navbar{flex:none;display:flex;padding:8px 0 22px;border-top:1px solid #274045;background:#152427}
+.navitem{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;padding:6px 0;min-height:52px;justify-content:center}
+.navicon{font-size:19px;line-height:1;color:#6E868B}
+.navlabel{font-size:11px;color:#6E868B;font-weight:500}
+.navitem.on .navicon{color:#FF6F2C}
+.navitem.on .navlabel{color:#FF6F2C;font-weight:600}
+
+/* 其他 */
+.hint{font-size:12px;color:#8FA6AA;line-height:1.7}
+.recentrow{display:flex;align-items:center;gap:12px;padding:13px 0;min-height:56px}
+.recentrow+.recentrow{border-top:1px solid #274045}
+.emptycta{text-align:center;padding:20px 0}
+</style></head>
+<body style="margin:0;background:#000;display:flex;justify-content:center;padding:20px"><div class="screen"><div class="sb"><span>9:41</span><span>▮▮▮ ⌁ ▰</span></div><div class="topbar">
+      <div><div class="title">抖音下载器</div><div class="subtitle">粘贴链接，自动解析</div></div>
+      <div class="iconbtn">☰</div></div>
+<div class="content">
+  <div class="inputwrap"><span class="urlph">粘贴抖音分享链接…</span><span class="pastebtn">粘贴</span></div>
+  <button class="btn btn-primary">解析</button>
+
+  <div style="margin-top:4px">
+    <div class="section">开始使用</div>
+    <div class="card" style="padding:18px">
+      <div style="display:flex;gap:12px;margin-bottom:16px">
+        <div style="font-size:12px;font-weight:700;color:#FF6F2C;width:18px">01</div>
+        <div><div style="font-size:14px;font-weight:600">复制抖音分享链接</div>
+        <div style="font-size:12px;color:#8FA6AA;margin-top:3px">在抖音点分享 → 复制链接</div></div>
+      </div>
+      <div style="display:flex;gap:12px;margin-bottom:16px">
+        <div style="font-size:12px;font-weight:700;color:#FF6F2C;width:18px">02</div>
+        <div><div style="font-size:14px;font-weight:600">切回本 App</div>
+        <div style="font-size:12px;color:#8FA6AA;margin-top:3px">链接会自动填入，无需手动粘贴</div></div>
+      </div>
+      <div style="display:flex;gap:12px">
+        <div style="font-size:12px;font-weight:700;color:#FF6F2C;width:18px">03</div>
+        <div><div style="font-size:14px;font-weight:600">点解析并下载</div>
+        <div style="font-size:12px;color:#8FA6AA;margin-top:3px">视频、图集、实况图都能保存</div></div>
+      </div>
+    </div>
+  </div>
+</div><div class="navbar"><div class="navitem on"><div class="navicon">⌂</div><div class="navlabel">首页</div></div><div class="navitem "><div class="navicon">◷</div><div class="navlabel">历史</div></div><div class="navitem "><div class="navicon">⚙</div><div class="navlabel">设置</div></div></div></div></body></html>
