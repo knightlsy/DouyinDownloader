@@ -21,6 +21,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.hazeEffect
+import dev.chrisbanes.haze.HazeStyle
+import dev.chrisbanes.haze.HazeTint
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.runtime.remember
 import com.knightlsy.douyin.ui.theme.BgRadius
 import com.knightlsy.douyin.ui.theme.LocalBgColors
 
@@ -168,4 +174,69 @@ fun BgBackdrop(
         }
         content()
     }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   真 · 液态玻璃（Haze）
+   ═══════════════════════════════════════════════════════════
+
+   上面 [BgGlassCard] 那套是「固定色 + 高光」，做不出「透」——
+   不管 alpha 调多少，看到的都是预设的颜色，和背后内容无关。
+
+   真正的玻璃必须**采样背后的像素**：把那块区域的渲染结果离屏取出 →
+   模糊 → 叠色调 → 画进玻璃形状。Compose 自带的 Modifier.blur() 只能模糊
+   自己（拿不到身后），RenderEffect 同理，所以只能靠 Haze。
+
+   用法（源和效果必须是兄弟节点，玻璃不能放在源内部，否则采样到自己）：
+
+       val haze = rememberBgHaze()
+       Box {
+           Column(Modifier.hazeSource(haze)) { 页面内容 }
+           TopBar(Modifier.bgHazeGlass(haze, BgRadius.r4))
+       }
+   */
+
+/** 全局共享的 Haze 源。源头在 AppNavigation 建一次，各层玻璃共用。 */
+val LocalBgHaze = staticCompositionLocalOf<HazeState?> { null }
+
+@Composable
+fun rememberBgHaze(): HazeState = remember { HazeState() }
+
+/**
+ * 液态玻璃修饰符。
+ *
+ * @param blurRadius 模糊半径。iOS 顶栏大约 20–30dp；再高内容就糊成一片色块了。
+ * @param tint 叠色。玻璃不是纯透明的，有一层极薄的色 —— 这是「玻璃有厚度」的来源。
+ * @param backgroundAlpha 底色不透明度。这是「透多少」的主控：
+ *        0.0 = 完全透明只看到模糊；0.6+ = 变回半透明色块。iOS 落在 0.25–0.45。
+ */
+@Composable
+fun Modifier.bgHazeGlass(
+    haze: HazeState,
+    radius: Dp = BgRadius.r3,
+    blurRadius: Dp = 24.dp,
+    tint: Color? = null,
+    backgroundAlpha: Float = 0.34f,
+): Modifier {
+    val c = LocalBgColors.current
+    val shape = RoundedCornerShape(radius)
+    val tintColor = tint ?: c.glassTop
+    return this
+        .clip(shape)
+        .hazeEffect(haze) {
+            style = HazeStyle(
+                // 底色压得很低 —— 高了这个效果立刻退化成一块灰膜
+                backgroundColor = c.paper.copy(alpha = backgroundAlpha),
+                // 薄薄一层高光色，给玻璃厚度
+                tints = listOf(HazeTint(tintColor.copy(alpha = 0.12f))),
+                blurRadius = blurRadius,
+                // 极细颗粒，让模糊不至于像塑料。iOS 毛玻璃有这个
+                noiseFactor = 0.018f,
+            )
+        }
+        .drawBehind {
+            // 顶部内高光：光从上方来，上沿更亮
+            drawGlassTopHighlight(radius, c.glassTop)
+        }
+        .border(1.dp, c.glassEdge, shape)
 }

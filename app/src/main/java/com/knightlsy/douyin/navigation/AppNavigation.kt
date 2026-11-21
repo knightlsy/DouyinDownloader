@@ -1,5 +1,8 @@
 package com.knightlsy.douyin.navigation
 
+import com.knightlsy.douyin.ui.components.bgHazeGlass
+import com.knightlsy.douyin.ui.components.rememberBgHaze
+import dev.chrisbanes.haze.hazeSource
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
@@ -105,7 +108,11 @@ fun AppNavigation(mainViewModel: MainViewModel) {
 
     // Tab 栏放在 AnimatedContent 外面：切换页面时内容走原有的
     // 350ms 缩放 + 横滑动效，Tab 栏本身保持静止（motion-spec「页面级：不动」）。
+    // 底部 Tab 要「透」出页面内容，所以页面内容必须注册成 Haze 的采样源。
+    // 源和效果是兄弟关系：Tab 栏在源外面，否则它采样的就是它自己。
+    val haze = rememberBgHaze()
     Box(Modifier.fillMaxSize()) {
+      Box(Modifier.fillMaxSize().hazeSource(haze)) {
         AnimatedContent(
             targetState = currentScreen,
             transitionSpec = {
@@ -157,6 +164,7 @@ fun AppNavigation(mainViewModel: MainViewModel) {
                 "about" -> AboutScreen(onBack = { currentScreen = "main" })
             }
         }
+      }
 
         // 底部 Tab 栏（首页 / 历史 / 设置），叠在内容之上、贴屏幕底部。
         BottomTabBar(
@@ -197,10 +205,8 @@ private fun BottomTabBar(
             .height(56.dp)
             // 外阴影先于 clip：clip=false 让它画在形状外面，浮起来才有「离开页面」的重量。
             .shadow(14.dp, RoundedCornerShape(BgRadius.r4), clip = false)
-            // 玻璃走主题 token，不写死白色。
-            // 之前是 Color.White.copy(alpha = 0.045f) —— 深色主题下勉强可见，
-            // 浅色主题下米白底叠 4.5% 白，等于什么都没画，所以「看不到玻璃」。
-            .bgGlassSurface(BgRadius.r4)
+            // 真玻璃：采样页面内容，模糊后透出来
+            .bgHazeGlass(haze, BgRadius.r4, blurRadius = 22.dp)
     ) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val tabWidth = maxWidth / 3

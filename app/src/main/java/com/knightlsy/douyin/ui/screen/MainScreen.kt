@@ -1,5 +1,6 @@
 package com.knightlsy.douyin.ui.screen
 
+import dev.chrisbanes.haze.hazeSource
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
@@ -36,6 +37,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.shadow
 import com.knightlsy.douyin.ui.components.bgGlassSurface
+import androidx.compose.ui.zIndex
+import com.knightlsy.douyin.ui.components.LocalBgHaze
+import com.knightlsy.douyin.ui.components.rememberBgHaze
+import com.knightlsy.douyin.ui.components.bgHazeGlass
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -90,6 +95,9 @@ import kotlinx.coroutines.withContext
 fun MainScreen(
     viewModel: MainViewModel = viewModel(),
 ) {
+    // 玻璃采样源：AppNavigation 统一建立，各层玻璃共用。
+    // 拿不到就自建一个（单独预览本屏时也不至于崩）。
+    val haze = LocalBgHaze.current ?: rememberBgHaze()
     val c = LocalBgColors.current
     val context = LocalContext.current
 
@@ -138,7 +146,9 @@ fun MainScreen(
         }
     }
 
-    Column(
+    // 根容器改用 Box：顶栏要从「内容源」里挪出来做玻璃，
+    // 玻璃不能是源的子节点，否则采样的就是它自己（会糊成灰块）。
+    Box(
         Modifier
             .fillMaxSize()
             .background(c.paper)
@@ -173,12 +183,14 @@ fun MainScreen(
         /* ── 顶栏：玻璃悬浮条，只留身份信息 ── */
         Row(
             Modifier
+                .align(Alignment.TopCenter)
+                // Box 子节点按声明顺序绘制；顶栏声明在 LazyColumn 之前，不抬层级会被内容盖住
+                .zIndex(1f)
                 .fillMaxWidth()
                 .padding(start = BgSpace.gutter, end = BgSpace.gutter, top = 10.dp, bottom = 8.dp)
-                // 同样是写死白色的问题：浅色主题下 4.2% 白完全隐形。
-                // 顶栏和底部 Tab 必须用同一套玻璃 token，否则一块能看见一块看不见。
-                .shadow(10.dp, RoundedCornerShape(BgRadius.r3), clip = false)
-                .bgGlassSurface(BgRadius.r3)
+                .shadow(14.dp, RoundedCornerShape(BgRadius.r3), clip = false)
+                // 真玻璃：采样下方滚过的内容，模糊后透出来
+                .bgHazeGlass(haze, BgRadius.r3)
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -215,9 +227,11 @@ fun MainScreen(
 
         /* ── 内容 ── */
         LazyColumn(
-            Modifier.fillMaxSize(),
+            // 这一列是玻璃的「采样源」：顶栏背后能看到列表滚过去的颜色
+            Modifier.fillMaxSize().hazeSource(haze),
+            // top 96dp：顶栏是叠加层不占布局空间，内容要自己让出位置
             // bottom 90dp：给悬浮的底部 Tab 栏（56dp 高 + 12dp 边距 + 手势条余量）让位
-            contentPadding = PaddingValues(top = 18.dp, bottom = 90.dp),
+            contentPadding = PaddingValues(top = 96.dp, bottom = 90.dp),
         ) {
 
             // 链接输入 —— 唯一主角，紧跟顶栏

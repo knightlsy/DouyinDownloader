@@ -101,6 +101,18 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.6.2")
     implementation("androidx.activity:activity-compose:1.8.1")
     implementation(platform("androidx.compose:compose-bom:2026.05.00"))
+
+    /**
+     * Haze：真正的 backdrop blur（采样背后的内容 → 模糊 → 画到玻璃上）。
+     *
+     * 为什么必须引库：Compose 自带的 Modifier.blur() 只能模糊**自己**，
+     * 拿不到身后的内容；RenderEffect 同理。要「透」就必须离屏采样背景，
+     * 这套 RenderNode + 坐标映射 Haze 已经做对了。
+     *
+     * 版本锁 1.5.3：它依赖 kotlin-stdlib 2.1.0，本项目 Kotlin 2.2.10 向下兼容。
+     * 2.x 依赖 Kotlin 2.4.21，会被 2.2.10 的编译器以 metadata 版本不符拒掉。
+     */
+    implementation("dev.chrisbanes.haze:haze:1.5.3")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
