@@ -107,7 +107,7 @@ class MainViewModel @JvmOverloads constructor(
     val wallpaperDiag: StateFlow<String> = _wallpaperDiag.asStateFlow()
 
     fun refreshWallpaperDiag() {
-        _wallpaperDiag.value = runCatching { WallpaperTint.get(applicationContext).diag }
+        _wallpaperDiag.value = runCatching { WallpaperTint.get(getApplication<Application>()).diag }
             .getOrElse { "诊断读取失败：${it.message}" }
     }
 
