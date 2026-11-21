@@ -1,5 +1,6 @@
 package com.knightlsy.douyin.viewmodel
 
+import com.knightlsy.douyin.data.WallpaperTint
 import android.app.Application
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -92,11 +93,22 @@ class MainViewModel @JvmOverloads constructor(
     fun setWallpaperMood(enabled: Boolean) {
         themePreferences.setWallpaperMood(enabled)
         _wallpaperMood.value = enabled
+        if (enabled) refreshWallpaperDiag()
     }
 
     fun setAccentFromWallpaper(enabled: Boolean) {
         themePreferences.setAccentFromWallpaper(enabled)
         _accentFromWallpaper.value = enabled
+        if (enabled) refreshWallpaperDiag()
+    }
+
+    /** 壁纸读取诊断（设置页显示）。开关打开时立即取一次，失败原因直接可见。 */
+    private val _wallpaperDiag = MutableStateFlow("")
+    val wallpaperDiag: StateFlow<String> = _wallpaperDiag.asStateFlow()
+
+    fun refreshWallpaperDiag() {
+        _wallpaperDiag.value = runCatching { WallpaperTint.get(applicationContext).diag }
+            .getOrElse { "诊断读取失败：${it.message}" }
     }
 
     /** 在「跟随系统 → 浅色 → 深色」之间循环切换。 */

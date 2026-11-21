@@ -78,6 +78,8 @@ fun SettingsScreen(
     onWallpaperMoodChange: (Boolean) -> Unit = {},
     /** 强调色跟随壁纸开关的当前值。 */
     accentFromWallpaper: Boolean = false,
+    /** 壁纸读取诊断（AppNavigation 从 ViewModel 收集后传入）。 */
+    wallpaperDiag: String = "",
     onAccentFromWallpaperChange: (Boolean) -> Unit = {},
     onBack: () -> Unit,
     /**
@@ -203,6 +205,18 @@ fun SettingsScreen(
                     onChange = ::toggleAccentFromWallpaper,
                 )
                 RowDivider()
+                // 壁纸读取的真实状态。这个功能曾经「开了没反应」，
+                // 大部分是 ROM 拒绝读取，被 runCatching 吞掉后界面上毫无反馈。
+                if (wallpaperDiag.isNotEmpty() && (wallpaperMood || accentFromWallpaper)) {
+                    Text(
+                        text = wallpaperDiag,
+                        fontFamily = FontFamily.SansSerif,
+                        fontSize = 11.sp,
+                        lineHeight = 17.sp,
+                        color = c.ink3,
+                        modifier = Modifier.padding(top = 8.dp, bottom = 2.dp),
+                    )
+                }
                 Text(
                     text = "需要 Android 12 及以上。更低版本会自动降级为预先模糊的静态背景。",
                     fontFamily = FontFamily.SansSerif,

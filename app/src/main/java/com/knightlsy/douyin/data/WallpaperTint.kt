@@ -47,6 +47,12 @@ object WallpaperTint {
         val accent: Color?,
         /** 壁纸缩略图，供背景层拉伸铺满。不可读时为 null。 */
         val backdrop: ImageBitmap?,
+        /**
+         * 人话诊断。壁纸功能「开了但没效果」曾有相当一部分是 ROM 拒绝读取壁纸，
+         * 而这里 runCatching 把一切吞成 null —— 界面上毫无反馈，用户以为功能是假的。
+         * 现在失败原因会带到设置页显示出来。
+         */
+        val diag: String = "",
     )
 
     @Volatile private var cachedId = Int.MIN_VALUE
@@ -72,14 +78,18 @@ object WallpaperTint {
         val hit = cached
         if (hit != null && id == cachedId) return hit
 
-        val fresh = runCatching { compute(wm) }.getOrDefault(Result(null, null))
+        val fresh = runCatching { compute(wm) }.getOrElse {
+            Result(null, null, diag = "读取异常：${it.javaClass.simpleName} ${it.message ?: ""}".trim())
+        }
         cachedId = id
         cached = fresh
         return fresh
     }
 
     private fun compute(wm: WallpaperManager): Result {
-        val src = wm.drawable ?: return Result(null, null)
+        // ROM 拒绝给出壁纸时 drawable 为 null（不少国产 ROM 对第三方应用如此），
+        // 必须把这个原因说出来，而不是静默当「没开」。
+        val src = wm.drawable ?: return Result(null, null, diag = "系统未返回壁纸 —— 动态壁纸，或 ROM 限制了第三方读取")
         val w = src.intrinsicWidth.coerceAtLeast(1)
         val h = src.intrinsicHeight.coerceAtLeast(1)
 
@@ -93,9 +103,15 @@ object WallpaperTint {
         src.setBounds(0, 0, tw, th)
         src.draw(canvas)
 
+        val accent = constrainAccent(small)
+        val hex = accent?.let { c ->
+            String.format("#%02X%02X%02X",
+                (c.red * 255).toInt(), (c.green * 255).toInt(), (c.blue * 255).toInt())
+        }
         return Result(
-            accent = constrainAccent(small),
+            accent = accent,
             backdrop = small.asImageBitmap(),
+            diag = "壁纸 ${w}×${h} → 强调色 ${hex ?: "未提取到主色"}",
         )
     }
 

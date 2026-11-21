@@ -205,19 +205,21 @@ fun MainScreen(
                 // 标题用系统无衬线 + 粗字重 + 负字距。
                 // 之前是 Monospace 11.5sp + letterSpacing 1.8 —— 等宽中文字距还被撑开，
                 // 比正文还小，等于没标题。中文笔画密度高，等宽只适合数字和代码。
+                // 按设计稿参数：17px/650 + 副标题 11.5px。20sp Bold 在玻璃条里太重，
+                // 和 12sp 副标题的对比也过于悬殊，观感笨 —— 回到稿子的量级。
                 Text(
                     text = "抖音下载器",
                     fontFamily = FontFamily.SansSerif,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = (-0.4).sp,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    letterSpacing = (-0.2).sp,
                     color = c.ink,
                 )
-                Spacer(Modifier.height(2.dp))
+                Spacer(Modifier.height(1.dp))
                 Text(
                     text = "粘贴链接即可下载",
                     fontFamily = FontFamily.SansSerif,
-                    fontSize = 12.sp,
+                    fontSize = 11.5.sp,
                     fontWeight = FontWeight.Normal,
                     letterSpacing = 0.sp,
                     color = c.ink3,

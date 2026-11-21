@@ -88,6 +88,7 @@ fun AppNavigation(mainViewModel: MainViewModel) {
     val themeMode by mainViewModel.themeMode.collectAsState()
     val wallpaperMood by mainViewModel.wallpaperMood.collectAsState()
     val accentFromWallpaper by mainViewModel.accentFromWallpaper.collectAsState()
+    val wallpaperDiag by mainViewModel.wallpaperDiag.collectAsState()
 
     val nonMainScreens = listOf("history", "about", "settings", "logs")
     BackHandler(enabled = currentScreen in nonMainScreens) {
@@ -151,6 +152,7 @@ fun AppNavigation(mainViewModel: MainViewModel) {
                     onWallpaperMoodChange = { mainViewModel.setWallpaperMood(it) },
                     accentFromWallpaper = accentFromWallpaper,
                     onAccentFromWallpaperChange = { mainViewModel.setAccentFromWallpaper(it) },
+                    wallpaperDiag = wallpaperDiag,
                     onBack = { currentScreen = "main" }
                 )
                 "logs" -> LogScreen(onBack = { currentScreen = "settings" })
