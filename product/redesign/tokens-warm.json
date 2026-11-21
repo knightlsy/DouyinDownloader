@@ -1,0 +1,13 @@
+{
+  "ink": "#0C0B0A",
+  "ink2": "#141210",
+  "ink3": "#1C1917",
+  "line": "rgba(255,255,255,.09)",
+  "text": "#F2EFEC",
+  "dim": "#A39C95",
+  "dim2": "#6E6862",
+  "accent": "#FF7A3A",
+  "onAccent": "#1A0E06",
+  "ok": "#6FD3A8",
+  "danger": "#F26B5E"
+}
