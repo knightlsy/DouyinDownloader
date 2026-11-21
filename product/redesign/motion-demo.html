@@ -1,0 +1,208 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>液态玻璃动效 demo</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{font-family:-apple-system,"PingFang SC","Noto Sans SC",system-ui,sans-serif;
+     background:#0C0B0A;color:#F2EFEC;padding:32px 24px 48px}
+.mono{font-family:ui-monospace,SFMono-Regular,monospace;font-variant-numeric:tabular-nums}
+h1{font-size:23px;font-weight:700;margin:0 0 6px;letter-spacing:-.4px}
+.lead{font-size:12.5px;color:#8C8580;line-height:1.85;margin:0 0 8px;max-width:900px}
+.hint{font-size:12px;color:#9A938D;margin:0 0 30px;padding-left:13px;
+      border-left:2px solid #FF7A3A;line-height:1.85;max-width:900px}
+.sec{margin-bottom:34px;max-width:520px}
+.st{font-size:13px;font-weight:700;color:#C0BAB4;margin-bottom:4px}
+.sp{font-size:11px;color:#6E6862;font-family:ui-monospace,monospace;margin-bottom:12px}
+
+/* ═══ 玻璃底 ═══ */
+.glass{background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.12);
+  -webkit-backdrop-filter:blur(28px) saturate(170%) brightness(1.1);
+  backdrop-filter:blur(28px) saturate(170%) brightness(1.1);
+  box-shadow:0 10px 30px rgba(0,0,0,.4),inset 0 1px 0 rgba(255,255,255,.26)}
+.bgwrap{position:relative;padding:26px 22px;border-radius:22px;overflow:hidden;max-width:520px}
+.bgwrap::before{content:"";position:absolute;inset:0;z-index:0;
+  background:
+   radial-gradient(55% 40% at 20% 20%,#C4652B 0%,transparent 66%),
+   radial-gradient(50% 38% at 80% 70%,#8A4A1E 0%,transparent 68%),
+   linear-gradient(168deg,#151210,#0C0B0A)}
+.bgwrap>*{position:relative;z-index:1}
+
+/* ═══ 1. 分段控件：滑块液体形变 ═══ */
+.seg{position:relative;display:flex;background:rgba(0,0,0,.24);border-radius:15px;padding:3px;
+     border:1px solid rgba(255,255,255,.06)}
+.seg-pill{position:absolute;top:3px;bottom:3px;border-radius:12px;
+  background:rgba(255,255,255,.14);box-shadow:inset 0 1px 0 rgba(255,255,255,.22);
+  /* 液体：超调 + 拉伸过渡 */
+  transition:left 260ms cubic-bezier(.34,1.42,.64,1), width 260ms cubic-bezier(.34,1.42,.64,1);}
+.seg-pill.stretch{ /* 移动途中横向拉长，到位后收回 */
+  transition:left 260ms cubic-bezier(.34,1.42,.64,1), width 260ms cubic-bezier(.22,1.6,.5,1);}
+.seg-item{flex:1;text-align:center;font-size:12.5px;font-weight:600;padding:9px 4px;
+  border-radius:12px;color:rgba(255,255,255,.48);position:relative;z-index:2;cursor:pointer;
+  min-height:38px;display:flex;align-items:center;justify-content:center;
+  transition:color 200ms ease}
+.seg-item.on{color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.4)}
+
+/* ═══ 2. 开关：knob 拉伸变形 ═══ */
+.sw{position:relative;width:52px;height:30px;border-radius:15px;background:rgba(255,255,255,.13);
+    border:1px solid rgba(255,255,255,.10);cursor:pointer;flex:none;
+    transition:background 260ms cubic-bezier(.34,1.4,.64,1), border-color 260ms ease}
+.sw.on{background:#FF7A3A;border-color:#FF7A3A}
+.sw .knob{position:absolute;top:2px;left:2px;width:24px;height:24px;border-radius:50%;
+  background:rgba(255,255,255,.94);box-shadow:0 2px 5px rgba(0,0,0,.35);
+  transition:left 280ms cubic-bezier(.34,1.5,.64,1), width 280ms cubic-bezier(.34,1.5,.64,1),
+             background 260ms ease}
+.sw.on .knob{left:24px;background:#1A0E06}
+/* 按下时 knob 横向拉长，像被液体推着走 */
+.sw:active .knob{width:30px}
+.sw.on:active .knob{width:30px;left:18px}
+
+/* ═══ 3. Tab：指示条流体滑动 ═══ */
+.tabs{position:relative;display:flex;border-radius:18px;padding:5px}
+.tab-ind{position:absolute;top:5px;height:2px;border-radius:1px;background:#FF7A3A;
+  transition:left 240ms cubic-bezier(.34,1.45,.64,1), width 240ms cubic-bezier(.34,1.45,.64,1);
+  filter:drop-shadow(0 0 6px rgba(255,122,58,.55))}
+.tab-item{flex:1;display:flex;align-items:center;justify-content:center;min-height:46px;
+  font-size:13px;font-weight:500;color:rgba(255,255,255,.46);cursor:pointer;border-radius:14px;
+  position:relative;transition:color 200ms ease, background 200ms ease}
+.tab-item.on{color:#fff;font-weight:650;background:rgba(255,255,255,.09)}
+
+/* ═══ 4. 按钮：按进软胶 ═══ */
+.btn{width:100%;min-height:52px;border:none;border-radius:17px;font-size:15.5px;font-weight:650;
+  font-family:inherit;cursor:pointer;position:relative;overflow:hidden;
+  background:#FF7A3A;color:#1A0E06;
+  box-shadow:0 8px 24px rgba(255,122,58,.26), inset 0 1px 0 rgba(255,255,255,.32);
+  /* 按下变快，松手回弹慢 */
+  transition:transform 160ms cubic-bezier(.34,1.5,.64,1), box-shadow 160ms ease}
+.btn:active{transform:scale(.972);
+  box-shadow:0 3px 10px rgba(255,122,58,.20), inset 0 2px 6px rgba(90,30,0,.28)}
+/* 高光扫过 */
+.btn::after{content:"";position:absolute;top:0;left:-60%;width:40%;height:100%;
+  background:linear-gradient(100deg,transparent,rgba(255,255,255,.42),transparent);
+  transform:skewX(-18deg);transition:left 420ms ease}
+.btn:active::after{left:120%}
+
+/* ═══ 5. 勾选框：液体填充 ═══ */
+.chk{width:26px;height:26px;border-radius:9px;border:1.5px solid rgba(255,255,255,.24);
+  display:flex;align-items:center;justify-content:center;cursor:pointer;
+  transition:background 220ms cubic-bezier(.34,1.5,.64,1), border-color 220ms ease,
+             border-radius 220ms cubic-bezier(.34,1.5,.64,1)}
+.chk.on{background:#6FD3A8;border-color:#6FD3A8;border-radius:50%}
+.chk i{display:block;width:10px;height:6px;border-left:2px solid #0F2A1E;border-bottom:2px solid #0F2A1E;
+  transform:rotate(-45deg) translate(1px,-1px) scale(0);
+  transition:transform 220ms cubic-bezier(.34,1.7,.64,1)}
+.chk.on i{transform:rotate(-45deg) translate(1px,-1px) scale(1)}
+</style></head><body>
+
+<h1>液态玻璃动效</h1>
+<p class="lead">按钮级切换动效。页面切换不动，仍是原来的 350ms 缩放 0.92 + 横滑。</p>
+<p class="hint">点一下下面的控件看效果。液态玻璃的关键不是"滑得快"，而是<b>形变</b>——滑块移动时会被拉长，到位后弹回；knob 被推着走时会压扁；高光随手指扫过。</p>
+
+<div class="sec">
+  <div class="st">① 分段控件 · 液体滑块</div>
+  <div class="sp">260ms · cubic-bezier(.34,1.42,.64,1) · 移动途中横向拉长</div>
+  <div class="bgwrap"><div class="seg glass" id="seg">
+    <div class="seg-pill" id="pill"></div>
+    <div class="seg-item on">跟随系统</div><div class="seg-item">深色</div><div class="seg-item">浅色</div>
+  </div></div>
+</div>
+
+<div class="sec">
+  <div class="st">② 开关 · knob 被液体推着走</div>
+  <div class="sp">280ms · cubic-bezier(.34,1.5,.64,1) · 按住时压扁成 30×24</div>
+  <div class="bgwrap" style="display:flex;gap:18px;align-items:center">
+    <div class="sw" id="sw1"><div class="knob"></div></div>
+    <div class="sw on" id="sw2"><div class="knob"></div></div>
+    <span style="font-size:12.5px;color:#8C8580">按住不放看形变</span>
+  </div>
+</div>
+
+<div class="sec">
+  <div class="st">③ 底部 Tab · 指示条流体滑动</div>
+  <div class="sp">240ms · cubic-bezier(.34,1.45,.64,1) · 带 6px 外发光</div>
+  <div class="bgwrap"><div class="tabs glass" id="tabs" style="position:relative">
+    <div class="tab-ind" id="ind"></div>
+    <div class="tab-item on">首页</div><div class="tab-item">历史</div><div class="tab-item">设置</div>
+  </div></div>
+</div>
+
+<div class="sec">
+  <div class="st">④ 主按钮 · 按进软胶 + 高光扫过</div>
+  <div class="sp">按下 160ms 回弹 · scale .972 · 内阴影变深 · 高光从左扫到右</div>
+  <div class="bgwrap"><button class="btn">解析</button></div>
+</div>
+
+<div class="sec">
+  <div class="st">⑤ 勾选框 · 方形液体变圆</div>
+  <div class="sp">220ms · 圆角 9px → 50% · 勾号 scale(0)→1 带弹</div>
+  <div class="bgwrap" style="display:flex;gap:16px;align-items:center">
+    <div class="chk" id="c1"><i></i></div>
+    <div class="chk on" id="c2"><i></i></div>
+    <div class="chk on" id="c3"><i></i></div>
+    <span style="font-size:12.5px;color:#8C8580">点一下看形变</span>
+  </div>
+</div>
+
+<script>
+// ① 分段控件
+const seg=document.getElementById('seg'), pill=document.getElementById('pill');
+const items=[...seg.querySelectorAll('.seg-item')];
+function movePill(el){
+  const r=el.getBoundingClientRect(), pr=seg.getBoundingClientRect();
+  pill.style.left=(r.left-pr.left)+'px';
+  pill.style.width=r.width+'px';
+}
+function initSeg(){
+  const on=seg.querySelector('.seg-item.on');
+  pill.style.transition='none';
+  movePill(on);
+  requestAnimationFrame(()=>{ pill.style.transition=''; });
+}
+items.forEach(it=>it.addEventListener('click',()=>{
+  items.forEach(x=>x.classList.remove('on'));
+  it.classList.add('on');
+  // 液体拉伸：先加宽 12px 再回位
+  const r=it.getBoundingClientRect(), pr=seg.getBoundingClientRect();
+  const left=r.left-pr.left, w=r.width;
+  pill.style.transition='none';
+  pill.style.left=(left-6)+'px'; pill.style.width=(w+12)+'px';
+  requestAnimationFrame(()=>{
+    pill.style.transition='left 260ms cubic-bezier(.34,1.42,.64,1), width 260ms cubic-bezier(.34,1.42,.64,1)';
+    pill.style.left=left+'px'; pill.style.width=w+'px';
+  });
+}));
+window.addEventListener('load',initSeg);
+window.addEventListener('resize',initSeg);
+
+// ② 开关
+['sw1','sw2'].forEach(id=>{
+  const el=document.getElementById(id);
+  el.addEventListener('click',()=>el.classList.toggle('on'));
+});
+
+// ③ Tab
+const tabs=document.getElementById('tabs'), ind=document.getElementById('ind');
+const titems=[...tabs.querySelectorAll('.tab-item')];
+function moveInd(el){
+  const r=el.getBoundingClientRect(), tr=tabs.getBoundingClientRect();
+  const w=Math.min(26, r.width*0.34);
+  ind.style.left=(r.left-tr.left+(r.width-w)/2)+'px';
+  ind.style.width=w+'px';
+}
+function initInd(){
+  ind.style.transition='none'; moveInd(tabs.querySelector('.tab-item.on'));
+  requestAnimationFrame(()=>{ ind.style.transition=''; });
+}
+titems.forEach(it=>it.addEventListener('click',()=>{
+  titems.forEach(x=>x.classList.remove('on')); it.classList.add('on');
+  moveInd(it);
+}));
+window.addEventListener('load',initInd);
+window.addEventListener('resize',initInd);
+
+// ⑤ 勾选框
+['c1','c2','c3'].forEach(id=>{
+  const el=document.getElementById(id);
+  el.addEventListener('click',()=>el.classList.toggle('on'));
+});
+</script>
+</body></html>
