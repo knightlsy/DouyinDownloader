@@ -1,5 +1,6 @@
 package com.knightlsy.douyin.navigation
 
+import dev.chrisbanes.haze.HazeState
 import com.knightlsy.douyin.ui.components.bgHazeGlass
 import com.knightlsy.douyin.ui.components.rememberBgHaze
 import dev.chrisbanes.haze.hazeSource
@@ -172,6 +173,7 @@ fun AppNavigation(mainViewModel: MainViewModel) {
             onSelect = { route ->
                 if (route != currentScreen) currentScreen = route
             },
+            haze = haze,
             modifier = Modifier.align(Alignment.BottomCenter),
         )
     }
@@ -192,6 +194,7 @@ fun AppNavigation(mainViewModel: MainViewModel) {
 private fun BottomTabBar(
     currentRoute: String,
     onSelect: (String) -> Unit,
+    haze: HazeState,
     modifier: Modifier = Modifier,
 ) {
     val c = LocalBgColors.current
