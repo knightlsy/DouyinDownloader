@@ -122,18 +122,27 @@ internal object DouyinParser {
         return null
     }
 
+    /**
+     * 三级选择：精确匹配 contentId 的 → 第一个带有效 url 的 → 第 0 个兜底。
+     * 裸数组分支与包裹（item_list/aweme_details/aweme_list）分支共用，
+     * 推荐流混入多条 item 时保证优先取到用户请求的内容。
+     */
+    private fun chooseItem(items: List<ItemObj>, contentId: String): ItemObj {
+        val target = items.firstOrNull { it.aweme_id == contentId }
+        val firstValid = items.firstOrNull { obj ->
+            (!obj.video?.play_addr?.url_list.isNullOrEmpty()) ||
+                (!obj.images.isNullOrEmpty() && obj.images!!.any { it.url_list.isNotEmpty() })
+        }
+        return target ?: firstValid ?: items[0]
+    }
+
     internal fun parseItemList(json: String, contentId: String): ContentInfo? {
         try {
             val arr = gson.fromJson(json, Array<ItemObj>::class.java)
             if (arr.isNotEmpty()) {
-                // 优先目标 id，其次第一个带有效 url 的 item
-                val target = arr.firstOrNull { it.aweme_id == contentId }
-                val firstValid = arr.firstOrNull { obj ->
-                    (!obj.video?.play_addr?.url_list.isNullOrEmpty()) ||
-                        (!obj.images.isNullOrEmpty() && obj.images!!.any { it.url_list.isNotEmpty() })
-                }
-                val chosen = target ?: firstValid ?: arr[0]
-                Log.d(TAG, "Array item: chosen=${chosen.aweme_id} target=${target != null} total=${arr.size}")
+                // 优先目标 id，其次第一个带有效 url 的 item（与包裹分支共用 chooseItem）
+                val chosen = chooseItem(arr.toList(), contentId)
+                Log.d(TAG, "Array item: chosen=${chosen.aweme_id} target=${chosen.aweme_id == contentId} total=${arr.size}")
                 chosen.toContentInfo()?.let { return it }
             }
         } catch (_: Exception) {}
@@ -146,12 +155,18 @@ internal object DouyinParser {
             // WebView 通道新增来源：iteminfo 的 {item_list:[...]}、slidesinfo 可能的 {aweme_details:[...]}
             for (key in listOf("item_list", "aweme_details", "aweme_list")) {
                 val arrEl = root.getAsJsonArray(key) ?: continue
-                if (arrEl.size() > 0) {
-                    val obj = gson.fromJson(arrEl[0], ItemObj::class.java)
-                    if (obj.aweme_id.isNotEmpty()) {
-                        Log.d(TAG, "Wrapped item ($key): id=${obj.aweme_id}")
-                        return obj.toContentInfo()
-                    }
+                if (arrEl.size() == 0) continue
+                val items = arrEl.mapNotNull { el ->
+                    try { gson.fromJson(el, ItemObj::class.java) } catch (_: Exception) { null }
+                }
+                if (items.isEmpty()) continue
+                // 与裸数组分支同一套三级选择：推荐流混入多条时优先匹配请求的 contentId，
+                // 而不是盲取第 0 个（否则会解出错误的视频/图集）
+                val chosen = chooseItem(items, contentId)
+                if (chosen.aweme_id.isNotEmpty()) {
+                    Log.d(TAG, "Wrapped item ($key): id=${chosen.aweme_id} target=${chosen.aweme_id == contentId} total=${items.size}")
+                    chosen.toContentInfo()?.let { return it }
+                    // 选中的 item 无有效 url（风控剥空）：继续走后面的兜底
                 }
             }
             val detail = root.getAsJsonObject("aweme_detail") ?: return parseJsonTree(json, contentId)

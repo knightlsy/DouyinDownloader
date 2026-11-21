@@ -133,6 +133,14 @@ class ContentMapperTest {
     }
 
     @Test
+    fun `watermark是首个query参数时问号不能丢`() {
+        // 回归：watermark 排在 query 第一位时，删参数的正则会把 "?" 一起吃掉，
+        // 剩下 "&video_id=x" 这种残缺 query —— 首个参数的 "?" 必须补回来
+        val url = "https://h/aweme/v1/play/?watermark=1&video_id=x"
+        assertEquals("https://h/aweme/v1/play/?video_id=x", stripWatermarkParam(url))
+    }
+
+    @Test
     fun `无watermark参数原样返回`() {
         val url = "https://v.douyinvod.com/video/a1.mp4?ratio=720p&line=0"
         assertEquals(url, stripWatermarkParam(url))
@@ -279,6 +287,32 @@ class ContentMapperTest {
         val img = gson.fromJson(json, ItemObj::class.java).toContentInfo() as ContentInfo.ImageCollection
         assertEquals(listOf("https://p3-sign.douyinpic.com/watermark/a1.jpeg"), img.imageUrls)
         assertNull(img.animatedUrls[0])
+    }
+
+    @Test
+    fun `中间图无地址时imageUrls与animatedUrls仍一一对应`() {
+        // 回归：第二张图被风控剥空（url_list 和 download_url_list 都拿不到地址）时，
+        // 该图在两个列表里都要跳过。修复前 imageUrls 被过滤成 2 项、animatedUrls
+        // 却仍是全量 3 项，第三张的实况视频会错位挂到第二张的静图位置上。
+        val json = """
+            {"aweme_id":"7412345678901234700","desc":"错位回归",
+             "images":[
+               {"url_list":["https://p3-sign.douyinpic.com/tos/i/a1.jpeg"]},
+               {"url_list":[],"download_url_list":[],
+                "video":{"play_addr":{"url_list":["https://v.douyinvod.com/live/a2.mp4"]}}},
+               {"url_list":["https://p3-sign.douyinpic.com/tos/i/a3.webp"],
+                "video":{"play_addr":{"url_list":["https://v.douyinvod.com/live/a3.mp4"]}}}
+             ]}
+        """.trimIndent()
+        val img = gson.fromJson(json, ItemObj::class.java).toContentInfo() as ContentInfo.ImageCollection
+        // 两个列表长度必须相等（剥空的那张图两边都跳过）
+        assertEquals(img.imageUrls.size, img.animatedUrls.size)
+        assertEquals(2, img.imageUrls.size)
+        // 第三张图的实况视频仍挂在第三张（现在下标 1）上，而不是错位串到别的图
+        assertEquals("https://p3-sign.douyinpic.com/tos/i/a1.jpeg", img.imageUrls[0])
+        assertEquals("https://p3-sign.douyinpic.com/tos/i/a3.webp", img.imageUrls[1])
+        assertNull(img.animatedUrls[0])
+        assertEquals("https://v.douyinvod.com/live/a3.mp4", img.animatedUrls[1])
     }
 
     @Test

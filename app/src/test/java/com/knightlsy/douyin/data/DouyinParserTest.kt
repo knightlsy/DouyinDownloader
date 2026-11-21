@@ -178,6 +178,45 @@ class DouyinParserTest {
         assertEquals(targetId, (DouyinParser.parseItemList(json, targetId) as ContentInfo.Video).id)
     }
 
+    /** 生成与 videoItemJson 同结构、指定 id 的视频 item，用于多条目选择逻辑的测试 */
+    private fun videoItem(id: String): String = """
+        {"aweme_id":"$id","desc":"视频-$id","create_time":1730000000,
+         "author":{"nickname":"作者-$id"},
+         "video":{"duration":15000,"width":1080,"height":1920,
+           "play_addr":{"url_list":["https://www.douyin.com/aweme/v1/play/?video_id=$id&ratio=720p&line=0"],"data_size":2890000},
+           "download_addr":{"url_list":["https://www.douyin.com/aweme/v1/play/?video_id=$id&ratio=720p&line=0&watermark=1"]},
+           "cover":{"url_list":["https://p3-sign.douyinpic.com/cover/$id.jpeg"]}},
+         "statistics":{"digg_count":100,"comment_count":1,"share_count":2}}
+    """.trimIndent()
+
+    @Test
+    fun `包裹结构多条item时目标contentId优先`() {
+        // 回归：iteminfo 返回多条（推荐流混入），目标不在首位也必须取到目标，而不是第 0 个
+        val json = """{"status_code":0,"item_list":[${videoItem("B")},${videoItem("A")}],"extra":true}"""
+        assertEquals("A", (DouyinParser.parseItemList(json, "A") as ContentInfo.Video).id)
+    }
+
+    @Test
+    fun `包裹结构目标不存在时退回第一个有效item`() {
+        // contentId 匹配不上（推荐流场景）：不能返回 null，退回第一个带 url 的 item
+        val json = """{"item_list":[${videoItem("B")},${videoItem("A")}]}"""
+        assertEquals("B", (DouyinParser.parseItemList(json, "X") as ContentInfo.Video).id)
+    }
+
+    @Test
+    fun `包裹结构目标不存在且首位无url时跳过剥空item`() {
+        // 首位是风控剥空的推荐流 item：第二级 fallback 要跳过它选第一个有效的
+        val json = """{"item_list":[$strippedItemJson,${videoItem("A")}]}"""
+        assertEquals("A", (DouyinParser.parseItemList(json, "X") as ContentInfo.Video).id)
+    }
+
+    @Test
+    fun `aweme_details多条时目标contentId优先`() {
+        // slidesinfo 的 {"aweme_details":[...]} 同样优先匹配 contentId，而不是盲取第 0 个
+        val json = """{"aweme_details":[${videoItem("B")},${videoItem("A")}]}"""
+        assertEquals("A", (DouyinParser.parseItemList(json, "A") as ContentInfo.Video).id)
+    }
+
     @Test
     fun `slidesinfo风格aweme_details解析出图集`() {
         // slidesinfo 接口的真实形态：{"aweme_details":[{...images...}]}

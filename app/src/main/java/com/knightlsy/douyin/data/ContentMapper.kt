@@ -32,9 +32,19 @@ internal fun ItemObj.toContentInfo(): ContentInfo? {
         // 所以优先 url_list（同分辨率且无水印），只有它为空才退回 download_url_list。
         // jpeg 优先于 webp：同分辨率下码率约 2.3 倍，暗部/细纹理更好；
         // 且 Motion Photo 合成只接受 jpg 主图，webp 会让合成被跳过退化成静图。
-        val imageUrls = this.images.mapNotNull { img ->
-            pickBestImageUrl(img.url_list) ?: pickBestImageUrl(img.download_url_list)
-        }.filter { it.isNotEmpty() }
+        //
+        // 一次遍历同时产出 imageUrls 与 animatedUrls：取不到静态图地址的那一项
+        // 两个列表都跳过，保证下标严格一一对应（见 [ContentInfo.ImageCollection.animatedUrls]）。
+        // 曾经 imageUrls 用 mapNotNull+filter 丢项、animatedUrls 却全量 map，
+        // 某张图被风控剥空时两个列表长度不一致，实况视频会错位挂到别的静图上。
+        val imageUrls = mutableListOf<String>()
+        val animatedUrls = mutableListOf<String?>()
+        for (img in this.images) {
+            val best = pickBestImageUrl(img.url_list) ?: pickBestImageUrl(img.download_url_list)
+            if (best.isNullOrEmpty()) continue // 这张图没有可用地址：静态图和实况视频两边都跳过
+            imageUrls.add(best)
+            animatedUrls.add(img.video?.let { pickLiveVideoUrl(it) })
+        }
         if (imageUrls.isNotEmpty()) {
             // 实况图(Live Photo): images[i].video 存在时该图有动态视频版本。
             //
@@ -48,7 +58,6 @@ internal fun ItemObj.toContentInfo(): ContentInfo? {
             // 把该参数去掉就回到 337508 B 的无水印版 —— 但既然 play_addr 直接给了
             // 无水印地址，就没有必要自己拼参数（拼参数还依赖 video_id，易随接口变动失效）。
             // download_addr 仅作兜底：play_addr 为空时才用，用前尽量去掉 watermark 参数。
-            val animatedUrls = this.images.map { img -> img.video?.let { pickLiveVideoUrl(it) } }
             val liveCount = animatedUrls.count { it != null }
             if (liveCount > 0) Log.d(TAG, "ImageCollection: ${imageUrls.size} images, live=$liveCount (play_addr/无水印优先)")
             return ContentInfo.ImageCollection(this.aweme_id, title, authorName, imageUrls.first(), imageUrls, this.create_time, animatedUrls)
@@ -114,9 +123,16 @@ internal fun pickLiveVideoUrl(v: ImageVideoObj): String? {
  * 只在 play_addr 没有地址、退回 download_addr 兜底时才需要调用。
  */
 internal fun stripWatermarkParam(url: String): String {
-    var u = url.replace(Regex("[?&]watermark=1(?=&|$)"), "").replace(Regex("[?&]watermark=0(?=&|$)"), "")
+    val stripped = url.replace(Regex("[?&]watermark=1(?=&|$)"), "").replace(Regex("[?&]watermark=0(?=&|$)"), "")
     // 去掉参数后可能出现 "?&" 或末尾多余的 "?"/"&"
-    u = u.replace("?&", "?").replace(Regex("[?&]$"), "")
+    var u = stripped.replace("?&", "?").replace(Regex("[?&]$"), "")
+    // 回归修复：watermark 是 query 的第一个参数时，上面的正则连 "?" 一起删掉，
+    // 剩下 "&video_id=x" 这种残缺 query。此时若整串已无 "?" 但还有 "&"，
+    // 把第一个 "&" 换回 "?" 即可恢复合法 URL。
+    // 只在确实删过 watermark 参数（stripped 变短）时才修：没动过的 URL 必须原样返回。
+    if (stripped != url && !u.contains('?') && u.contains('&')) {
+        u = u.replaceFirst("&", "?")
+    }
     return u
 }
 
