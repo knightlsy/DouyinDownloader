@@ -10,7 +10,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -27,7 +26,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -38,6 +36,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -49,20 +48,19 @@ import com.knightlsy.douyin.data.ContentInfo
 import com.knightlsy.douyin.data.DownloadHistoryItem
 import com.knightlsy.douyin.data.HistoryRepository
 import com.knightlsy.douyin.data.ContentType
-import com.knightlsy.douyin.ui.components.BgHair
 import com.knightlsy.douyin.ui.components.BgMonoLabel
 import com.knightlsy.douyin.ui.components.BgSectionLabel
 import com.knightlsy.douyin.ui.components.BgWarn
 import com.knightlsy.douyin.ui.screen.components.CollectionPreviewCard
 import com.knightlsy.douyin.ui.screen.components.ImageViewerDialog
 import com.knightlsy.douyin.ui.screen.components.LinkInputCard
-import com.knightlsy.douyin.ui.screen.components.StatsBar
 import com.knightlsy.douyin.ui.screen.components.TaskCard
 import com.knightlsy.douyin.ui.screen.components.VideoPlayerDialog
 import com.knightlsy.douyin.ui.screen.components.VideoPreviewCard
 import com.knightlsy.douyin.ui.theme.BgRadius
 import com.knightlsy.douyin.ui.theme.BgSpace
 import com.knightlsy.douyin.ui.theme.LocalBgColors
+import com.knightlsy.douyin.viewmodel.DownloadStats
 import com.knightlsy.douyin.viewmodel.MainViewModel
 import com.knightlsy.douyin.data.DownloadStatus
 import kotlinx.coroutines.Dispatchers
@@ -71,23 +69,21 @@ import kotlinx.coroutines.withContext
 /**
  * 主页。
  *
- * 与旧版的结构差异：
+ * 本轮（底部导航重构）的结构变化：
  *
- *  1. 去掉 Scaffold + 渐变 TopAppBar。顶栏改成「等宽标记 + 三个文字按钮」，
- *     高度从 64dp 降到 46dp，省下来的空间给内容。
- *  2. 统计从 2×2 磁贴卡压成三格参数带（StatsBar），高度减半。
- *  3. 内容区仍然是一个 LazyColumn，但每个区块都拆成了独立文件，
- *     这个文件只负责编排 —— 旧版 1310 行全部塞在这里，改一处要滚半天。
- *  4. 预览出现用 AnimatedVisibility 做淡入 + 上移，不再突然撑开页面。
+ *  1. 顶栏去掉「历史」「设置」两个文字按钮 —— 一级入口全部收进底部 Tab
+ *     （见 AppNavigation 的 BottomTabBar），顶栏只留身份信息：6dp 圆点 +
+ *     应用名 + 副标题，并改成玻璃悬浮条（16dp 圆角 + 白 4.2% 底 + 1dp 白 13% 边）。
+ *  2. 信息顺序按「打开 App 是为了粘贴链接」重排：链接解析 → 预览 →
+ *     空态/最近解析 → 任务 → 统计（弱化）。统计仍保留三个读数，只是
+ *     从主角降为参考：位置移到任务之后，字号降一档、颜色统一 ink3。
+ *  3. LazyColumn 底部留 90dp，给悬浮 Tab 栏让位。
  *
- * 交互上的修正都落在子组件里（输入框收键盘、播放器控制层常驻、
- * 任务卡触摸区 44dp、去掉整卡可点），这里不重复。
+ * 其余交互修正都在子组件里，这里只负责编排。
  */
 @Composable
 fun MainScreen(
     viewModel: MainViewModel = viewModel(),
-    onNavigateToHistory: () -> Unit = {},
-    onNavigateToSettings: () -> Unit = {},
 ) {
     val c = LocalBgColors.current
     val context = LocalContext.current
@@ -144,11 +140,15 @@ fun MainScreen(
             .systemBarsPadding()
     ) {
 
-        /* ── 顶栏 ── */
+        /* ── 顶栏：玻璃悬浮条，只留身份信息 ── */
         Row(
             Modifier
                 .fillMaxWidth()
-                .padding(start = BgSpace.gutter, end = BgSpace.gutter, top = 10.dp, bottom = 8.dp),
+                .padding(start = BgSpace.gutter, end = BgSpace.gutter, top = 10.dp, bottom = 8.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(Color.White.copy(alpha = 0.042f))
+                .border(1.dp, Color.White.copy(alpha = 0.13f), RoundedCornerShape(16.dp))
+                .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
@@ -157,46 +157,34 @@ fun MainScreen(
                     .clip(CircleShape)
                     .background(c.accent)
             )
-            Spacer(Modifier.width(8.dp))
-            Text(
-                text = "抖音下载器",
-                fontFamily = FontFamily.Monospace,
-                fontSize = 11.5.sp,
-                fontWeight = FontWeight.Medium,
-                letterSpacing = 1.8.sp,
-                color = c.ink,
-            )
-            Spacer(Modifier.weight(1f))
-            TopAction("历史", onNavigateToHistory)
-            TopAction("设置", onNavigateToSettings)
+            Spacer(Modifier.width(10.dp))
+            Column {
+                Text(
+                    text = "抖音下载器",
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 11.5.sp,
+                    fontWeight = FontWeight.Medium,
+                    letterSpacing = 1.8.sp,
+                    color = c.ink,
+                )
+                Text(
+                    text = "粘贴链接即可下载",
+                    fontFamily = FontFamily.SansSerif,
+                    fontSize = 10.5.sp,
+                    color = c.ink3,
+                )
+            }
         }
-
-        BgHair()
 
         /* ── 内容 ── */
         LazyColumn(
             Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(top = 18.dp, bottom = 40.dp),
+            // bottom 90dp：给悬浮的底部 Tab 栏（56dp 高 + 12dp 边距 + 手势条余量）让位
+            contentPadding = PaddingValues(top = 18.dp, bottom = 90.dp),
         ) {
 
-            // 统计
-            item { StatsBar(stats) }
-
-            // 细线分隔：统计读数与输入区之间
+            // 链接输入 —— 唯一主角，紧跟顶栏
             item {
-                Spacer(Modifier.height(16.dp))
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = BgSpace.gutter)
-                        .height(1.dp)
-                        .background(c.hair)
-                )
-            }
-
-            // 链接输入
-            item {
-                Spacer(Modifier.height(18.dp))
                 BgSectionLabel(
                     text = "链接解析",
                     modifier = Modifier.padding(horizontal = BgSpace.gutter),
@@ -316,7 +304,22 @@ fun MainScreen(
                 }
             }
 
-            // 空态提示
+            // 统计（弱化）：从页面最上方移到任务之后，三个读数保留，
+            // 但字号降一档、颜色统一 ink3 —— 读数仍在，只是不再是开场白。
+            item {
+                Spacer(Modifier.height(30.dp))
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = BgSpace.gutter)
+                        .height(1.dp)
+                        .background(c.hair)
+                )
+                Spacer(Modifier.height(16.dp))
+                SubduedStats(stats)
+            }
+
+            // 空态提示（怎么用）
             if (uiState.contentInfo == null && tasks.isEmpty() && !uiState.isLoading) {
                 item {
                     Spacer(Modifier.height(30.dp))
@@ -360,32 +363,50 @@ fun MainScreen(
 }
 
 /**
- * 顶栏文字按钮。
+ * 弱化版三格统计条。
  *
- * 用文字而不是图标：A 的语言是「窄体大写 + 等宽」，一排放三个图标会和
- * 整体气质打架。文字按钮的可点区通过 padding 撑到 44dp 高。
+ * 与 StatsBar.kt 的区别：那个组件按「仪表盘读数」设计（displayMedium 大数字、
+ * 成功绿/失败橙双编码），是旧首页的开场白。统计移到任务之后降为参考信息后，
+ * 这里改用小一号的等宽数字 + 统一 ink3，避免在页面末尾又抢回注意力。
+ * StatsBar.kt 组件本身不动，留给其他调用方。
  */
 @Composable
-private fun TopAction(text: String, onClick: () -> Unit) {
+private fun SubduedStats(stats: DownloadStats, modifier: Modifier = Modifier) {
     val c = LocalBgColors.current
-    Box(
-        Modifier
-            .height(44.dp)
-            .clip(androidx.compose.foundation.shape.RoundedCornerShape(1.dp))
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick,
-            )
-            .padding(horizontal = 9.dp),
-        contentAlignment = Alignment.Center,
+    Row(
+        modifier
+            .fillMaxWidth()
+            .padding(horizontal = BgSpace.gutter)
     ) {
+        // 标签原本写「今日」，但 stats 只在内存里、重启即归零，
+        // 叫「本次」才不骗人。
+        SubduedStatCell("本次", stats.totalDownloads.toString(), Modifier.weight(1f))
+        SubduedStatCell("成功", stats.successDownloads.toString(), Modifier.weight(1f))
+        SubduedStatCell("失败", stats.failedDownloads.toString(), Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun SubduedStatCell(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier,
+) {
+    val c = LocalBgColors.current
+    Column(modifier) {
         Text(
-            text = text,
+            text = label.uppercase(),
             fontFamily = FontFamily.Monospace,
-            fontSize = 10.sp,
-            letterSpacing = 0.6.sp,
-            color = c.ink2,
+            fontSize = 8.sp,
+            letterSpacing = 1.4.sp,
+            color = c.ink3,
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = value,
+            fontFamily = FontFamily.Monospace,
+            fontSize = 15.sp,
+            color = c.ink3,
         )
     }
 }

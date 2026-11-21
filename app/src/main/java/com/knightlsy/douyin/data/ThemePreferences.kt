@@ -47,4 +47,31 @@ class ThemePreferences(context: Context) {
     fun isDarkMode(): Boolean = mode() == ThemeMode.DARK
 
     fun setDarkMode(dark: Boolean) = setMode(if (dark) ThemeMode.DARK else ThemeMode.LIGHT)
+
+    /* ════════ 壁纸相关（设置页「背景」分组）════════
+     * 本阶段只做持久化，取色 / 渲染逻辑在下一阶段接入。
+     */
+
+    private val wallpaperMoodKey = "wallpaper_mood"
+    private val accentFromWallpaperKey = "accent_from_wallpaper"
+
+    /**
+     * 壁纸氛围：背景跟随桌面壁纸，压到很淡，只影响色温。
+     * 默认关。需要 Android 12+，更低版本由渲染层降级为静态背景。
+     */
+    fun wallpaperMood(): Boolean = prefs.getBoolean(wallpaperMoodKey, false)
+
+    fun setWallpaperMood(enabled: Boolean) {
+        prefs.edit().putBoolean(wallpaperMoodKey, enabled).apply()
+    }
+
+    /**
+     * 强调色跟随壁纸：从壁纸取色替代橙色 #FF7A3A。
+     * 默认关（固定橙色）。
+     */
+    fun accentFromWallpaper(): Boolean = prefs.getBoolean(accentFromWallpaperKey, false)
+
+    fun setAccentFromWallpaper(enabled: Boolean) {
+        prefs.edit().putBoolean(accentFromWallpaperKey, enabled).apply()
+    }
 }
