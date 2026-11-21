@@ -19,7 +19,7 @@ internal object DouyinParser {
     internal fun parseRouterData(json: String, contentId: String): ContentInfo? {
         val m = itemListPattern.matcher(json)
         if (m.find()) {
-            val arr = extractJsonArray(json, m.end() - 1)
+            val arr = DouyinJsonExtract.extractJsonArray(json, m.end() - 1)
             val items = arr?.let {
                 try { gson.fromJson(it, Array<ItemObj>::class.java) } catch (_: Exception) { null }
             }
