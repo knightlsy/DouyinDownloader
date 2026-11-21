@@ -23,6 +23,10 @@ import com.knightlsy.douyin.data.ParseRecord
 import com.knightlsy.douyin.data.ThemeMode
 import com.knightlsy.douyin.data.ThemePreferences
 import com.knightlsy.douyin.data.VideoRepository
+// 纯函数已搬到 ui 包的顶层文件（UrlExtractor.kt / ErrorMessages.kt）：
+// 不再以 private 方法形式困在 God ViewModel 里，单测可以零依赖地直接覆盖它们。
+import com.knightlsy.douyin.ui.extractUrl
+import com.knightlsy.douyin.ui.humanizeParseError
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -91,15 +95,6 @@ class MainViewModel @JvmOverloads constructor(
 
     fun toggleDarkMode() = cycleThemeMode()
 
-    private val urlPatterns = listOf(
-        Regex("https?://v\\.douyin\\.com/[\\w-]+/?"),
-        Regex("https?://vm\\.tiktok\\.com/[\\w-]+/?"),
-        Regex("https?://www\\.douyin\\.com/video/\\d+"),
-        Regex("https?://www\\.douyin\\.com/note/\\d+"),
-        Regex("https?://www\\.iesdouyin\\.com/share/[\\w]+/\\d+")
-    )
-    private val fallbackPattern = Regex("https?://[\\w.-]+(?:\\.com|\\.cn)/[\\w\\-._~:/?#\\[\\]@!$&'()*+,;=%]*")
-
     fun onUrlChanged(url: String) {
         if (url.contains("douyin.com") || url.contains("tiktok.com")) {
             val extracted = extractUrl(url)
@@ -135,45 +130,6 @@ class MainViewModel @JvmOverloads constructor(
             }
         } catch (e: Exception) {
             Log.w("MainVM", "Auto paste failed: ${e.message}")
-        }
-    }
-
-    private fun extractUrl(text: String): String? {
-        for (p in urlPatterns) {
-            val match = p.find(text)
-            if (match != null) return match.value
-        }
-        return fallbackPattern.find(text)?.value
-    }
-
-
-    /**
-     * 把技术异常翻译成人话。
-     *
-     * 之前是 `error = "解析失败: ${e.message}"`，直接把异常原文甩给用户 ——
-     * 视频被作者删掉、设成私密、或者链接过期时，用户看到的是
-     * 「HTTP响应状态异常」「HTTP 403」这种，既不知道发生了什么，也不知道要不要重试。
-     *
-     * 这里只翻译能确定的几种（403/404/410 = 内容侧没了；超时/DNS = 网络侧），
-     * 其余统一收敛成一句「稍后重试」，不再暴露原始异常文本 ——
-     * 原文仍然通过 ParseDiag 进诊断（复制到剪贴板），排查能力不受影响。
-     */
-    private fun humanizeParseError(raw: String?): String {
-        if (raw.isNullOrBlank()) return "解析失败，请稍后重试"
-        val m = raw.lowercase()
-        return when {
-            // 抖音对已删除/私密内容常见的几种返回
-            m.contains("403") || m.contains("404") || m.contains("410") ->
-                "视频已被作者删除，或已设为私密"
-            m.contains("http") && (m.contains("状态") || m.contains("status") || m.contains("code")) ->
-                "视频已被作者删除，或已设为私密"
-            m.contains("timeout") || m.contains("timed out") || m.contains("超时") ->
-                "请求超时，请检查网络后重试"
-            m.contains("unable to resolve host") || m.contains("unknownhost") || m.contains("dns") ->
-                "网络不可用，请检查网络连接"
-            m.contains("connect") || m.contains("socket") || m.contains("network") ->
-                "网络连接失败，请检查网络后重试"
-            else -> "解析失败，请稍后重试"
         }
     }
 

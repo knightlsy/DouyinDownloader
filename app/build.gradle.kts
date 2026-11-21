@@ -133,6 +133,12 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 
+    // JVM 单元测试（JUnit4）：此前 app 模块没有任何 test 依赖，测试覆盖为零。
+    // 只加这一条 —— 解析层（DouyinJsonExtract/DouyinParser/ContentMapper）是
+    // 纯 JVM 逻辑，Log 的替身已放在 test 源集里，不需要 Robolectric 这类重依赖。
+    testImplementation("junit:junit:4.13.2")
+}
+
 /**
  * Kotlin 编译选项。
  *
@@ -143,6 +149,4 @@ kotlin {
     compilerOptions {
         jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_1_8)
     }
-}
-
 }
