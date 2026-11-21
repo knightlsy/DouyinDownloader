@@ -1,51 +1,83 @@
 <!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
-<title>抖音下载器 · 四版配色方案</title>
+<title>抖音下载器 · 八版配色</title>
 <style>
 *{box-sizing:border-box}
-body{margin:0;background:#0C0C0E;color:#EDEDED;font-family:-apple-system,"PingFang SC","Noto Sans SC",system-ui,sans-serif;padding:56px 40px 80px}
-h1{font-size:30px;font-weight:700;margin:0 0 8px;letter-spacing:-.5px}
-.lead{color:#8A8A90;font-size:14px;margin:0 0 46px;line-height:1.8;max-width:760px}
-.row{display:flex;gap:34px;justify-content:center;flex-wrap:nowrap}
-.col{width:270px;flex:none}
-.frame{width:270px;height:600px;overflow:hidden;border-radius:12px;background:#000;box-shadow:0 20px 60px #000a}
-.frame iframe{width:411px;height:914px;border:0;transform:scale(.657);transform-origin:top left}
-.t{font-size:19px;font-weight:700;margin:20px 0 5px}
-.h{font-size:11px;color:#7A7A80;font-family:ui-monospace,monospace;line-height:1.7;margin-bottom:12px}
-.n{font-size:12.5px;color:#9A9AA0;line-height:1.85}
+body{margin:0;background:#0B0B0D;color:#EDEDED;font-family:-apple-system,"PingFang SC","Noto Sans SC",system-ui,sans-serif;padding:44px 32px 52px}
+h1{font-size:30px;font-weight:700;margin:0 0 8px;letter-spacing:-.6px}
+.lead{color:#94949C;font-size:13.5px;margin:0 0 6px;line-height:1.9;max-width:1010px}
+.grp{margin-top:34px}
+.gt{font-size:15.5px;font-weight:700;letter-spacing:.4px;margin-bottom:5px}
+.gd{font-size:12.5px;color:#85858D;margin-bottom:18px}
+.row{display:flex;gap:20px}
+.col{width:249px;flex:none}
+.frame{width:249px;height:554px;overflow:hidden;border-radius:10px;background:#000;box-shadow:0 18px 50px #000a}
+.frame iframe{width:411px;height:914px;border:0;transform:scale(.6058);transform-origin:top left}
+.t{font-size:17px;font-weight:700;margin:14px 0 9px;letter-spacing:-.2px}
+.swr{display:flex;align-items:center;gap:6px;margin-bottom:8px}
+.swr i{width:25px;height:25px;border-radius:3px;display:block;box-shadow:inset 0 0 0 1px #ffffff1f}
+.rl{font-size:10.5px;color:#9A9AA2;margin-left:3px}
+.h{font-size:13px;color:#C0C0C8;font-family:ui-monospace,SFMono-Regular,monospace;line-height:1.8;letter-spacing:.2px}
 </style></head><body>
-<h1>抖音下载器 · 四版配色</h1>
-<p class="lead">四版都从你的撞色库里取色，排版一并做了区分。每版的按钮文字都按对比度算过（WCAG AA），不是凭感觉配的白字。</p>
-<div class="row">
+<h1>抖音下载器 · 八版配色</h1>
+<p class="lead">上排明暗撞：近黑底 + 一个高饱和色，稳。下排色相撞：两个彩色分工，一个管行动一个管数据，跳但压得住。按钮文字色全部按 WCAG 对比度算过。</p>
+
+<div class="grp">
+  <div class="gt">① 明暗撞 · 近黑底 + 单色</div>
+  <div class="gd">差异在强调色相与排版密度，工具类应用最不容易出错的一类。</div>
+  <div class="row">
   <div class="col">
-    <div class="frame">
-      <iframe src="v1-甜酷粉-phone.html" scrolling="no"></iframe>
-    </div>
+    <div class="frame"><iframe src="v1-甜酷粉-phone.html" scrolling="no"></iframe></div>
     <div class="t">甜酷粉</div>
-    <div class="h">炭黑 #1A1A1D · 甜酷粉 #E6397C</div>
-    <div class="n">最保守的一版。还是粉，但比现在的 #FE4F75 沉一档，黑的紫调去掉，界面立刻干净。用户不会觉得陌生。</div>
+    <div class="swr"><i style="background:#E6397C"></i><i style="background:#1A1A1D"></i><span class="rl">强调 / 底</span></div>
+    <div class="h">#E6397C<br>#1A1A1D</div>
   </div>
   <div class="col">
-    <div class="frame">
-      <iframe src="v2-瀑布蓝-phone.html" scrolling="no"></iframe>
-    </div>
+    <div class="frame"><iframe src="v2-瀑布蓝-phone.html" scrolling="no"></iframe></div>
     <div class="t">瀑布蓝</div>
-    <div class="h">极夜黑 #0A0A0A · 瀑布蓝 #51C4D3</div>
-    <div class="n">彻底摆脱抖音影子。没有卡片、没有圆角，靠细线和留白分区，像一台仪表而不是一个 App。冷静、专业。</div>
+    <div class="swr"><i style="background:#51C4D3"></i><i style="background:#0A0A0A"></i><span class="rl">强调 / 底</span></div>
+    <div class="h">#51C4D3<br>#0A0A0A</div>
   </div>
   <div class="col">
-    <div class="frame">
-      <iframe src="v3-漫芭紫-phone.html" scrolling="no"></iframe>
-    </div>
+    <div class="frame"><iframe src="v3-漫芭紫-phone.html" scrolling="no"></iframe></div>
     <div class="t">漫芭紫</div>
-    <div class="h">鸦青墨 #151D34 · 漫芭紫 #5A189A · 香芋紫 #C98EFF</div>
-    <div class="n">三个色。底是深蓝墨，主色漫芭紫，香芋紫只做高光和选中。夜间沉浸感最强，但底色偏蓝，视频封面放上去会显冷。</div>
+    <div class="swr"><i style="background:#C98EFF"></i><i style="background:#151D34"></i><span class="rl">强调 / 底</span></div>
+    <div class="h">#C98EFF<br>#151D34</div>
   </div>
   <div class="col">
-    <div class="frame">
-      <iframe src="v4-翡翠绿-phone.html" scrolling="no"></iframe>
-    </div>
+    <div class="frame"><iframe src="v4-翡翠绿-phone.html" scrolling="no"></iframe></div>
     <div class="t">翡翠绿</div>
-    <div class="h">极致黑 #000000 · 翡翠绿 #00E384</div>
-    <div class="n">最激进。纯黑底 + 翡翠绿，数据全部顶到眼前，字最小、信息最密。适合天天用的人，第一次打开会觉得冷。</div>
+    <div class="swr"><i style="background:#00E384"></i><i style="background:#000000"></i><span class="rl">强调 / 底</span></div>
+    <div class="h">#00E384<br>#000000</div>
   </div></div>
+</div>
+
+<div class="grp">
+  <div class="gt">② 色相撞 · 两个彩色分工</div>
+  <div class="gd">从左到右：最均衡 → 最柔和 → 最跳 → 最凶。</div>
+  <div class="row">
+  <div class="col">
+    <div class="frame"><iframe src="v5-荷青x暖橘-phone.html" scrolling="no"></iframe></div>
+    <div class="t">荷青 × 暖橘</div>
+    <div class="swr"><i style="background:#A1E6DD"></i><i style="background:#FF6F2C"></i><span class="rl">副·数据 / 主·行动</span></div>
+    <div class="h">#A1E6DD<br>#FF6F2C</div>
+  </div>
+  <div class="col">
+    <div class="frame"><iframe src="v6-牡丹粉x淡绿-phone.html" scrolling="no"></iframe></div>
+    <div class="t">牡丹粉 × 淡绿</div>
+    <div class="swr"><i style="background:#FFA6C9"></i><i style="background:#61AC85"></i><span class="rl">主·行动 / 副·数据</span></div>
+    <div class="h">#FFA6C9<br>#61AC85</div>
+  </div>
+  <div class="col">
+    <div class="frame"><iframe src="v7-柠檬黄x帝王紫-phone.html" scrolling="no"></iframe></div>
+    <div class="t">柠檬黄 × 帝王紫</div>
+    <div class="swr"><i style="background:#FFF000"></i><i style="background:#7B2CBF"></i><span class="rl">主·行动 / 副·数据</span></div>
+    <div class="h">#FFF000<br>#7B2CBF</div>
+  </div>
+  <div class="col">
+    <div class="frame"><iframe src="v8-炽烈正红x极光靛蓝-phone.html" scrolling="no"></iframe></div>
+    <div class="t">炽烈正红 × 极光靛蓝</div>
+    <div class="swr"><i style="background:#FF0000"></i><i style="background:#002EFF"></i><span class="rl">主·行动 / 副·数据</span></div>
+    <div class="h">#FF0000<br>#002EFF</div>
+  </div></div>
+</div>
 </body></html>
