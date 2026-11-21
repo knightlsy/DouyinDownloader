@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
@@ -35,11 +36,22 @@ class MainActivity : ComponentActivity() {
      */
     private val mainViewModel: MainViewModel by viewModels()
 
+    /**
+     * 壁纸刷新信号。
+     *
+     * 用户可能在别处换了壁纸再切回来，此时 Compose 没有任何状态变化、不会重组，
+     * Theme 里的壁纸缓存就一直是旧的。每次 onResume 递增这个值，
+     * Theme 收到新 key 后重新比对壁纸 ID，变了才真正重算。
+     */
+    private val wallpaperTick = mutableIntStateOf(0)
+
     override fun onResume() {
         super.onResume()
         // 每次回到前台都看一眼剪贴板。autoPasteFromClipboard 内部只在
         // 输入框为空时才填，不会覆盖用户正在编辑的内容。
         mainViewModel.autoPasteFromClipboard()
+        // 壁纸可能变了，让 Theme 重算一次（内部比对 ID，没变就直接命中缓存）
+        wallpaperTick.intValue++
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -58,7 +70,15 @@ class MainActivity : ComponentActivity() {
             }
             val context = this@MainActivity
 
-            DouyinDownloaderTheme(darkTheme = isDarkMode) {
+            val wallpaperMood by mainViewModel.wallpaperMood.collectAsState()
+            val accentFromWallpaper by mainViewModel.accentFromWallpaper.collectAsState()
+
+            DouyinDownloaderTheme(
+                darkTheme = isDarkMode,
+                wallpaperMood = wallpaperMood,
+                accentFromWallpaper = accentFromWallpaper,
+                wallpaperRefreshKey = wallpaperTick.intValue,
+            ) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background

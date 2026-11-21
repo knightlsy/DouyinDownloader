@@ -77,6 +77,28 @@ class MainViewModel @JvmOverloads constructor(
     private val _themeMode = MutableStateFlow(themePreferences.mode())
     val themeMode: StateFlow<ThemeMode> = _themeMode.asStateFlow()
 
+    /**
+     * 壁纸相关两个开关。默认都关，此时整个 WallpaperManager 都不会被碰。
+     *
+     * 这两个状态放 ViewModel 而不是留在设置页本地，是因为 Theme 需要读它们：
+     * 设置页直接写 Preferences 的话，Theme 不会重组，开关看起来「没反应」。
+     */
+    private val _wallpaperMood = MutableStateFlow(themePreferences.wallpaperMood())
+    val wallpaperMood: StateFlow<Boolean> = _wallpaperMood.asStateFlow()
+
+    private val _accentFromWallpaper = MutableStateFlow(themePreferences.accentFromWallpaper())
+    val accentFromWallpaper: StateFlow<Boolean> = _accentFromWallpaper.asStateFlow()
+
+    fun setWallpaperMood(enabled: Boolean) {
+        themePreferences.setWallpaperMood(enabled)
+        _wallpaperMood.value = enabled
+    }
+
+    fun setAccentFromWallpaper(enabled: Boolean) {
+        themePreferences.setAccentFromWallpaper(enabled)
+        _accentFromWallpaper.value = enabled
+    }
+
     /** 在「跟随系统 → 浅色 → 深色」之间循环切换。 */
     fun cycleThemeMode() {
         val next = when (_themeMode.value) {

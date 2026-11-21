@@ -27,15 +27,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
@@ -75,6 +71,12 @@ fun SettingsScreen(
     onCycleTheme: () -> Unit,
     onNavigateToLogs: () -> Unit,
     onNavigateToAbout: () -> Unit,
+    /** 壁纸氛围开关的当前值。由 ViewModel 驱动，Theme 读同一个源。 */
+    wallpaperMood: Boolean = false,
+    onWallpaperMoodChange: (Boolean) -> Unit = {},
+    /** 强调色跟随壁纸开关的当前值。 */
+    accentFromWallpaper: Boolean = false,
+    onAccentFromWallpaperChange: (Boolean) -> Unit = {},
     onBack: () -> Unit,
     /**
      * 分段控件直选目标主题模式。
@@ -100,21 +102,11 @@ fun SettingsScreen(
 ) {
     val c = LocalBgColors.current
 
-    // 壁纸两开关：本阶段只落库不渲染，直连 ThemePreferences（见类注释）。
-    val context = LocalContext.current
-    val prefs = remember { ThemePreferences(context) }
-    var wallpaperMood by remember { mutableStateOf(prefs.wallpaperMood()) }
-    var accentFromWallpaper by remember { mutableStateOf(prefs.accentFromWallpaper()) }
+    // 壁纸两开关的状态由 ViewModel 持有 —— Theme 读同一份源。
+    // 留在这里会与同名参数（wallpaperMood / accentFromWallpaper）冲突。
+    fun toggleWallpaperMood(enabled: Boolean) = onWallpaperMoodChange(enabled)
 
-    fun toggleWallpaperMood(enabled: Boolean) {
-        prefs.setWallpaperMood(enabled)
-        wallpaperMood = enabled
-    }
-
-    fun toggleAccentFromWallpaper(enabled: Boolean) {
-        prefs.setAccentFromWallpaper(enabled)
-        accentFromWallpaper = enabled
-    }
+    fun toggleAccentFromWallpaper(enabled: Boolean) = onAccentFromWallpaperChange(enabled)
 
     Column(
         Modifier

@@ -79,6 +79,8 @@ fun AppNavigation(mainViewModel: MainViewModel) {
     var pendingReparseUrl by remember { mutableStateOf<String?>(null) }
     val historyViewModel: HistoryViewModel = viewModel()
     val themeMode by mainViewModel.themeMode.collectAsState()
+    val wallpaperMood by mainViewModel.wallpaperMood.collectAsState()
+    val accentFromWallpaper by mainViewModel.accentFromWallpaper.collectAsState()
 
     val nonMainScreens = listOf("history", "about", "settings", "logs")
     BackHandler(enabled = currentScreen in nonMainScreens) {
@@ -134,6 +136,10 @@ fun AppNavigation(mainViewModel: MainViewModel) {
                     onCycleTheme = { mainViewModel.toggleDarkMode() },
                     onNavigateToLogs = { currentScreen = "logs" },
                     onNavigateToAbout = { currentScreen = "about" },
+                    wallpaperMood = wallpaperMood,
+                    onWallpaperMoodChange = { mainViewModel.setWallpaperMood(it) },
+                    accentFromWallpaper = accentFromWallpaper,
+                    onAccentFromWallpaperChange = { mainViewModel.setAccentFromWallpaper(it) },
                     onBack = { currentScreen = "main" }
                 )
                 "logs" -> LogScreen(onBack = { currentScreen = "settings" })

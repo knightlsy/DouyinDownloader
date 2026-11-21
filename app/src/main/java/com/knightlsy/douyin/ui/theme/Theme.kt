@@ -3,7 +3,11 @@ package com.knightlsy.douyin.ui.theme
 import android.app.Activity
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
@@ -12,11 +16,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
+import com.knightlsy.douyin.data.WallpaperTint
 
 /**
  * 主题。
@@ -207,13 +216,43 @@ val LocalBgColors = staticCompositionLocalOf { LightTokens }
 @Composable
 fun DouyinDownloaderTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
+    /** 背景跟随桌面壁纸（压到很淡，只影响色温）。默认关。 */
+    wallpaperMood: Boolean = false,
+    /** 强调色跟随壁纸取色（约束在橙色家族内）。默认关，关时用固定橙。 */
+    accentFromWallpaper: Boolean = false,
+    /**
+     * 壁纸刷新信号。壁纸变更时由宿主递增，Theme 据此重算。
+     *
+     * 为什么不用 lifecycle 监听：`androidx.lifecycle.compose.LocalLifecycleOwner`
+     * 需要 lifecycle-runtime-compose 2.8+，本项目只引了 lifecycle-runtime-ktx 2.6.2。
+     * 用 Activity 的 onResume 递增一个 Int 更简单，也不引入新依赖。
+     */
+    wallpaperRefreshKey: Int = 0,
     content: @Composable () -> Unit
 ) {
     val target = if (darkTheme) DarkColorScheme else LightColorScheme
 
     // 关键：不在两套方案之间硬切，而是对颜色做补间，消除切换时的生硬感。
     val colorScheme = animateColorScheme(target)
-    val tokens = if (darkTheme) DarkTokens else LightTokens
+
+    // 壁纸提取：两个开关都关时完全不碰 WallpaperManager
+    val context = LocalContext.current
+    val wallpaper = remember(wallpaperMood, accentFromWallpaper, wallpaperRefreshKey) {
+        if (wallpaperMood || accentFromWallpaper) {
+            WallpaperTint.get(context)
+        } else {
+            WallpaperTint.Result(null, null)
+        }
+    }
+
+    val baseTokens = if (darkTheme) DarkTokens else LightTokens
+    // 强调色被约束在橙色家族内（WallpaperTint 里锁了明度/饱和度，只改色相），
+    // 所以 accentInk 不需要跟着换 —— 明度没变，压在上面的字对比度仍达标。
+    val tokens = if (accentFromWallpaper && wallpaper.accent != null) {
+        baseTokens.copy(accent = wallpaper.accent)
+    } else {
+        baseTokens
+    }
 
     val view = LocalView.current
     if (!view.isInEditMode) {
@@ -232,7 +271,30 @@ fun DouyinDownloaderTheme(
         MaterialTheme(
             colorScheme = colorScheme,
             typography = Typography,
-            content = content
-        )
+        ) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(tokens.paper)
+            ) {
+                // 壁纸层：48×48 拉伸铺满，等效重度模糊。
+                // 上面再盖 88% 纸色 —— 净贡献约 12%，只留下色温倾向，不影响任何文字对比度。
+                val art = wallpaper.backdrop
+                if (wallpaperMood && art != null) {
+                    Image(
+                        bitmap = art,
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop,
+                    )
+                    Box(
+                        Modifier
+                            .fillMaxSize()
+                            .background(tokens.paper.copy(alpha = 0.88f))
+                    )
+                }
+                content()
+            }
+        }
     }
 }
