@@ -40,12 +40,14 @@ import kotlinx.coroutines.withTimeout
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
-class MainViewModel(application: Application) : AndroidViewModel(application) {
-    private val repository = VideoRepository()
-    private val historyRepository = HistoryRepository(application)
-    private val themePreferences = ThemePreferences(application)
-    private val notificationHelper = DownloadNotificationHelper(application)
-    private val cloudSyncRepository = CloudSyncRepository(application)
+class MainViewModel @JvmOverloads constructor(
+    application: Application,
+    private val repository: VideoRepository = VideoRepository(),
+    private val historyRepository: HistoryRepository = HistoryRepository(application),
+    private val themePreferences: ThemePreferences = ThemePreferences(application),
+    private val notificationHelper: DownloadNotificationHelper = DownloadNotificationHelper(application),
+    private val cloudSyncRepository: CloudSyncRepository = CloudSyncRepository(application),
+) : AndroidViewModel(application) {
     private val activeJobs = ConcurrentHashMap<String, Job>()
     private val downloadSemaphore = Semaphore(5)
 

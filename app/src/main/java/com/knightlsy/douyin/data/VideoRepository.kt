@@ -241,7 +241,7 @@ class VideoRepository {
             ParseDiag.log("slidesinfo ttwid=${if (ttwid != null) "ok" else "无"}")
             fetchSlidesInfo(contentId, ttwid)?.let { json ->
                 ParseDiag.log("slidesinfo 返回 ${json.length}B")
-                parseItemList(json, contentId)?.let {
+                DouyinParser.parseItemList(json, contentId)?.let {
                     Log.d(TAG, "SUCCESS from slidesinfo")
                     return@withContext it
                 }
@@ -280,7 +280,7 @@ class VideoRepository {
                         continue
                     }
 
-                    val routerData = extractRouterData(html)
+                    val routerData = DouyinJsonExtract.extractRouterData(html)
                     if (routerData != null) {
                         // 诊断增强: 记录 routerData 内的关键数据块位置，判断是挖空页还是解析问题
                         val hasItemList = routerData.contains("\"item_list\"")
@@ -288,7 +288,7 @@ class VideoRepository {
                         val hasDetail = routerData.contains("aweme_detail")
                         val hasEmpty = routerData.contains("\"item_list\":[]") || routerData.contains("\"item_list\": []")
                         ParseDiag.log("ROUTER_DATA ${routerData.length}B item_list=$hasItemList videoInfoRes=$hasVideoInfo detail=$hasDetail 空数组=$hasEmpty")
-                        val result = parseRouterData(routerData, contentId)
+                        val result = DouyinParser.parseRouterData(routerData, contentId)
                         if (result != null) {
                             Log.d(TAG, "SUCCESS from $sharePageUrl")
                             return@withContext result
@@ -296,10 +296,10 @@ class VideoRepository {
                         ParseDiag.log("parseRouterData失败(gson/字段不匹配?)")
                     }
 
-                    val itemData = extractItemList(html)
+                    val itemData = DouyinJsonExtract.extractItemList(html)
                     if (itemData != null) {
                         ParseDiag.log("item_list ${itemData.length}B")
-                        val result = parseItemList(itemData, contentId)
+                        val result = DouyinParser.parseItemList(itemData, contentId)
                         if (result != null) {
                             Log.d(TAG, "SUCCESS (itemList) from $sharePageUrl")
                             return@withContext result
@@ -330,11 +330,11 @@ class VideoRepository {
             val json = WebViewParser(context).parse(contentId)
             if (json != null) {
                 ParseDiag.log("WebView返回${json.length}B")
-                parseRouterData(json, contentId)?.let {
+                DouyinParser.parseRouterData(json, contentId)?.let {
                     Log.d(TAG, "SUCCESS from WebView (routerData)")
                     return@withContext it
                 }
-                parseItemList(json, contentId)?.let {
+                DouyinParser.parseItemList(json, contentId)?.let {
                     Log.d(TAG, "SUCCESS from WebView (itemList/detail)")
                     return@withContext it
                 }
@@ -353,366 +353,6 @@ class VideoRepository {
         null
     }
 
-    private fun extractRouterData(html: String): String? {
-        val marker = "window._ROUTER_DATA = "
-        val idx = html.indexOf(marker)
-        if (idx < 0) return null
-        return extractJsonObject(html, idx + marker.length)
-    }
-
-    private fun extractItemList(html: String): String? {
-        val idx = html.indexOf("\"item_list\"")
-        if (idx < 0) return null
-        var start = idx
-        while (start < html.length && html[start] != '[') start++
-        return extractJsonArray(html, start)
-    }
-
-    private fun extractJsonObject(json: String, start: Int): String? {
-        if (start >= json.length || json[start] != '{') return null
-        var depth = 0; var inStr = false; var esc = false
-        for (i in start until json.length) {
-            val c = json[i]
-            if (esc) { esc = false; continue }
-            if (c == '\\' && inStr) { esc = true; continue }
-            if (c == '"') { inStr = !inStr; continue }
-            if (inStr) continue
-            if (c == '{') depth++ else if (c == '}') { depth--; if (depth == 0) return json.substring(start, i + 1) }
-        }
-        return null
-    }
-
-    private fun extractJsonArray(json: String, start: Int): String? {
-        if (start >= json.length || json[start] != '[') return null
-        var depth = 0; var inStr = false; var esc = false
-        for (i in start until json.length) {
-            val c = json[i]
-            if (esc) { esc = false; continue }
-            if (c == '\\' && inStr) { esc = true; continue }
-            if (c == '"') { inStr = !inStr; continue }
-            if (inStr) continue
-            if (c == '[') depth++ else if (c == ']') { depth--; if (depth == 0) return json.substring(start, i + 1) }
-        }
-        return null
-    }
-
-    private val gson by lazy { com.google.gson.Gson() }
-    private val itemListPattern by lazy { Pattern.compile("\"item_list\"\\s*:\\s*\\[") }
-
-    private fun parseRouterData(json: String, contentId: String): ContentInfo? {
-        val m = itemListPattern.matcher(json)
-        if (m.find()) {
-            val arr = extractJsonArray(json, m.end() - 1)
-            val items = arr?.let {
-                try { gson.fromJson(it, Array<ItemObj>::class.java) } catch (_: Exception) { null }
-            }
-            if (!items.isNullOrEmpty()) {
-                // 优先取 aweme_id 等于目标 contentId 的 item（推荐流会混入其他视频）
-                val target = items.firstOrNull { it.aweme_id == contentId }
-                val firstValid = items.firstOrNull { obj ->
-                    (!obj.video?.play_addr?.url_list.isNullOrEmpty()) ||
-                        (!obj.images.isNullOrEmpty() && obj.images!!.any { it.url_list.isNotEmpty() })
-                }
-                val chosen = target ?: firstValid ?: items[0]
-                Log.d(TAG, "Router item: chosen=${chosen.aweme_id} target=${target != null} total=${items.size}")
-                val info = chosen.toContentInfo()
-                if (info != null) return info
-                // 继续落树兜底
-                ParseDiag.log("正则分支item无效(${chosen.aweme_id == contentId}), 走树解析")
-            }
-        }
-        // 正则没命中 item_list（结构变化/嵌套转义），退化为 gson 整体解析后递归找数据块。
-        // 2026-09 实测 App 端 routerData 可达 47KB 且正则不命中，此兜底能直接定位 item_list /
-        // aweme_detail / videoInfoRes 等任意嵌套层级里的数据。
-        return parseJsonTree(json, contentId)
-    }
-
-    /** 深度优先: 找 aweme_id 匹配 contentId 的 item；找不到再退回第一个有效 item */
-    private fun findItemInTree(el: com.google.gson.JsonElement?, contentId: String): com.google.gson.JsonObject? {
-        if (el == null || !el.isJsonObject) {
-            if (el != null && el.isJsonArray) {
-                for (e in el.asJsonArray) findItemInTree(e, contentId)?.let { return it }
-            }
-            return null
-        }
-        val obj = el.asJsonObject
-        val id = obj.get("aweme_id")?.takeIf { it.isJsonPrimitive }?.asString ?: ""
-        if (id.isNotEmpty() && (obj.has("video") || obj.has("images"))) {
-            // 第一优先: 精确匹配目标视频/图集（推荐流里会有大量其他视频的 item）
-            if (id == contentId) return obj
-        }
-        // 命中 item_list/aweme_detail 容器时优先进入
-        for (key in listOf("item_list", "aweme_detail", "aweme_details", "videoInfoRes", "items")) {
-            obj.get(key)?.let { child -> findItemInTree(child, contentId)?.let { return it } }
-        }
-        // 无命中则遍历所有子节点
-        for ((_, v) in obj.entrySet()) findItemInTree(v, contentId)?.let { return it }
-        return null
-    }
-
-    /**
-     * 两轮查找: 先精确匹配 contentId，失败再放宽到第一个带 url 的 item。
-     * 防止推荐流 item（url 被风控剥空）误匹配导致 toContentInfo 返回 null。
-     */
-    private fun parseJsonTree(json: String, contentId: String): ContentInfo? = try {
-        val root = gson.fromJson(json, com.google.gson.JsonElement::class.java)
-        // 第一轮: 精确 id
-        findItemInTree(root, contentId)?.let { obj ->
-            val item = gson.fromJson(obj, ItemObj::class.java)
-            item.toContentInfo()?.let {
-                Log.d(TAG, "Tree item (exact): id=${item.aweme_id}")
-                return it
-            }
-            // url 被剥空的精确节点: 记录诊断
-            ParseDiag.log("目标item存在但无url(风控剥空?)")
-            null
-        }
-            // 第二轮: 任一有效 item
-            ?: run {
-                findAnyValidItem(root)?.let { obj ->
-                    val item = gson.fromJson(obj, ItemObj::class.java)
-                    Log.d(TAG, "Tree item (fallback): id=${item.aweme_id}")
-                    item.toContentInfo()
-                } ?: run { ParseDiag.log("树解析: 无任何有效url的item"); null }
-            }
-    } catch (e: Exception) {
-        ParseDiag.log("树解析异常: ${e.message?.take(50)}")
-        null
-    }
-
-    /** 找第一个能转出有效内容的 item（url_list 非空） */
-    private fun findAnyValidItem(el: com.google.gson.JsonElement?): com.google.gson.JsonObject? {
-        if (el == null) return null
-        if (el.isJsonArray) {
-            for (e in el.asJsonArray) findAnyValidItem(e)?.let { return it }
-            return null
-        }
-        if (!el.isJsonObject) return null
-        val obj = el.asJsonObject
-        val id = obj.get("aweme_id")?.takeIf { it.isJsonPrimitive }?.asString ?: ""
-        if (id.isNotEmpty()) {
-            val hasUrlVideo = (obj.getAsJsonObject("video")?.getAsJsonObject("play_addr")
-                ?.getAsJsonArray("url_list")?.size() ?: 0) > 0
-            val hasUrlImages = obj.getAsJsonArray("images")?.any { img ->
-                ((img as? com.google.gson.JsonObject)?.getAsJsonArray("url_list")?.size() ?: 0) > 0
-            } == true
-            if (hasUrlVideo || hasUrlImages) return obj
-        }
-        for (key in listOf("item_list", "aweme_detail", "aweme_details", "videoInfoRes", "items")) {
-            obj.get(key)?.let { child -> findAnyValidItem(child)?.let { return it } }
-        }
-        for ((_, v) in obj.entrySet()) findAnyValidItem(v)?.let { return it }
-        return null
-    }
-
-    private fun parseItemList(json: String, contentId: String): ContentInfo? {
-        try {
-            val arr = gson.fromJson(json, Array<ItemObj>::class.java)
-            if (arr.isNotEmpty()) {
-                // 优先目标 id，其次第一个带有效 url 的 item
-                val target = arr.firstOrNull { it.aweme_id == contentId }
-                val firstValid = arr.firstOrNull { obj ->
-                    (!obj.video?.play_addr?.url_list.isNullOrEmpty()) ||
-                        (!obj.images.isNullOrEmpty() && obj.images!!.any { it.url_list.isNotEmpty() })
-                }
-                val chosen = target ?: firstValid ?: arr[0]
-                Log.d(TAG, "Array item: chosen=${chosen.aweme_id} target=${target != null} total=${arr.size}")
-                chosen.toContentInfo()?.let { return it }
-            }
-        } catch (_: Exception) {}
-        try {
-            val obj = gson.fromJson(json, ItemObj::class.java)
-            if (obj.aweme_id.isNotEmpty()) return obj.toContentInfo()
-        } catch (_: Exception) {}
-        try {
-            val root = gson.fromJson(json, com.google.gson.JsonObject::class.java)
-            // WebView 通道新增来源：iteminfo 的 {item_list:[...]}、slidesinfo 可能的 {aweme_details:[...]}
-            for (key in listOf("item_list", "aweme_details", "aweme_list")) {
-                val arrEl = root.getAsJsonArray(key) ?: continue
-                if (arrEl.size() > 0) {
-                    val obj = gson.fromJson(arrEl[0], ItemObj::class.java)
-                    if (obj.aweme_id.isNotEmpty()) {
-                        Log.d(TAG, "Wrapped item ($key): id=${obj.aweme_id}")
-                        return obj.toContentInfo()
-                    }
-                }
-            }
-            val detail = root.getAsJsonObject("aweme_detail") ?: return parseJsonTree(json, contentId)
-            val obj = gson.fromJson(detail, ItemObj::class.java)
-            return obj.toContentInfo()
-        } catch (_: Exception) {}
-        return parseJsonTree(json, contentId)
-    }
-
-    data class ItemObj(
-        val aweme_id: String = "", val desc: String = "", val aweme_type: Int = 0,
-        val author: AuthorObj? = null, val video: VideoObj? = null,
-        val images: List<ImageObj>? = null, val create_time: Long = 0,
-        val statistics: StatisticsObj? = null
-    )
-    data class AuthorObj(val nickname: String = "")
-    data class VideoObj(val play_addr: UrlObj? = null, val download_addr: UrlObj? = null, val cover: UrlObj? = null, val duration: Long = 0, val width: Int = 0, val height: Int = 0, val bit_rate: List<BitRateObj>? = null)
-    data class UrlObj(val url_list: List<String> = emptyList(), val data_size: Long = 0)
-
-    /**
-     * 实况图(Live Photo)的视频部分。
-     *
-     * 字段名是单数 `video`（不是 `videos`），取自 slidesinfo 接口的 images[i]。
-     * 实测 `play_addr` 是**无水印原片**（3.0s），`download_addr` 带 `watermark=1`
-     * 水印且时长翻倍（6.0s）—— 取地址请走 [pickLiveVideoUrl]，不要直接用 download_addr。
-     */
-    data class ImageVideoObj(
-        val play_addr: UrlObj? = null,
-        val download_addr: UrlObj? = null,
-        val duration: Long = 0, val width: Int = 0, val height: Int = 0,
-        val bit_rate: List<BitRateObj>? = null
-    )
-
-    /**
-     * 图集里的单张图。
-     *
-     * url_list / download_url_list 是同一张图的两组地址：
-     * - `url_list`          → 无水印(tplv-dy-aweme-images / tplv-dy-lqen-new)
-     * - `download_url_list` → 带水印(tplv-dy-water-v2 / lqen-new-water)，但分辨率更高
-     *
-     * slidesinfo 接口会额外给出 `live_photo_type`(1=实况) 与 `video`(实况视频)，
-     * 分享页接口这两项都没有 —— 这就是改走 slidesinfo 的原因。
-     */
-    data class ImageObj(
-        val url_list: List<String> = emptyList(),
-        val download_url_list: List<String> = emptyList(),
-        val video: ImageVideoObj? = null,
-        val live_photo_type: Int = 0,
-        val width: Int = 0, val height: Int = 0
-    )
-    data class BitRateObj(val gear_name: String = "", val bit_rate: Int = 0, val play_addr: UrlObj? = null)
-    data class StatisticsObj(val digg_count: Long = 0, val comment_count: Long = 0, val share_count: Long = 0)
-
-    private fun ItemObj.toContentInfo(): ContentInfo? {
-        val authorName = this.author?.nickname ?: "未知"
-        val title = this.desc.ifEmpty { "未命名" }
-
-        val videoUrl = this.video?.play_addr?.url_list?.firstOrNull()
-            ?: this.video?.download_addr?.url_list?.firstOrNull()
-        val cover = this.video?.cover?.url_list?.firstOrNull() ?: ""
-        val duration = this.video?.duration ?: 0
-
-        if (!this.images.isNullOrEmpty()) {
-            // 每张图挑最优地址。
-            //
-            // 背景（2026-10 实测，slidesinfo 接口）：
-            //   url_list          → 2160x2880，tplv-dy-aweme-images:q75  【无水印】
-            //   download_url_list → 2160x2880，tplv-dy-water-v2          【带水印】
-            //   分享页接口只给 1440x1920 —— 这就是改走 slidesinfo 的原因。
-            //
-            // 所以优先 url_list（同分辨率且无水印），只有它为空才退回 download_url_list。
-            // jpeg 优先于 webp：同分辨率下码率约 2.3 倍，暗部/细纹理更好；
-            // 且 Motion Photo 合成只接受 jpg 主图，webp 会让合成被跳过退化成静图。
-            val imageUrls = this.images.mapNotNull { img ->
-                pickBestImageUrl(img.url_list) ?: pickBestImageUrl(img.download_url_list)
-            }.filter { it.isNotEmpty() }
-            if (imageUrls.isNotEmpty()) {
-                // 实况图(Live Photo): images[i].video 存在时该图有动态视频版本。
-                //
-                // ★ 必须优先 play_addr，它才无水印。2026-10 实测同一条实况（slidessinfo）：
-                //   play_addr     -> 337508 B, 720x960, 3.0s/90帧   【无水印】raw 原片
-                //   download_addr -> 640306 B, 720x960, 6.0s/180帧  【带水印】
-                //                    水印 = 抖音logo + 「抖音号: xxx」+ 搜索图标，固定在左上角
-                //                    且 6s 版是 3s 动作重复两遍，每帧都有水印
-                // download_addr 的 official play 接口 URL 里明确带 `watermark=1`：
-                //   .../aweme/v1/play/?video_id=xxx&ratio=720p&watermark=1&media_type=2
-                // 把该参数去掉就回到 337508 B 的无水印版 —— 但既然 play_addr 直接给了
-                // 无水印地址，就没有必要自己拼参数（拼参数还依赖 video_id，易随接口变动失效）。
-                // download_addr 仅作兜底：play_addr 为空时才用，用前尽量去掉 watermark 参数。
-                val animatedUrls = this.images.map { img -> img.video?.let { pickLiveVideoUrl(it) } }
-                val liveCount = animatedUrls.count { it != null }
-                if (liveCount > 0) Log.d(TAG, "ImageCollection: ${imageUrls.size} images, live=$liveCount (play_addr/无水印优先)")
-                return ContentInfo.ImageCollection(this.aweme_id, title, authorName, imageUrls.first(), imageUrls, this.create_time, animatedUrls)
-            }
-        }
-
-        if (!videoUrl.isNullOrEmpty()) {
-            Log.d(TAG, "Video: ${videoUrl.take(80)}")
-            // 清晰度由 URL 的 ratio 参数决定，web 接口最高 1080p（实测 1440p/2160p
-            // 返回的是同一个 1080p 文件）。这里直接生成候选地址，用户无需选择。
-            val best = VideoQuality.rewrite(videoUrl, VideoQuality.LADDER.first())
-            val candidates = VideoQuality.candidates(videoUrl).ifEmpty { listOf(best) }
-            Log.d(TAG, "清晰度候选: ${candidates.size} 档, 最高 ${VideoQuality.BEST_LABEL}")
-            return ContentInfo.Video(this.aweme_id, title, authorName, cover, best, duration, this.create_time,
-                diggCount = this.statistics?.digg_count ?: 0,
-                commentCount = this.statistics?.comment_count ?: 0,
-                shareCount = this.statistics?.share_count ?: 0,
-                width = this.video?.width ?: 0,
-                height = this.video?.height ?: 0,
-                candidateUrls = candidates
-            )
-        }
-
-        return null
-    }
-
-    /**
-     * 挑实况视频(MP4)的下载地址 —— 目标是**无水印**。
-     *
-     * 2026-10 实测同一条实况（slidesinfo 的 images[i].video）：
-     *
-     * | 来源           | 大小     | 时长/帧数    | 水印           |
-     * |----------------|----------|--------------|----------------|
-     * | `play_addr`    | 337508 B | 3.0s / 90f   | 无（原片）      |
-     * | `download_addr`| 640306 B | 6.0s / 180f  | 有（每帧左上角） |
-     *
-     * `download_addr` 那条 `douyin.com/aweme/v1/play/` 地址显式带 `watermark=1`，
-     * 返回的 MP4 左上角有「抖音 logo + 抖音号: xxx + 搜索图标」，而且时长翻倍
-     * （同一段 3s 素材放两遍）。把 `watermark=1` 参数删掉就回到 337508 B 的无水印原片；
-     * 但 `douyinvod.com` 那条路径本身带水印，删参数无效，所以只对 play 接口生效。
-     *
-     * 因此顺序是：play_addr[0] → download_addr 里能去水印的那条 → download_addr[0] 兜底。
-     */
-    private fun pickLiveVideoUrl(v: ImageVideoObj): String? {
-        v.play_addr?.url_list?.firstOrNull()?.takeIf { it.isNotEmpty() }?.let { return it }
-        val dl = v.download_addr?.url_list?.filter { it.isNotEmpty() }.orEmpty()
-        dl.firstOrNull { it.contains("/aweme/v1/play/") }?.let { return stripWatermarkParam(it) }
-        return dl.firstOrNull()
-    }
-
-    // 清晰度与水印处理已统一收敛到 VideoQuality（见 VideoQuality.kt）。
-    // 原先的 cleanUrl 正则不含 p 后缀，会把 ratio=1440p 改成 ratio=1080pp，故移除。
-
-    /**
-     * 去掉抖音播放地址里的水印开关参数。
-     *
-     * `download_addr` 那条 `www.douyin.com/aweme/v1/play/` 地址带 `watermark=1`，
-     * 拿到的 MP4 左上角会有「抖音logo + 抖音号: xxx」水印，且时长被拉长到两倍
-     * （同段 3s 素材重复两遍）。实测把 `watermark=1` 删掉即回到无水印原片：
-     *   watermark=1  -> 640306 B  带水印
-     *   （删除）      -> 337508 B  无水印
-     *
-     * 只在 play_addr 没有地址、退回 download_addr 兜底时才需要调用。
-     */
-    private fun stripWatermarkParam(url: String): String {
-        var u = url.replace(Regex("[?&]watermark=1(?=&|$)"), "").replace(Regex("[?&]watermark=0(?=&|$)"), "")
-        // 去掉参数后可能出现 "?&" 或末尾多余的 "?"/"&"
-        u = u.replace("?&", "?").replace(Regex("[?&]$"), "")
-        return u
-    }
-
-    /**
-     * 从同图的多个候选 URL 中挑最合适的。
-     *
-     * 抖音 images[i].url_list 里的条目是**同一张图的不同编码**, 顺序不固定:
-     * 典型为 [webp, webp, jpeg]。webp 走 q75 有损压缩, 码率约为 jpeg 的 43%,
-     * 暗部与细纹理损失更明显; 且 jpg 主图才能合成 Motion Photo(实况图)。
-     * 因此优先 jpeg/jpg, 其次 png(无损), 都没有才回退第一个可用地址。
-     */
-    private fun pickBestImageUrl(urls: List<String>): String? {
-        if (urls.isEmpty()) return null
-        val usable = urls.filter { it.isNotEmpty() }
-        if (usable.isEmpty()) return null
-        fun pathOf(u: String) = u.substringBefore('?').lowercase()
-        return usable.firstOrNull { pathOf(it).endsWith(".jpeg") || pathOf(it).endsWith(".jpg") }
-            ?: usable.firstOrNull { pathOf(it).endsWith(".png") }
-            ?: usable.firstOrNull()
-    }
 
 
     suspend fun downloadContent(
