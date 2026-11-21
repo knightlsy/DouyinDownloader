@@ -44,6 +44,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.knightlsy.douyin.ui.components.BgGhostButton
+import com.knightlsy.douyin.ui.components.BgPrimaryButton
 import com.knightlsy.douyin.ui.theme.BgRadius
 import com.knightlsy.douyin.ui.theme.BgSpace
 import com.knightlsy.douyin.ui.theme.LocalBgColors
@@ -212,51 +213,20 @@ fun LinkInputCard(
                 )
             }
 
-            Box(
-                Modifier
-                    .weight(1f)
-                    .height(46.dp)
-                    .clip(RoundedCornerShape(BgRadius.r2))
-                    .background(if (url.isNotBlank() && !isLoading) c.accent else c.hair)
-                    .then(
-                        if (url.isNotBlank() && !isLoading) {
-                            Modifier.clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null,
-                                onClick = { submit() },
-                            )
-                        } else Modifier
-                    ),
-                contentAlignment = Alignment.Center,
-            ) {
-                if (isLoading) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(14.dp),
-                            strokeWidth = 1.5.dp,
-                            color = c.ink3,
-                        )
-                        Spacer(Modifier.width(9.dp))
-                        Text(
-                            // 8 秒内只显示"解析中"（多数请求本来就这么快，加秒数反而吵）；
-                            // 超过 8 秒才带上秒数，提示"还在跑，不是死了"
-                            text = if (elapsedSec >= 8) "解析中 ${elapsedSec}s" else "解析中",
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 11.sp,
-                            letterSpacing = 1.2.sp,
-                            color = c.ink2,
-                        )
-                    }
-                } else {
-                    Text(
-                        text = "解析",
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 11.5.sp,
-                        letterSpacing = 1.6.sp,
-                        color = if (url.isNotBlank()) c.accentInk else c.ink3,
-                    )
-                }
-            }
+            // 主行动按钮走 BgPrimaryButton —— 按压缩放 + 内阴影加深 + 高光扫过
+            // 全在这一个控件里，之前这里是内联 Box+clickable，一个动效都没有，
+            // 结果次按钮（粘贴）会动、主按钮（解析）不动，正好反了。
+            BgPrimaryButton(
+                text = "解析",
+                onClick = { submit() },
+                modifier = Modifier.weight(1f),
+                enabled = url.isNotBlank(),
+                height = 46.dp,
+                loading = isLoading,
+                // 8 秒内只显示"解析中"（多数请求本来就这么快，加秒数反而吵）；
+                // 超过 8 秒才带上秒数，提示"还在跑，不是死了"
+                loadingText = if (elapsedSec >= 8) "解析中 ${elapsedSec}s" else "解析中",
+            )
         }
     }
 }

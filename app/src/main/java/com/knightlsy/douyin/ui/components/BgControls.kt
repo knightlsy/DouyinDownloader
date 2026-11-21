@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -278,6 +279,9 @@ fun BgPrimaryButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     height: Dp = 48.dp,
+    /** 加载中：转圈 + [loadingText]，期间不可点击，底色降为 hair。 */
+    loading: Boolean = false,
+    loadingText: String = "处理中",
 ) {
     val c = LocalBgColors.current
     // interactionSource 提出来共享：clickable 消费按下事件，动画层读同一个源
@@ -308,7 +312,7 @@ fun BgPrimaryButton(
                 scaleY = scale.value
             }
             .clip(RoundedCornerShape(BgRadius.r2))
-            .background(if (enabled) c.accent else c.hair)
+            .background(if (enabled && !loading) c.accent else c.hair)
             .bgInnerShadow(shadowAlpha)
             .drawWithContent {
                 drawContent()
@@ -332,7 +336,7 @@ fun BgPrimaryButton(
                 }
             }
             .then(
-                if (enabled) {
+                if (enabled && !loading) {
                     Modifier.clickable(
                         interactionSource = interactionSource,
                         indication = null,
@@ -342,12 +346,29 @@ fun BgPrimaryButton(
             ),
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.labelLarge,
-            color = if (enabled) c.accentInk else c.ink3,
-            textAlign = TextAlign.Center,
-        )
+        if (loading) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(14.dp),
+                    strokeWidth = 1.5.dp,
+                    color = c.ink3,
+                )
+                Spacer(Modifier.width(9.dp))
+                Text(
+                    text = loadingText,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = c.ink2,
+                )
+            }
+        } else {
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelLarge,
+                color = if (enabled) c.accentInk else c.ink3,
+                textAlign = TextAlign.Center,
+            )
+        }
     }
 }
 
@@ -519,21 +540,25 @@ fun BgSectionLabel(
 ) {
     val c = LocalBgColors.current
     Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        // 中文用小节标题的字重和字号 —— 它是这一段的标题，要能一眼抓到。
+        // 之前是 9.5sp 等宽 + 字距 1.6，比正文小还撑散了，读起来像水印。
+        // 等宽字体只留给英文标签和数字：中文笔画密度高，等宽字面窄，纯粹是自找难读。
         Text(
-            text = text.uppercase(),
-            fontFamily = FontFamily.Monospace,
-            fontSize = 9.5.sp,
-            letterSpacing = 1.6.sp,
-            color = c.ink3,
+            text = text,
+            fontFamily = FontFamily.SansSerif,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = 0.sp,
+            color = c.ink,
         )
         if (accent != null) {
-            Spacer(Modifier.width(6.dp))
+            Spacer(Modifier.width(7.dp))
             Text(
                 text = accent,
                 fontFamily = FontFamily.Monospace,
                 fontSize = 9.5.sp,
                 letterSpacing = 1.0.sp,
-                color = c.accent,
+                color = c.accent.copy(alpha = 0.75f),
             )
         }
     }

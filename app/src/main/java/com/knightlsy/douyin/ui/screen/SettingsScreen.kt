@@ -44,6 +44,7 @@ import com.knightlsy.douyin.BuildConfig
 import com.knightlsy.douyin.data.LogStore
 import com.knightlsy.douyin.data.ThemeMode
 import com.knightlsy.douyin.data.ThemePreferences
+import com.knightlsy.douyin.ui.components.BgSegmented
 import com.knightlsy.douyin.ui.components.BgHair
 import com.knightlsy.douyin.ui.components.BgSectionLabel
 import com.knightlsy.douyin.ui.theme.BgRadius
@@ -378,45 +379,17 @@ private fun ThemeSegmented(
     selected: ThemeMode,
     onSelect: (ThemeMode) -> Unit,
 ) {
-    val options = listOf(
-        ThemeMode.SYSTEM to "跟随系统",
-        ThemeMode.DARK to "深色",
-        ThemeMode.LIGHT to "浅色",
+    // 用 BgSegmented 而不是内联实现：滑块主体走 spring、移动时短暂拉伸、
+    // 圆角跟着从 12dp 变 17dp 再收回，后面还跟一层延迟 60ms 的拖尾。
+    // 内联版是「选中色块直接跳过去」，一个过渡都没有 —— 那是标签页，不是液态玻璃。
+    val modes = remember { listOf(ThemeMode.SYSTEM, ThemeMode.DARK, ThemeMode.LIGHT) }
+    val labels = remember { listOf("跟随系统", "深色", "浅色") }
+    BgSegmented(
+        options = labels,
+        selectedIndex = modes.indexOf(selected).coerceAtLeast(0),
+        onSelect = { onSelect(modes[it]) },
+        modifier = Modifier.fillMaxWidth(),
     )
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .height(44.dp)
-            .clip(RoundedCornerShape(14.dp))
-            .background(Color.Black.copy(alpha = 0.22f))
-            .border(1.dp, LocalBgColors.current.glassEdge, RoundedCornerShape(14.dp))
-            .padding(3.dp),
-        horizontalArrangement = Arrangement.spacedBy(2.dp),
-    ) {
-        options.forEach { (mode, label) ->
-            val on = mode == selected
-            Box(
-                Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
-                    .clip(RoundedCornerShape(11.dp))
-                    .background(if (on) Color.White.copy(alpha = 0.13f) else Color.Transparent)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                    ) { onSelect(mode) },
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = label,
-                    fontFamily = FontFamily.SansSerif,
-                    fontSize = 12.5.sp,
-                    fontWeight = FontWeight(if (on) 650 else 600),
-                    color = if (on) LocalBgColors.current.ink else LocalBgColors.current.ink3,
-                )
-            }
-        }
-    }
 }
 
 /* ═══════════════════════════════════════════════════════

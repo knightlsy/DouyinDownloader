@@ -186,19 +186,25 @@ fun MainScreen(
                     .background(c.accent)
             )
             Spacer(Modifier.width(10.dp))
-            Column {
+            Column(Modifier.weight(1f)) {
+                // 标题用系统无衬线 + 粗字重 + 负字距。
+                // 之前是 Monospace 11.5sp + letterSpacing 1.8 —— 等宽中文字距还被撑开，
+                // 比正文还小，等于没标题。中文笔画密度高，等宽只适合数字和代码。
                 Text(
                     text = "抖音下载器",
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 11.5.sp,
-                    fontWeight = FontWeight.Medium,
-                    letterSpacing = 1.8.sp,
+                    fontFamily = FontFamily.SansSerif,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = (-0.4).sp,
                     color = c.ink,
                 )
+                Spacer(Modifier.height(2.dp))
                 Text(
                     text = "粘贴链接即可下载",
                     fontFamily = FontFamily.SansSerif,
-                    fontSize = 10.5.sp,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Normal,
+                    letterSpacing = 0.sp,
                     color = c.ink3,
                 )
             }
