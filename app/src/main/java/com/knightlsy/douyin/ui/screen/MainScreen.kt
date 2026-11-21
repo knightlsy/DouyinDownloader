@@ -35,8 +35,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -137,6 +140,31 @@ fun MainScreen(
         Modifier
             .fillMaxSize()
             .background(c.paper)
+            // 液态玻璃的「可透内容」：两团无边界柔光。
+            // 没有这层，上面的玻璃卡片就是一块灰膜 —— 玻璃能不能透，
+            // 取决于背后有没有东西，而不取决于模糊。
+            .drawBehind {
+                val r1 = size.minDimension * 0.85f
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        listOf(c.accent.copy(alpha = 0.16f), Color.Transparent),
+                        center = Offset(size.width * 0.18f, size.height * 0.08f),
+                        radius = r1,
+                    ),
+                    radius = r1,
+                    center = Offset(size.width * 0.18f, size.height * 0.08f),
+                )
+                val r2 = size.minDimension * 0.75f
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        listOf(c.accent.copy(alpha = 0.10f), Color.Transparent),
+                        center = Offset(size.width * 0.92f, size.height * 0.72f),
+                        radius = r2,
+                    ),
+                    radius = r2,
+                    center = Offset(size.width * 0.92f, size.height * 0.72f),
+                )
+            }
             .systemBarsPadding()
     ) {
 
@@ -430,8 +458,8 @@ private fun OnboardingGuideCard() {
                 .fillMaxWidth()
                 .padding(horizontal = BgSpace.gutter)
                 .clip(RoundedCornerShape(BgRadius.r2))
-                .background(c.raise)
-                .border(1.dp, c.hair, RoundedCornerShape(BgRadius.r2))
+                .background(c.glass)
+                .border(1.dp, c.glassEdge, RoundedCornerShape(BgRadius.r2))
                 .padding(horizontal = 16.dp, vertical = 16.dp)
         ) {
             GuideStep("01", "复制抖音分享链接", "在抖音里点分享 → 复制链接")
@@ -497,8 +525,8 @@ private fun RecentParsesCard(
                 .fillMaxWidth()
                 .padding(horizontal = BgSpace.gutter)
                 .clip(RoundedCornerShape(BgRadius.r2))
-                .background(c.raise)
-                .border(1.dp, c.hair, RoundedCornerShape(BgRadius.r2))
+                .background(c.glass)
+                .border(1.dp, c.glassEdge, RoundedCornerShape(BgRadius.r2))
         ) {
             items.forEachIndexed { i, item ->
                 Row(

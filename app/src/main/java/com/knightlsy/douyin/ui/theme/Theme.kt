@@ -170,6 +170,9 @@ data class BgColors(
     val accent: Color,    // 橙：主操作（解析 / 下载 / 主 CTA），全应用唯一强调色
     val accentInk: Color, // 压在橙底上的文字色
     val success: Color,   // 绿：成功 / 选中 / 进行中，不做装饰
+    val glass: Color,     // 玻璃底（半透明，alpha 必须低否则变灰膜）
+    val glassEdge: Color, // 玻璃 1dp 边（模拟边缘反光）
+    val glassTop: Color,  // 顶部内高光（光从上方来）
 )
 
 private val LightTokens = BgColors(
@@ -181,9 +184,12 @@ private val LightTokens = BgColors(
     surface = SurfaceLight,
     raise = SurfaceVariantLight,
     hair = OutlineLight,
-    accent = DouyinPinkDeep,
-    accentInk = Color(0xFFFFFFFF),
-    success = DouyinCyanDeep,
+    accent = PrimaryLight,
+    accentInk = OnPrimaryLight,
+    success = SecondaryLight,
+    glass = GlassTintLight,
+    glassEdge = GlassEdgeLight,
+    glassTop = GlassTopLight,
 )
 
 private val DarkTokens = BgColors(
@@ -195,9 +201,12 @@ private val DarkTokens = BgColors(
     surface = SurfaceDark,
     raise = SurfaceVariantDark,
     hair = OutlineDark,
-    accent = DouyinPink,
-    accentInk = Color(0xFF1A0410),
-    success = DouyinCyan,
+    accent = PrimaryDark,
+    accentInk = OnPrimaryDark,
+    success = SecondaryDark,
+    glass = GlassTintDark,
+    glassEdge = GlassEdgeDark,
+    glassTop = GlassTopDark,
 )
 
 val LocalBgColors = staticCompositionLocalOf { LightTokens }

@@ -146,6 +146,29 @@ val StatusSuccessLight = Color(0xFF287A60)
 val StatusFailedLight = Color(0xFFC43A2E)
 val StatusRunningLight = Color(0xFF8A5F0D)
 
+
+/* ══════════ 液态玻璃 ══════════
+ * 玻璃的三层构成。缺任何一层就不成立：
+ *   1. 半透明底  —— alpha 必须低（0.04~0.10），高了立刻变灰膜
+ *   2. 1dp 亮边  —— 模拟玻璃边缘的反光
+ *   3. 顶部内高光 —— 光从上方来，玻璃上沿更亮
+ */
+val GlassTintDark = Color(0x14FFFFFF)        // 8% 白：深色主题下的玻璃底
+val GlassEdgeDark = Color(0x24FFFFFF)        // 14% 白：玻璃边缘
+val GlassTopDark = Color(0x4DFFFFFF)         // 30% 白：顶部内高光
+
+val GlassTintLight = Color(0x70FFFFFF)       // 44% 白：浅色主题下玻璃更实（浅底透色难）
+val GlassEdgeLight = Color(0xB8FFFFFF)       // 72% 白
+val GlassTopLight = Color(0xFFFFFFFF)        // 纯白高光
+
+/** 页面背景的柔光斑颜色（深色主题）。极低不透明度，只给色温。 */
+val GlowWarmDark = Color(0x2EC4652B)         // 18% 暖橙
+val GlowAmberDark = Color(0x268A4A1E)        // 15% 深琥珀
+
+/** 页面背景的柔光斑颜色（浅色主题）。 */
+val GlowWarmLight = Color(0x40F0C9A8)
+val GlowAmberLight = Color(0x33E3CDB6)
+
 /* ══════════ 几何 ══════════
  * r1 / r2 保持原值不动 —— 它们被 60 多处引用，其中 r1 用在缩略图、
  * 序号角标这类小元素上，圆角超过元素一半会变成胶囊。圆角放大留到
@@ -154,10 +177,17 @@ val StatusRunningLight = Color(0xFF8A5F0D)
  * r3 / r4 是新增的大容器圆角，供后续玻璃卡片使用。
  */
 object BgRadius {
-    val r1: Dp = 1.dp    // 小元素（保持原值，勿单独改）
-    val r2: Dp = 2.dp    // 卡片 / 按钮（保持原值）
-    val r3: Dp = 18.dp   // 新增：玻璃卡片
-    val r4: Dp = 26.dp   // 新增：悬浮条 / 底部导航
+    /**
+     * 圆角是液态玻璃的硬性前提 —— 1dp/2dp 的直角最多做出「便签本」。
+     * 玻璃靠边缘张力表达流体感，锐角会直接破坏这层语义。
+     *
+     * r1 用在缩略图、序号角标这类小元素上：10dp 在 20dp 见方的元素上
+     * 正好是半圆（Compose 会自动收敛），呈现为圆形徽章，不会过圆。
+     */
+    val r1: Dp = 10.dp   // 小元素：缩略图、角标、标签
+    val r2: Dp = 16.dp   // 中元素：按钮、输入框
+    val r3: Dp = 20.dp   // 玻璃卡片
+    val r4: Dp = 26.dp   // 悬浮条 / 底部导航
 }
 
 /** 间距骨架。所有页面只从这里取值，不在调用处写 ad-hoc dp。 */

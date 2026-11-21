@@ -261,8 +261,8 @@ private fun SettingsCard(
         modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(20.dp))
-            .background(c.surface)
-            .border(1.dp, c.hair, RoundedCornerShape(20.dp))
+            .background(c.glass)
+            .border(1.dp, c.glassEdge, RoundedCornerShape(20.dp))
             .padding(contentPadding),
         content = content,
     )
@@ -389,7 +389,7 @@ private fun ThemeSegmented(
             .height(44.dp)
             .clip(RoundedCornerShape(14.dp))
             .background(Color.Black.copy(alpha = 0.22f))
-            .border(1.dp, LocalBgColors.current.hair, RoundedCornerShape(14.dp))
+            .border(1.dp, LocalBgColors.current.glassEdge, RoundedCornerShape(14.dp))
             .padding(3.dp),
         horizontalArrangement = Arrangement.spacedBy(2.dp),
     ) {

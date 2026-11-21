@@ -122,8 +122,8 @@ fun LinkInputCard(
                 .fillMaxWidth()
                 .heightIn(min = 56.dp)
                 .clip(RoundedCornerShape(BgRadius.r2))
-                .background(c.surface)
-                .border(1.dp, c.hair, RoundedCornerShape(BgRadius.r2))
+                .background(c.glass)
+                .border(1.dp, c.glassEdge, RoundedCornerShape(BgRadius.r2))
                 .padding(start = 12.dp, end = 4.dp, top = 10.dp, bottom = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {

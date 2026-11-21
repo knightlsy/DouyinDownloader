@@ -132,7 +132,7 @@ fun CollectionPreviewCard(
             Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(BgRadius.r2))
-                .background(c.surface)
+                .background(c.glass)
         ) {
             Box {
                 Column(Modifier.fillMaxWidth().padding(2.dp)) {

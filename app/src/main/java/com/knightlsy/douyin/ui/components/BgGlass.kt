@@ -1,0 +1,171 @@
+package com.knightlsy.douyin.ui.components
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import com.knightlsy.douyin.ui.theme.BgRadius
+import com.knightlsy.douyin.ui.theme.LocalBgColors
+
+/**
+ * 液态玻璃。
+ *
+ * ## 这里没有用 backdrop blur，是有意的
+ *
+ * 真正的 `backdrop-filter` 在 Android 上要引入 Haze 这类库（+1~2MB），
+ * 且 API 26–30 照样降级成半透明。更要紧的是：**玻璃能不能「透」，
+ * 取决于背后有没有东西可透，而不取决于模糊本身。**
+ *
+ * 所以这里的做法是配套的：
+ *  - 背景层（[BgBackdrop]）铺大范围径向柔光斑，本身就是无边界渐变
+ *  - 玻璃层半透明浮上去，透过去的就是那层柔光
+ *
+ * 光斑没有硬边，透过去天然是柔的，视觉上与真模糊等价，
+ * 而且全版本一致、零额外开销。
+ *
+ * ## 三层构成，缺一层就不成立
+ * ```
+ * 1. 半透明底   alpha 0.04~0.10 —— 高了立刻变灰膜
+ * 2. 1dp 亮边   模拟玻璃边缘反光
+ * 3. 顶部内高光  光从上方来，玻璃上沿更亮
+ * ```
+ * 再叠一层外阴影，浮起来。
+ */
+
+/** 玻璃卡片。带 padding 的 Column。 */
+@Composable
+fun BgGlassCard(
+    modifier: Modifier = Modifier,
+    radius: Dp = BgRadius.r3,
+    padding: Dp = 16.dp,
+    contentPadding: Boolean = true,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val c = LocalBgColors.current
+    Column(
+        modifier
+            .clip(RoundedCornerShape(radius))
+            .background(c.glass)
+            .drawBehind { drawGlassTopHighlight(radius, c.glassTop) }
+            .border(1.dp, c.glassEdge, RoundedCornerShape(radius))
+            .then(if (contentPadding) Modifier.padding(padding) else Modifier)
+    ) {
+        content()
+    }
+}
+
+/** 玻璃容器。不带 padding，给需要自己控制布局的场景。 */
+@Composable
+fun BgGlassBox(
+    modifier: Modifier = Modifier,
+    radius: Dp = BgRadius.r3,
+    content: @Composable BoxScope.() -> Unit,
+) {
+    val c = LocalBgColors.current
+    Box(
+        modifier
+            .clip(RoundedCornerShape(radius))
+            .background(c.glass)
+            .drawBehind { drawGlassTopHighlight(radius, c.glassTop) }
+            .border(1.dp, c.glassEdge, RoundedCornerShape(radius))
+    ) {
+        content()
+    }
+}
+
+/**
+ * 直接给任意 modifier 加玻璃底。用于不方便套 BgGlassCard 的地方
+ * （比如 LazyColumn 的 item 已经自带背景的情况）。
+ *
+ * 注意顺序：调用方要保证自己的 clip 在此之后，否则圆角会被覆盖。
+ */
+@Composable
+fun Modifier.bgGlassSurface(radius: Dp = BgRadius.r3): Modifier {
+    val c = LocalBgColors.current
+    val shape = RoundedCornerShape(radius)
+    return this
+        .clip(shape)
+        .background(c.glass)
+        .drawBehind { drawGlassTopHighlight(radius, c.glassTop) }
+        .border(1.dp, c.glassEdge, shape)
+}
+
+/**
+ * 顶部内高光：从上沿往下 22dp 的极短渐变。
+ *
+ * 不用整块渐变 —— 那会变成「上半亮下半暗」的立体感，像拟物按钮。
+ * 真正的玻璃只有边缘那一圈反光。
+ */
+private fun DrawScope.drawGlassTopHighlight(radius: Dp, topColor: Color) {
+    val h = 22.dp.toPx().coerceAtMost(size.height)
+    drawRoundRect(
+        brush = Brush.verticalGradient(
+            colors = listOf(
+                topColor,
+                Color.Transparent,
+            ),
+            startY = 0f,
+            endY = h,
+        ),
+        topLeft = Offset.Zero,
+        size = Size(size.width, h),
+        cornerRadius = CornerRadius(radius.toPx()),
+    )
+}
+
+/**
+ * 页面背景：纯色打底 + 两团柔光。
+ *
+ * 光斑位置固定在左上与右下，与设计稿一致 —— 上方暖橙、下方深琥珀。
+ * 它们不是装饰，是玻璃「透」的对象：没有这层，玻璃就是一块灰膜。
+ */
+@Composable
+fun BgBackdrop(
+    modifier: Modifier = Modifier,
+    content: @Composable BoxScope.() -> Unit,
+) {
+    val c = LocalBgColors.current
+    Box(modifier.fillMaxSize().background(c.paper)) {
+        val accent = c.accent
+        androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+            // 左上暖光
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(accent.copy(alpha = 0.16f), Color.Transparent),
+                    center = Offset(size.width * 0.18f, size.height * 0.10f),
+                    radius = size.minDimension * 0.85f,
+                ),
+                radius = size.minDimension * 0.85f,
+                center = Offset(size.width * 0.18f, size.height * 0.10f),
+            )
+            // 右下琥珀光
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(accent.copy(alpha = 0.10f), Color.Transparent),
+                    center = Offset(size.width * 0.92f, size.height * 0.72f),
+                    radius = size.minDimension * 0.75f,
+                ),
+                radius = size.minDimension * 0.75f,
+                center = Offset(size.width * 0.92f, size.height * 0.72f),
+            )
+        }
+        content()
+    }
+}
