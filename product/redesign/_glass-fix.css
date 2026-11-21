@@ -1,0 +1,24 @@
+
+.g{background:rgba(255,255,255,.042);
+   -webkit-backdrop-filter:blur(34px) saturate(165%) brightness(1.10);
+   backdrop-filter:blur(34px) saturate(165%) brightness(1.10);
+   border:1px solid rgba(255,255,255,.13);
+   box-shadow:0 12px 40px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.32),inset 0 -1px 0 rgba(0,0,0,.26)}
+.g-light{background:rgba(255,255,255,.42);
+   -webkit-backdrop-filter:blur(34px) saturate(200%) brightness(1.0);
+   backdrop-filter:blur(34px) saturate(200%) brightness(1.0);
+   border:1px solid rgba(255,255,255,.72);
+   box-shadow:0 10px 34px rgba(20,30,40,.10),inset 0 1.5px 0 rgba(255,255,255,1),inset 0 -1px 0 rgba(0,0,0,.04)}
+
+@keyframes drift {
+  0%   { transform: translate(0,0) scale(1); }
+  50%  { transform: translate(-6%,4%) scale(1.08); }
+  100% { transform: translate(0,0) scale(1); }
+}
+@keyframes drift2 {
+  0%   { transform: translate(0,0) scale(1.05); }
+  50%  { transform: translate(7%,-5%) scale(1); }
+  100% { transform: translate(0,0) scale(1.05); }
+}
+.fluid { animation: drift 18s ease-in-out infinite; }
+.glow  { animation: drift2 22s ease-in-out infinite; }

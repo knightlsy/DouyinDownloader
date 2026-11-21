@@ -1,0 +1,43 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+body{margin:0;font-family:system-ui;background:#0A0E12;overflow:hidden}
+.stage{position:relative;width:420px;height:420px;overflow:hidden}
+
+@keyframes drift {
+  0%   { transform: translate(0,0) scale(1); }
+  50%  { transform: translate(-6%,4%) scale(1.08); }
+  100% { transform: translate(0,0) scale(1); }
+}
+@keyframes drift2 {
+  0%   { transform: translate(0,0) scale(1.05); }
+  50%  { transform: translate(7%,-5%) scale(1); }
+  100% { transform: translate(0,0) scale(1.05); }
+}
+.fluid { animation: drift 18s ease-in-out infinite; }
+.glow  { animation: drift2 22s ease-in-out infinite; }
+
+.fluid{position:absolute;inset:-10%;
+  background:
+   radial-gradient(40% 34% at 26% 24%,#FF8A4C 0%,transparent 64%),
+   radial-gradient(38% 32% at 76% 18%,#B44BC8 0%,transparent 60%),
+   radial-gradient(46% 38% at 58% 74%,#2FA8B8 0%,transparent 66%),
+   linear-gradient(170deg,#151E27,#0A0E12)}
+.glow0{position:absolute;border-radius:50%;filter:blur(50px);animation:drift2 16s ease-in-out infinite;}.glow1{position:absolute;border-radius:50%;filter:blur(50px);animation:drift2 20s ease-in-out infinite;}.glow2{position:absolute;border-radius:50%;filter:blur(50px);animation:drift2 24s ease-in-out infinite;}
+.g{position:absolute;left:36px;right:36px;top:150px;border-radius:24px;padding:22px;color:#fff;font-size:13px;
+   background:rgba(255,255,255,.042);
+   -webkit-backdrop-filter:blur(34px) saturate(165%) brightness(1.10);
+   backdrop-filter:blur(34px) saturate(165%) brightness(1.10);
+   border:1px solid rgba(255,255,255,.13);
+   box-shadow:0 12px 40px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.32),inset 0 -1px 0 rgba(0,0,0,.26)}
+.g::before{content:"";position:absolute;inset:0;border-radius:inherit;
+   background:radial-gradient(130% 90% at 50% -25%,rgba(255,255,255,.18),transparent 58%)}
+.tag{position:absolute;left:36px;top:110px;font-size:11px;color:#8FA6AA;letter-spacing:1px}
+</style></head><body>
+<div class="stage">
+  <div class="fluid"></div>
+  <div class="glow0" style="width:200px;height:200px;left:-40px;top:60px;background:rgba(255,138,76,.42)"></div>
+  <div class="glow1" style="width:220px;height:220px;right:-50px;top:20px;background:rgba(180,75,200,.38)"></div>
+  <div class="glow2" style="width:200px;height:200px;left:80px;bottom:-40px;background:rgba(47,168,184,.40)"></div>
+  <div class="tag">背景在动 · 玻璃内是实时重采样</div>
+  <div class="g"><b style="font-size:15px">这一块是 backdrop-filter</b><br><br>
+    如果背景动画在移动时，玻璃里的色块也跟着缓慢流动、边缘始终是柔的，说明它是实时取背景做模糊，而不是一张预渲染的静态图。</div>
+</div></body></html>
