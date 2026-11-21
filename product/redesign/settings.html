@@ -1,0 +1,271 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>设置页 · 壁纸开关</title><style>
+
+
+
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{font-family:-apple-system,"PingFang SC","Noto Sans SC",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+.mono{font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,monospace;font-variant-numeric:tabular-nums}
+.screen{width:393px;height:852px;position:relative;overflow:hidden;background:#0C0B0A;isolation:isolate;
+        display:flex;flex-direction:column}
+
+/* 玻璃：顶栏降 alpha 提升透底感（P1-6） */
+.g{position:relative;background:rgba(255,255,255,.034);
+   -webkit-backdrop-filter:blur(34px) saturate(165%) brightness(1.10);
+   backdrop-filter:blur(34px) saturate(165%) brightness(1.10);
+   border:1px solid rgba(255,255,255,.09);
+   box-shadow:0 12px 40px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.30),inset 0 -1px 0 rgba(0,0,0,.26)}
+.g::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+   background:radial-gradient(130% 90% at 50% -25%,rgba(255,255,255,.17),transparent 58%)}
+.g-heavy{background:rgba(255,255,255,.068);
+   -webkit-backdrop-filter:blur(46px) saturate(175%) brightness(1.14);
+   backdrop-filter:blur(46px) saturate(175%) brightness(1.14)}
+.g-light{position:relative;background:rgba(255,255,255,.40);
+   -webkit-backdrop-filter:blur(34px) saturate(200%) brightness(1.0);
+   backdrop-filter:blur(34px) saturate(200%) brightness(1.0);
+   border:1px solid rgba(255,255,255,.72);
+   box-shadow:0 10px 34px rgba(80,55,30,.10),inset 0 1.5px 0 rgba(255,255,255,1),inset 0 -1px 0 rgba(0,0,0,.04)}
+.g-light::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+   background:radial-gradient(130% 90% at 50% -25%,rgba(255,255,255,.55),transparent 58%)}
+
+.bg{position:absolute;inset:0;z-index:0;
+  background:
+   radial-gradient(62% 46% at 26% 14%,#C4652B 0%,transparent 66%),
+   radial-gradient(58% 44% at 78% 76%,#8A4A1E 0%,transparent 68%),
+   linear-gradient(168deg,#151210 0%,#0C0B0A 100%)}
+.glow{position:absolute;border-radius:50%;filter:blur(58px);pointer-events:none}
+
+.sb{position:relative;z-index:3;display:flex;justify-content:space-between;padding:15px 22px 8px;
+    font-size:13px;font-weight:600;color:rgba(255,255,255,.9);flex:none}
+
+/* 占位符：标签移顶部，不再和播放键抢中心（P0-4） */
+.ph{position:relative;overflow:hidden;background:
+     repeating-linear-gradient(45deg,rgba(255,255,255,.035) 0 5px,transparent 5px 10px),#1C1917;
+     border:1px solid rgba(255,255,255,.07)}
+.ph .cap{position:absolute;left:8px;top:7px;font-family:ui-monospace,SFMono-Regular,monospace;
+     font-size:10px;letter-spacing:.5px;color:rgba(255,255,255,.46);text-transform:uppercase}
+.ph .mid{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+
+.topglass{position:absolute;left:12px;right:12px;top:52px;z-index:4;border-radius:22px;padding:14px 18px;
+          display:flex;align-items:center;justify-content:space-between}
+.ttl{font-size:17px;font-weight:650;color:#fff;letter-spacing:-.2px}
+.tsub{font-size:11.5px;color:rgba(255,255,255,.56);margin-top:2px}
+.ghostbtn{min-width:44px;min-height:44px;display:flex;align-items:center;justify-content:center;
+     font-size:13px;font-weight:600;color:rgba(255,255,255,.68);padding:0 14px;border-radius:14px;
+     background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.09)}
+
+.inputcard{border-radius:24px;padding:18px}
+.inputrow{display:flex;align-items:center;gap:10px;background:rgba(0,0,0,.20);border-radius:16px;
+          padding:15px 16px;border:1px solid rgba(255,255,255,.06);min-height:52px}
+.inputph{flex:1;font-size:14px;color:rgba(255,255,255,.46)}
+.inputval{flex:1;font-size:14px;color:rgba(255,255,255,.94);overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.paste{font-size:13px;font-weight:600;color:rgba(255,255,255,.62);white-space:nowrap;padding:6px 0}
+
+.btn{border:none;border-radius:18px;font-size:16px;font-weight:650;letter-spacing:.1px;
+     display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:54px;
+     color:#fff;font-family:inherit}
+.btn-tint{background:#FF7A3A;color:#1A0E06;
+  box-shadow:0 8px 26px rgba(255,122,58,.28),inset 0 1px 0 rgba(255,255,255,.30)}
+.btn-glass{background:rgba(255,255,255,.095);border:1px solid rgba(255,255,255,.16);
+  -webkit-backdrop-filter:blur(24px) saturate(180%);backdrop-filter:blur(24px) saturate(180%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.22)}
+.btn-off{background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.06);color:rgba(255,255,255,.26)}
+
+.row{display:flex;align-items:center;gap:13px;padding:13px 0;min-height:60px}
+.row+.row{border-top:1px solid rgba(255,255,255,.06)}
+.rname{font-size:15px;font-weight:500;color:#F2EFEC;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.rmeta{font-size:12px;color:#A39C95;margin-top:3px}
+
+/* Tab：bottom 抬到 30px，避开外层 26px 圆角裁切（P0-3 根因） */
+.tabbar{position:absolute;left:16px;right:16px;bottom:30px;z-index:6;border-radius:24px;
+        display:flex;padding:7px;gap:4px}
+.tab{flex:1;display:flex;align-items:center;justify-content:center;min-height:50px;border-radius:18px;position:relative}
+.tab .tl{font-size:13px;color:rgba(255,255,255,.46);font-weight:500;letter-spacing:.2px}
+.tab.on .tl{color:#fff;font-weight:650}
+.tab.on::before{content:"";position:absolute;top:7px;width:16px;height:2px;border-radius:1px;background:#FF7A3A}
+.tab.on{background:rgba(255,255,255,.10);box-shadow:inset 0 1px 0 rgba(255,255,255,.18)}
+
+.tri{width:0;height:0;border-left:13px solid rgba(255,255,255,.92);
+      border-top:8px solid transparent;border-bottom:8px solid transparent;margin-left:4px}
+/* LIVE 胶囊徽章，不只靠文字（P1-1） */
+.livebadge{position:absolute;left:6px;bottom:6px;display:flex;align-items:center;gap:4px;
+     background:rgba(0,0,0,.6);border:1px solid rgba(255,255,255,.18);border-radius:7px;padding:3px 6px}
+.livebadge i{width:5px;height:5px;border-radius:50%;background:#6FD3A8;display:block}
+.livebadge span{font-family:ui-monospace,monospace;font-size:9px;letter-spacing:.4px;color:rgba(255,255,255,.82)}
+
+body{margin:0;background:#080706;color:#F2EFEC;padding:34px 26px 44px}
+h1{font-size:25px;font-weight:700;margin:0 0 6px;letter-spacing:-.5px}
+.lead{font-size:12.5px;color:#8C8580;line-height:1.9;max-width:1700px;margin:0 0 14px}
+.rule{font-size:12px;color:#9A938D;line-height:1.95;margin:0 0 22px;padding-left:14px;border-left:2px solid #FF7A3A}
+.row{display:grid;grid-template-columns:repeat(2,393px);gap:26px 30px;justify-content:start}
+.col{width:393px}
+.lbl{font-size:12.5px;font-weight:700;margin-bottom:9px;color:#C0BAB4}
+
+body{margin:0;background:#080706;color:#F2EFEC;padding:34px 26px 44px}
+h1{font-size:25px;font-weight:700;margin:0 0 6px;letter-spacing:-.5px}
+.lead{font-size:12.5px;color:#8C8580;line-height:1.9;max-width:1700px;margin:0 0 14px}
+.rule{font-size:12px;color:#9A938D;line-height:1.95;margin:0 0 22px;padding-left:14px;border-left:2px solid #FF7A3A}
+.row{display:grid;grid-template-columns:repeat(2,393px);gap:26px 30px;justify-content:start}
+.col{width:393px}
+.lbl{font-size:12.5px;font-weight:700;margin-bottom:9px;color:#C0BAB4}
+
+/* 分段控件（替代隐藏式循环点按） */
+.seg{display:flex;background:rgba(0,0,0,.22);border-radius:14px;padding:3px;gap:2px;
+     border:1px solid rgba(255,255,255,.06)}
+.seg div{flex:1;text-align:center;font-size:12.5px;font-weight:600;padding:9px 4px;border-radius:11px;
+     color:rgba(255,255,255,.50);min-height:38px;display:flex;align-items:center;justify-content:center}
+.seg div.on{background:rgba(255,255,255,.13);color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.20)}
+/* 开关：视觉 48×28，热区 44 高 */
+.sw2{position:relative;width:48px;height:28px;border-radius:14px;background:rgba(255,255,255,.14);
+     border:1px solid rgba(255,255,255,.10);flex:none}
+.sw2 .knob{position:absolute;top:2px;left:2px;width:22px;height:22px;border-radius:50%;
+     background:rgba(255,255,255,.92);box-shadow:0 1px 3px rgba(0,0,0,.35)}
+.sw2.on{background:#FF7A3A;border-color:#FF7A3A}
+.sw2.on .knob{left:22px;background:#1A0E06}
+.setrow{display:flex;align-items:center;justify-content:space-between;gap:14px;min-height:56px;padding:10px 0}
+.setrow+.setrow{border-top:1px solid rgba(255,255,255,.06)}
+.settitle{font-size:14.5px;font-weight:500;color:#F2EFEC}
+.setdesc{font-size:11.5px;color:#A39C95;margin-top:3px;line-height:1.5;max-width:210px}
+.setgrp{font-family:ui-monospace,monospace;font-size:10px;letter-spacing:1.1px;text-transform:uppercase;
+     color:#6E6862;margin:0 0 8px 4px}
+.chev{color:rgba(255,255,255,.30);font-size:17px;flex:none}
+
+body{margin:0;background:#080706;color:#F2EFEC;padding:30px 26px 40px}
+h1{font-size:22px;font-weight:700;margin:0 0 6px}
+.lead{font-size:12.5px;color:#8C8580;line-height:1.85;margin:0 0 8px;max-width:1100px}
+.note{font-size:12px;color:#9A938D;line-height:1.9;margin:0 0 22px;padding-left:14px;border-left:2px solid #FF7A3A;max-width:1100px}
+.row{display:flex;gap:22px}
+.col{width:393px}
+.lbl{font-size:12.5px;font-weight:700;margin-bottom:9px;color:#C0BAB4}
+.frame{width:393px;height:852px;border-radius:26px;overflow:hidden;background:#0C0B0A;
+    box-shadow:0 24px 70px #000d,0 0 0 1px #ffffff10}
+</style></head><body>
+<h1>设置页 · 壁纸开关</h1>
+<p class="lead">壁纸相关功能做成两个独立开关，默认都关，强调色固定橙色。</p>
+<p class="note">
+① 主题从「点一下轮换」改成三分段控件 —— 原实现要点三次才知道有哪些选项，违反可见性原则。<br>
+② 「壁纸氛围」与「强调色跟随壁纸」拆成两个开关：只想要壁纸质感但不想丢橙色的人，可以只开第一个。<br>
+③ 开关下方标注版本要求，低版本自动降级，不让用户开了没效果还以为坏了。
+</p>
+<div class="row">
+  <div class="col"><div class="lbl">默认状态 · 两个开关都关（橙色固定）</div><div class="frame"><div class="screen">
+ <div class="bg" style="opacity:.6"></div>
+ <div class="sb"><span class="mono">9:41</span><span class="mono">▮▮▮ ⌁ ▰</span></div>
+ <div class="topglass g"><div><div class="ttl">设置</div>
+   <div class="tsub">外观 · 下载 · 关于</div></div><div class="ghostbtn">返回</div></div>
+
+ <div style="position:absolute;left:16px;right:16px;top:150px;z-index:2;display:flex;flex-direction:column;gap:18px">
+
+  <div>
+   <div class="setgrp">外观</div>
+   <div class="g" style="border-radius:20px;padding:16px 18px">
+     <div style="font-size:14.5px;font-weight:500;color:#F2EFEC;margin-bottom:11px">主题</div>
+     <div class="seg"><div>跟随系统</div><div class="on">深色</div><div>浅色</div></div>
+   </div>
+  </div>
+
+  <div>
+   <div class="setgrp">背景</div>
+   <div class="g" style="border-radius:20px;padding:4px 18px 10px">
+     <div class="setrow">
+       <div><div class="settitle">壁纸氛围</div>
+         <div class="setdesc">背景跟随桌面壁纸，压到很淡，只影响色温</div></div>
+       <div class="sw2"><div class="knob"></div></div>
+     </div>
+     <div class="setrow">
+       <div><div class="settitle">强调色跟随壁纸</div>
+         <div class="setdesc">从壁纸取色替代橙色。关闭时固定用橙色 #FF7A3A</div></div>
+       <div class="sw2"><div class="knob"></div></div>
+     </div>
+     <div style="font-size:11px;color:#6E6862;padding:10px 0 4px;line-height:1.6;
+          border-top:1px solid rgba(255,255,255,.06)">
+       需要 Android 12 及以上。更低版本会自动降级为预先模糊的静态背景。
+     </div>
+   </div>
+  </div>
+
+  <div>
+   <div class="setgrp">下载</div>
+   <div class="g" style="border-radius:20px;padding:4px 18px">
+     <div class="setrow"><div><div class="settitle">保存位置</div>
+       <div class="setdesc">相册 / 自定义目录</div></div><div class="chev">›</div></div>
+     <div class="setrow"><div><div class="settitle">下载后通知</div></div>
+       <div class="sw2 on"><div class="knob"></div></div></div>
+   </div>
+  </div>
+
+  <div>
+   <div class="setgrp">诊断与关于</div>
+   <div class="g" style="border-radius:20px;padding:4px 18px">
+     <div class="setrow"><div class="settitle">运行日志</div><div class="chev">›</div></div>
+     <div class="setrow"><div class="settitle">关于抖音下载器</div>
+       <div style="font-size:12px;color:#A39C95">v1.8.5</div></div>
+   </div>
+  </div>
+ </div>
+
+ <div class="tabbar g"><div class="tab"><span class="tl">首页</span></div>
+  <div class="tab"><span class="tl">历史</span></div>
+  <div class="tab on"><span class="tl">设置</span></div></div>
+</div></div></div>
+  <div class="col"><div class="lbl">开启「壁纸氛围」 · 强调色仍是橙</div><div class="frame"><div class="screen">
+ <div class="bg" style="opacity:.6"></div>
+ <div class="sb"><span class="mono">9:41</span><span class="mono">▮▮▮ ⌁ ▰</span></div>
+ <div class="topglass g"><div><div class="ttl">设置</div>
+   <div class="tsub">外观 · 下载 · 关于</div></div><div class="ghostbtn">返回</div></div>
+
+ <div style="position:absolute;left:16px;right:16px;top:150px;z-index:2;display:flex;flex-direction:column;gap:18px">
+
+  <div>
+   <div class="setgrp">外观</div>
+   <div class="g" style="border-radius:20px;padding:16px 18px">
+     <div style="font-size:14.5px;font-weight:500;color:#F2EFEC;margin-bottom:11px">主题</div>
+     <div class="seg"><div>跟随系统</div><div class="on">深色</div><div>浅色</div></div>
+   </div>
+  </div>
+
+  <div>
+   <div class="setgrp">背景</div>
+   <div class="g" style="border-radius:20px;padding:4px 18px 10px">
+     <div class="setrow">
+       <div><div class="settitle">壁纸氛围</div>
+         <div class="setdesc">背景跟随桌面壁纸，压到很淡，只影响色温</div></div>
+       <div class="sw2 on"><div class="knob"></div></div>
+     </div>
+     <div class="setrow">
+       <div><div class="settitle">强调色跟随壁纸</div>
+         <div class="setdesc">从壁纸取色替代橙色。关闭时固定用橙色 #FF7A3A</div></div>
+       <div class="sw2"><div class="knob"></div></div>
+     </div>
+     <div style="font-size:11px;color:#6E6862;padding:10px 0 4px;line-height:1.6;
+          border-top:1px solid rgba(255,255,255,.06)">
+       需要 Android 12 及以上。更低版本会自动降级为预先模糊的静态背景。
+     </div>
+   </div>
+  </div>
+
+  <div>
+   <div class="setgrp">下载</div>
+   <div class="g" style="border-radius:20px;padding:4px 18px">
+     <div class="setrow"><div><div class="settitle">保存位置</div>
+       <div class="setdesc">相册 / 自定义目录</div></div><div class="chev">›</div></div>
+     <div class="setrow"><div><div class="settitle">下载后通知</div></div>
+       <div class="sw2 on"><div class="knob"></div></div></div>
+   </div>
+  </div>
+
+  <div>
+   <div class="setgrp">诊断与关于</div>
+   <div class="g" style="border-radius:20px;padding:4px 18px">
+     <div class="setrow"><div class="settitle">运行日志</div><div class="chev">›</div></div>
+     <div class="setrow"><div class="settitle">关于抖音下载器</div>
+       <div style="font-size:12px;color:#A39C95">v1.8.5</div></div>
+   </div>
+  </div>
+ </div>
+
+ <div class="tabbar g"><div class="tab"><span class="tl">首页</span></div>
+  <div class="tab"><span class="tl">历史</span></div>
+  <div class="tab on"><span class="tl">设置</span></div></div>
+</div></div></div>
+</div>
+</body></html>
