@@ -158,16 +158,16 @@ data class BgColors(
     val surface: Color,   // 卡片底
     val raise: Color,     // 次级块（输入框、错误带）
     val hair: Color,      // 全部细线
-    val accent: Color,    // 粉：主行动 + 失败
-    val accentInk: Color, // 压在粉底上的文字色
-    val success: Color,   // 青：成功 + 次要标记
+    val accent: Color,    // 橙：主操作（解析 / 下载 / 主 CTA），全应用唯一强调色
+    val accentInk: Color, // 压在橙底上的文字色
+    val success: Color,   // 绿：成功 / 选中 / 进行中，不做装饰
 )
 
 private val LightTokens = BgColors(
     ink = OnBackgroundLight,
     ink2 = OnSurfaceVariantLight,
-    ink3 = Color(0xFF8C8B92),
-    ink4 = Color(0xFFB0AFB6),
+    ink3 = Color(0xFF6D6864),   // 4.8:1（旧值 #8C8B92 仅 2.9:1，不达 AA）
+    ink4 = Color(0xFF9A948E),   // 禁用态
     paper = BackgroundLight,
     surface = SurfaceLight,
     raise = SurfaceVariantLight,
@@ -180,8 +180,8 @@ private val LightTokens = BgColors(
 private val DarkTokens = BgColors(
     ink = OnBackgroundDark,
     ink2 = OnSurfaceVariantDark,
-    ink3 = Color(0xFF58575F),
-    ink4 = Color(0xFF3D3C43),
+    ink3 = Color(0xFF8A837C),   // 5.3:1（旧值 #58575F 仅 2.8:1，不达 AA）
+    ink4 = Color(0xFF6B655F),   // 禁用态
     paper = BackgroundDark,
     surface = SurfaceDark,
     raise = SurfaceVariantDark,

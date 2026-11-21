@@ -67,8 +67,8 @@ val Typography = Typography(
     titleLarge = TextStyle(
         fontFamily = Mono,
         fontWeight = FontWeight.Medium,
-        fontSize = 11.sp,
-        lineHeight = 16.sp,
+        fontSize = 12.sp,
+        lineHeight = 17.sp,
         letterSpacing = 1.8.sp,
     ),
     titleMedium = TextStyle(
@@ -81,8 +81,8 @@ val Typography = Typography(
     titleSmall = TextStyle(
         fontFamily = Mono,
         fontWeight = FontWeight.Normal,
-        fontSize = 9.5.sp,
-        lineHeight = 14.sp,
+        fontSize = 10.5.sp,
+        lineHeight = 15.sp,
         letterSpacing = 1.6.sp,
     ),
 
@@ -104,7 +104,7 @@ val Typography = Typography(
     bodySmall = TextStyle(
         fontFamily = Sans,
         fontWeight = FontWeight.Normal,
-        fontSize = 11.5.sp,
+        fontSize = 12.sp,
         lineHeight = 17.sp,
         letterSpacing = 0.1.sp,
     ),
@@ -120,15 +120,15 @@ val Typography = Typography(
     labelMedium = TextStyle(
         fontFamily = Mono,
         fontWeight = FontWeight.Normal,
-        fontSize = 10.5.sp,
+        fontSize = 11.sp,
         lineHeight = 15.sp,
         letterSpacing = 1.0.sp,
     ),
     labelSmall = TextStyle(
         fontFamily = Mono,
         fontWeight = FontWeight.Normal,
-        fontSize = 9.5.sp,
-        lineHeight = 13.sp,
+        fontSize = 10.sp,
+        lineHeight = 14.sp,
         letterSpacing = 1.4.sp,
     ),
 )
@@ -140,5 +140,5 @@ val TabularMono = TextStyle(
     fontFamily = Mono,
     fontWeight = FontWeight.Medium,
     fontFeatureSettings = "tnum",
-    fontSize = 11.sp,
+    fontSize = 12.sp,
 )

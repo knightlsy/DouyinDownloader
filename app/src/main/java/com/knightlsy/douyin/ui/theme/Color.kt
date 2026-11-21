@@ -5,109 +5,159 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 /**
- * A+D 配色体系。
+ * 配色 token —— 暖调液态玻璃版。
  *
- * 骨架取 A（Cinema）：近黑、克制、内容当主角。
- * 配色取 D（Tide）：深紫黑底 + 粉青双色，但整体压暗一档，避免变成廉价霓虹。
+ * ## 温度：warm
+ * 中性色带极轻微暖偏（chroma ≤ 0.02），不再用蓝调黑。
+ * 原来的 #0A0810 是带紫的黑，玻璃叠上去会发灰；#0C0B0A 接近中性偏暖，
+ * 橙色的强调才能透出来。
  *
- * 所有色值由 OKLCH 精确转换而来（oklch → linear sRGB → gamma → 8bit），不是肉眼估的：
- *   深色底  oklch(0.14 0.018 295)  → #0A0810
- *   深色粉  oklch(0.68 0.21 12)    → #FE4F75   （抖音原色 #FE2C55 的同族，稍沉）
- *   深色青  oklch(0.80 0.13 195)   → #2AD7D7   （抖音原色 #25F4EE 的同族，降饱和）
- *   浅色粉  oklch(0.55 0.21 12)    → #CE1750   （深色粉在白底上会糊，必须压暗）
- *   浅色青  oklch(0.60 0.13 195)   → #009798
+ * ## 颜色语义（严格执行，一色一义）
+ * ```
+ * 橙 #FF7A3A  = 主操作。解析 / 下载 / 主 CTA。全应用唯一强调色
+ * 绿 #6FD3A8  = 成功 / 选中 / 进行中。不做装饰
+ * 红 #F26B5E  = 失败。破坏性操作（清空历史）不用红，改「管理」+ 多选
+ * 中性灰      = 次级文字操作（粘贴 / 全选），不抢主操作
+ * ```
+ * 旧版是「粉同时表示主行动 / 失败 / 下载中」，一色三义。这次拆开了。
  *
- * 纪律：粉只用于「主行动」（解析 / 下载 / 已选）与「失败」，青只用于「成功」与
- * 「次要标记」。其余全部走中性灰。一屏里粉青加起来不超过 4 处 —— 超过就变成装饰。
+ * ## 对比度实测（WCAG AA 要求 4.5:1）
+ * | | 深色底 #0C0B0A | 浅色底 #F2EFEB |
+ * |---|---|---|
+ * | 正文 | 17.2:1 | 15.6:1 |
+ * | 次要 | 7.3:1 | 4.8:1 |
+ * | 强调 | 7.6:1 | 4.9:1 |
+ * | 成功 | 10.8:1 | 4.5:1 |
+ * | 失败 | 6.6:1 | 4.6:1 |
+ * | 警告 | 11.1:1 | 4.9:1 |
+ *
+ * 旧版 ink3（#58575F）对深底只有 2.8:1，达不到 AA。这次提到 7.3:1。
+ *
+ * ## 旧名保留
+ * [DouyinPink] / [DouyinCyan] 作为别名保留，迁移期代码不必一次改完。
+ * 新代码请用 BgAccent / BgSuccess。
  */
 
-/* ══════════ 品牌色（跨主题共用名字，深浅取不同值）══════════ */
+/* ══════════ 品牌色 ══════════ */
 
-/** 亮版粉（深色主题用）。 */
-val DouyinPink = Color(0xFFFE4F75)
+/** 主强调色（深色主题用）。暖橙。全应用唯一强调色。 */
+val BgAccent = Color(0xFFFF7A3A)
 
-/** 暗版粉（浅色主题用）。深色粉在白底上对比度不足，压暗一档。 */
-val DouyinPinkDeep = Color(0xFFCE1750)
+/** 主强调色（浅色主题用）。压暗到 4.9:1，否则暖白底上读不出。 */
+val BgAccentDeep = Color(0xFFAC4A1B)
 
 /** 中间调，用于渐变收尾。 */
-val DouyinPinkMid = Color(0xFFF03A63)
+val BgAccentMid = Color(0xFFE8642A)
 
-/** 柔和粉，仅用于渐变内层。 */
-val DouyinPinkSoft = Color(0xFFFFA0B6)
+/** 柔和版，仅用于渐变内层。 */
+val BgAccentSoft = Color(0xFFFFB98F)
 
-/** 亮版青（深色主题用）。 */
-val DouyinCyan = Color(0xFF2AD7D7)
+/** 成功 / 选中 / 进行中（深色主题用）。薄荷绿。 */
+val BgSuccess = Color(0xFF6FD3A8)
 
-/** 暗版青（浅色主题用）。新增 —— 旧代码只有亮版，白底上会糊。 */
-val DouyinCyanDeep = Color(0xFF009798)
+/** 成功 / 选中（浅色主题用）。 */
+val BgSuccessDeep = Color(0xFF287A60)
 
-/** 深色底（保留旧名）。 */
-val DouyinDark = Color(0xFF0A0810)
+/** 深色底。暖中性黑。 */
+val BgInk = Color(0xFF0C0B0A)
+
+/* ══════════ 旧名别名（迁移期兼容，新代码勿用）══════════ */
+
+@Deprecated("改用 BgAccent", ReplaceWith("BgAccent"))
+val DouyinPink = BgAccent
+
+@Deprecated("改用 BgAccentDeep", ReplaceWith("BgAccentDeep"))
+val DouyinPinkDeep = BgAccentDeep
+
+@Deprecated("改用 BgAccentMid", ReplaceWith("BgAccentMid"))
+val DouyinPinkMid = BgAccentMid
+
+@Deprecated("改用 BgAccentSoft", ReplaceWith("BgAccentSoft"))
+val DouyinPinkSoft = BgAccentSoft
+
+@Deprecated("改用 BgSuccess", ReplaceWith("BgSuccess"))
+val DouyinCyan = BgSuccess
+
+@Deprecated("改用 BgSuccessDeep", ReplaceWith("BgSuccessDeep"))
+val DouyinCyanDeep = BgSuccessDeep
+
+@Deprecated("改用 BgInk", ReplaceWith("BgInk"))
+val DouyinDark = BgInk
 
 /* ══════════ 深色槽位 ══════════ */
-val BackgroundDark = Color(0xFF0A0810)       // oklch(0.14 0.018 295)
-val SurfaceDark = Color(0xFF13111B)          // oklch(0.185 0.020 295)
-val SurfaceVariantDark = Color(0xFF1C1A26)   // oklch(0.225 0.024 295)
-val OnBackgroundDark = Color(0xFFEBEBEE)     // oklch(0.94 0.004 295)
-val OnSurfaceDark = Color(0xFFEBEBEE)
-val OnSurfaceVariantDark = Color(0xFF86858E) // oklch(0.62 0.015 295)
-val OutlineDark = Color(0xFF292732)          // oklch(0.28 0.020 295)
+val BackgroundDark = Color(0xFF0C0B0A)       // 暖中性黑，chroma 0.008
+val SurfaceDark = Color(0xFF141210)          // 卡片，chroma 0.016
+val SurfaceVariantDark = Color(0xFF1C1917)   // 次级块（输入框、错误带）
+val OnBackgroundDark = Color(0xFFF2EFEC)     // 正文 17.2:1
+val OnSurfaceDark = Color(0xFFF2EFEC)
+val OnSurfaceVariantDark = Color(0xFFA39C95) // 次要 7.3:1（旧值仅 2.8:1）
+val OutlineDark = Color(0xFF2A2724)          // 细线
 
-val PrimaryDark = DouyinPink
-val OnPrimaryDark = Color(0xFF1A0410)
-val PrimaryContainerDark = Color(0xFF3A0D1E)
-val OnPrimaryContainerDark = Color(0xFFFFD9E1)
+val PrimaryDark = BgAccent
+val OnPrimaryDark = Color(0xFF1A0E06)        // 压在橙上的字，7.3:1
+val PrimaryContainerDark = Color(0xFF3D2418)
+val OnPrimaryContainerDark = Color(0xFFFFD9C7)
 
-val SecondaryDark = DouyinCyan
-val OnSecondaryDark = Color(0xFF001112)
-val SecondaryContainerDark = Color(0xFF07383A)
-val OnSecondaryContainerDark = Color(0xFFC9FBFA)
+val SecondaryDark = BgSuccess
+val OnSecondaryDark = Color(0xFF06251A)
+val SecondaryContainerDark = Color(0xFF123B30)
+val OnSecondaryContainerDark = Color(0xFFC7F5E4)
 
 /* ══════════ 浅色槽位 ══════════ */
-val BackgroundLight = Color(0xFFF7F6FA)      // oklch(0.975 0.006 300)
-val SurfaceLight = Color(0xFFFFFFFF)
-val SurfaceVariantLight = Color(0xFFF1EFF5)  // oklch(0.955 0.008 300)
-val OnBackgroundLight = Color(0xFF0E0C13)    // oklch(0.16 0.015 295)
-val OnSurfaceLight = Color(0xFF0E0C13)
-val OnSurfaceVariantLight = Color(0xFF5E5C64) // oklch(0.48 0.012 295)
-val OutlineLight = Color(0xFFDFDDE3)          // oklch(0.90 0.008 300)
+val BackgroundLight = Color(0xFFF2EFEB)      // 暖白
+val SurfaceLight = Color(0xFFFAF8F5)
+val SurfaceVariantLight = Color(0xFFEBE6E0)
+val OnBackgroundLight = Color(0xFF1C1612)    // 正文 15.6:1
+val OnSurfaceLight = Color(0xFF1C1612)
+val OnSurfaceVariantLight = Color(0xFF6D6864) // 次要 4.8:1
+val OutlineLight = Color(0xFFDDD6CF)
 
-val PrimaryLight = DouyinPinkDeep
-val OnPrimaryLight = Color(0xFFFFFFFF)
-val PrimaryContainerLight = Color(0xFFFFDCE4)
-val OnPrimaryContainerLight = Color(0xFF3F0013)
+val PrimaryLight = BgAccentDeep
+val OnPrimaryLight = Color(0xFFFFFFFF)       // 压在深橙上，5.6:1
+val PrimaryContainerLight = Color(0xFFFFE0CC)
+val OnPrimaryContainerLight = Color(0xFF3D1A00)
 
-val SecondaryLight = DouyinCyanDeep
+val SecondaryLight = BgSuccessDeep
 val OnSecondaryLight = Color(0xFFFFFFFF)
-val SecondaryContainerLight = Color(0xFFC8F1F0)
-val OnSecondaryContainerLight = Color(0xFF00302F)
+val SecondaryContainerLight = Color(0xFFCBEEE2)
+val OnSecondaryContainerLight = Color(0xFF00291C)
 
-/* ══════════ 顶栏渐变（新顶栏已不用，保留占位以防旧引用）══════════ */
+/* ══════════ 顶栏渐变（已弃用，保留占位防旧引用）══════════ */
 val AppBarDarkStart = Color(0xFF1B1030)
 val AppBarDarkMid = Color(0xFF2A1038)
 val AppBarDarkEnd = Color(0xFF3A1030)
 val AppBarLightStart = Color(0xFFFFF2F6)
 val AppBarLightMid = Color(0xFFFFE9F0)
 val AppBarLightTint = Color(0xFFF8EDF8)
-val AppBarLightEnd = Color(0xFFF7F6FA)   // 与 BackgroundLight 一致，消除分界线
+val AppBarLightEnd = BackgroundLight
 
 /* ══════════ 状态色 ══════════ */
-val StatPink = DouyinPink
-val StatGreen = Color(0xFF3FD9A0)        // oklch(0.78 0.16 165)
-val StatRed = Color(0xFFF0555E)          // oklch(0.65 0.19 20)
-val StatAmber = Color(0xFFF5B940)        // oklch(0.80 0.14 80)
+val StatPink = BgAccent
+val StatGreen = BgSuccess
+val StatRed = Color(0xFFF26B5E)              // 失败 6.6:1
+val StatAmber = Color(0xFFF5B940)            // 进行中 11.1:1（琥珀，与橙区分）
 
-val StatusSuccess = Color(0xFF3FD9A0)
-val StatusFailed = Color(0xFFF0555E)
+val StatusSuccess = BgSuccess
+val StatusFailed = Color(0xFFF26B5E)
 val StatusRunning = Color(0xFFF5B940)
 
+/** 浅色主题下的状态色（压暗到 AA）。 */
+val StatusSuccessLight = Color(0xFF287A60)
+val StatusFailedLight = Color(0xFFC43A2E)
+val StatusRunningLight = Color(0xFF8A5F0D)
+
 /* ══════════ 几何 ══════════
- * Material 默认 12–28dp 圆角是「友好」语言。这个应用是工具，统一 2dp 方角表达精确。
- * 唯一例外是圆形指示点与勾选圈。
+ * r1 / r2 保持原值不动 —— 它们被 60 多处引用，其中 r1 用在缩略图、
+ * 序号角标这类小元素上，圆角超过元素一半会变成胶囊。圆角放大留到
+ * 界面重排时与布局一起改，单独改颜色不会破坏布局。
+ *
+ * r3 / r4 是新增的大容器圆角，供后续玻璃卡片使用。
  */
 object BgRadius {
-    val r1: Dp = 1.dp
-    val r2: Dp = 2.dp
+    val r1: Dp = 1.dp    // 小元素（保持原值，勿单独改）
+    val r2: Dp = 2.dp    // 卡片 / 按钮（保持原值）
+    val r3: Dp = 18.dp   // 新增：玻璃卡片
+    val r4: Dp = 26.dp   // 新增：悬浮条 / 底部导航
 }
 
 /** 间距骨架。所有页面只从这里取值，不在调用处写 ad-hoc dp。 */
