@@ -34,6 +34,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.shadow
+import com.knightlsy.douyin.ui.components.bgGlassSurface
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -173,9 +175,10 @@ fun MainScreen(
             Modifier
                 .fillMaxWidth()
                 .padding(start = BgSpace.gutter, end = BgSpace.gutter, top = 10.dp, bottom = 8.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .background(Color.White.copy(alpha = 0.042f))
-                .border(1.dp, Color.White.copy(alpha = 0.13f), RoundedCornerShape(16.dp))
+                // 同样是写死白色的问题：浅色主题下 4.2% 白完全隐形。
+                // 顶栏和底部 Tab 必须用同一套玻璃 token，否则一块能看见一块看不见。
+                .shadow(10.dp, RoundedCornerShape(BgRadius.r3), clip = false)
+                .bgGlassSurface(BgRadius.r3)
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {

@@ -38,6 +38,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.shadow
+import com.knightlsy.douyin.ui.components.bgGlassSurface
+import com.knightlsy.douyin.ui.theme.BgRadius
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -192,9 +195,12 @@ private fun BottomTabBar(
             .padding(start = BgSpace.gutter, end = BgSpace.gutter, bottom = 12.dp)
             .fillMaxWidth()
             .height(56.dp)
-            .clip(RoundedCornerShape(26.dp))
-            .background(Color.White.copy(alpha = 0.045f))
-            .border(1.dp, Color.White.copy(alpha = 0.13f), RoundedCornerShape(26.dp))
+            // 外阴影先于 clip：clip=false 让它画在形状外面，浮起来才有「离开页面」的重量。
+            .shadow(14.dp, RoundedCornerShape(BgRadius.r4), clip = false)
+            // 玻璃走主题 token，不写死白色。
+            // 之前是 Color.White.copy(alpha = 0.045f) —— 深色主题下勉强可见，
+            // 浅色主题下米白底叠 4.5% 白，等于什么都没画，所以「看不到玻璃」。
+            .bgGlassSurface(BgRadius.r4)
     ) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val tabWidth = maxWidth / 3
