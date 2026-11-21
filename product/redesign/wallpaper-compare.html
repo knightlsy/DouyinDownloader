@@ -1,0 +1,267 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>壁纸背景 · 三方案对比</title><style>
+
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,"PingFang SC","Noto Sans SC",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+.mono{font-family:ui-monospace,SFMono-Regular,monospace;font-variant-numeric:tabular-nums}
+.screen{width:340px;height:740px;position:relative;overflow:hidden;isolation:isolate;
+        border-radius:22px;box-shadow:0 20px 60px #000c}
+.sb{position:relative;z-index:3;display:flex;justify-content:space-between;padding:13px 20px 6px;
+    font-size:12px;font-weight:600;color:rgba(255,255,255,.9)}
+.wall{position:absolute;inset:0;z-index:0}
+/* 遮罩：壁纸必须被压暗，否则文字读不清 */
+.veil{position:absolute;inset:0;z-index:1}
+.glass{position:relative;background:rgba(255,255,255,.07);
+  -webkit-backdrop-filter:blur(30px) saturate(150%);backdrop-filter:blur(30px) saturate(150%);
+  border:1px solid rgba(255,255,255,.14);
+  box-shadow:0 10px 34px rgba(0,0,0,.42),inset 0 1px 0 rgba(255,255,255,.28)}
+.glass::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+  background:radial-gradient(130% 90% at 50% -25%,rgba(255,255,255,.16),transparent 58%)}
+.btn{border:none;border-radius:16px;font-size:15px;font-weight:650;width:100%;min-height:50px;
+     display:flex;align-items:center;justify-content:center;font-family:inherit}
+.ttl{font-size:16px;font-weight:650;color:#fff;letter-spacing:-.2px}
+.tsub{font-size:11px;color:rgba(255,255,255,.55);margin-top:2px}
+.ghost{min-width:44px;min-height:44px;display:flex;align-items:center;justify-content:center;
+       font-size:12.5px;font-weight:600;color:rgba(255,255,255,.65);padding:0 12px;border-radius:12px;
+       background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.10)}
+.ph{position:relative;overflow:hidden;border-radius:10px;
+    background:repeating-linear-gradient(45deg,rgba(255,255,255,.04) 0 5px,transparent 5px 10px),rgba(255,255,255,.05);
+    border:1px solid rgba(255,255,255,.08)}
+.ph .cap{position:absolute;left:7px;top:6px;font-family:ui-monospace,monospace;font-size:9px;
+         letter-spacing:.5px;color:rgba(255,255,255,.45)}
+.row{display:flex;align-items:center;gap:11px;padding:11px 0;min-height:56px}
+.row+.row{border-top:1px solid rgba(255,255,255,.07)}
+.rname{font-size:14px;font-weight:500;color:#F2EFEC;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.rmeta{font-size:11px;color:rgba(255,255,255,.55);margin-top:2px}
+.nav{position:absolute;left:14px;right:14px;bottom:16px;z-index:6;border-radius:20px;display:flex;padding:6px;gap:3px}
+.nav i{flex:1;display:flex;align-items:center;justify-content:center;min-height:46px;border-radius:15px;
+       font-size:12px;color:rgba(255,255,255,.45);font-style:normal;font-weight:500;position:relative}
+.nav i.on{background:rgba(255,255,255,.12);color:#fff;font-weight:650}
+.nav i.on::before{content:"";position:absolute;top:5px;width:14px;height:2px;border-radius:1px}
+
+body{margin:0;background:#080706;color:#F2EFEC;padding:30px 26px 40px}
+h1{font-size:22px;font-weight:700;margin:0 0 6px}
+.lead{font-size:12px;color:#8C8580;line-height:1.85;margin:0 0 24px;max-width:1200px}
+.row{margin-bottom:30px}
+.rlbl{font-size:13px;font-weight:700;color:#C0BAB4;margin-bottom:10px}
+.cells{display:flex;gap:16px}
+</style></head><body>
+<h1>壁纸背景 · 三方案对比</h1>
+<p class="lead">同一个界面，放在两种壁纸下、三种取色策略下。重点看：文字还读得清吗？橙色还在吗？</p>
+<div class="row"><div class="rlbl">暖色壁纸</div><div class="cells"><div class="screen" data-mode="强调色固定橙">
+ <div class="wall" style="background:radial-gradient(55% 40% at 22% 18%,#E8894A 0%,transparent 62%),
+   radial-gradient(48% 36% at 76% 30%,#C25A2E 0%,transparent 58%),
+   radial-gradient(60% 44% at 55% 78%,#6B4A2A 0%,transparent 66%),
+   linear-gradient(160deg,#3A2515,#1A1008)"></div>
+ <div class="veil" style="background:linear-gradient(180deg,rgba(12,11,10,.55),rgba(12,11,10,.86))"></div>
+ <div class="sb"><span class="mono">9:41</span><span class="mono">▮▮▮ ⌁ ▰</span></div>
+ <div class="glass" style="position:absolute;left:12px;right:12px;top:46px;z-index:4;border-radius:18px;
+      padding:12px 14px;display:flex;align-items:center;justify-content:space-between">
+   <div><div class="ttl">抖音下载器</div><div class="tsub">粘贴链接即可下载</div></div>
+   <div class="ghost">菜单</div>
+ </div>
+ <div style="position:absolute;left:12px;right:12px;top:142px;z-index:2;display:flex;flex-direction:column;gap:12px">
+   <div class="glass" style="border-radius:20px;padding:14px">
+     <div style="display:flex;align-items:center;gap:8px;background:rgba(0,0,0,.22);border-radius:13px;
+          padding:13px;border:1px solid rgba(255,255,255,.07)">
+       <span style="flex:1;font-size:13px;color:rgba(255,255,255,.45)">粘贴抖音分享链接…</span>
+       <span style="font-size:12px;font-weight:600;color:rgba(255,255,255,.62)">粘贴</span>
+     </div>
+     <button class="btn" style="margin-top:13px;background:#FF7A3A;color:#15100C;">解析</button>
+   </div>
+   <div class="glass" style="border-radius:20px;padding:12px 14px 4px">
+     <div class="mono" style="font-size:9.5px;letter-spacing:1px;color:rgba(255,255,255,.42);
+          text-transform:uppercase;margin-bottom:2px">最近解析</div>
+     <div class="row"><div class="ph" style="width:46px;height:46px"><div class="cap">IMG</div></div>
+       <div style="flex:1;min-width:0"><div class="rname">成都人民公园银杏</div>
+       <div class="rmeta">@成都小队长 · 视频 · 11-21</div></div></div>
+     <div class="row"><div class="ph" style="width:46px;height:46px"><div class="cap">IMG</div></div>
+       <div style="flex:1;min-width:0"><div class="rname">熊猫基地一日游 vlog</div>
+       <div class="rmeta">@蓉城日记 · 图集 9 张 · 11-20</div></div></div>
+   </div>
+ </div>
+ <div class="nav glass"><i class="on" style="">首页</i><i>历史</i><i>设置</i></div>
+ <div style="position:absolute;left:0;right:0;bottom:0;z-index:8;padding:8px 12px;
+      background:rgba(0,0,0,.55);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);
+      font-size:9.5px;color:rgba(255,255,255,.72);text-align:center;line-height:1.5">A · 现方案：壁纸不动，橙=主操作</div>
+</div><div class="screen" data-mode="壁纸氛围 + 橙不动">
+ <div class="wall" style="background:radial-gradient(55% 40% at 22% 18%,#E8894A 0%,transparent 62%),
+   radial-gradient(48% 36% at 76% 30%,#C25A2E 0%,transparent 58%),
+   radial-gradient(60% 44% at 55% 78%,#6B4A2A 0%,transparent 66%),
+   linear-gradient(160deg,#3A2515,#1A1008)"></div>
+ <div class="veil" style="background:linear-gradient(180deg,rgba(12,11,10,.72),rgba(12,11,10,.94))"></div>
+ <div class="sb"><span class="mono">9:41</span><span class="mono">▮▮▮ ⌁ ▰</span></div>
+ <div class="glass" style="position:absolute;left:12px;right:12px;top:46px;z-index:4;border-radius:18px;
+      padding:12px 14px;display:flex;align-items:center;justify-content:space-between">
+   <div><div class="ttl">抖音下载器</div><div class="tsub">粘贴链接即可下载</div></div>
+   <div class="ghost">菜单</div>
+ </div>
+ <div style="position:absolute;left:12px;right:12px;top:142px;z-index:2;display:flex;flex-direction:column;gap:12px">
+   <div class="glass" style="border-radius:20px;padding:14px">
+     <div style="display:flex;align-items:center;gap:8px;background:rgba(0,0,0,.22);border-radius:13px;
+          padding:13px;border:1px solid rgba(255,255,255,.07)">
+       <span style="flex:1;font-size:13px;color:rgba(255,255,255,.45)">粘贴抖音分享链接…</span>
+       <span style="font-size:12px;font-weight:600;color:rgba(255,255,255,.62)">粘贴</span>
+     </div>
+     <button class="btn" style="margin-top:13px;background:#FF7A3A;color:#15100C;">解析</button>
+   </div>
+   <div class="glass" style="border-radius:20px;padding:12px 14px 4px">
+     <div class="mono" style="font-size:9.5px;letter-spacing:1px;color:rgba(255,255,255,.42);
+          text-transform:uppercase;margin-bottom:2px">最近解析</div>
+     <div class="row"><div class="ph" style="width:46px;height:46px"><div class="cap">IMG</div></div>
+       <div style="flex:1;min-width:0"><div class="rname">成都人民公园银杏</div>
+       <div class="rmeta">@成都小队长 · 视频 · 11-21</div></div></div>
+     <div class="row"><div class="ph" style="width:46px;height:46px"><div class="cap">IMG</div></div>
+       <div style="flex:1;min-width:0"><div class="rname">熊猫基地一日游 vlog</div>
+       <div class="rmeta">@蓉城日记 · 图集 9 张 · 11-20</div></div></div>
+   </div>
+ </div>
+ <div class="nav glass"><i class="on" style="">首页</i><i>历史</i><i>设置</i></div>
+ <div style="position:absolute;left:0;right:0;bottom:0;z-index:8;padding:8px 12px;
+      background:rgba(0,0,0,.55);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);
+      font-size:9.5px;color:rgba(255,255,255,.72);text-align:center;line-height:1.5">B · 壁纸做极淡氛围，强调色仍是橙</div>
+</div><div class="screen" data-mode="动态取色">
+ <div class="wall" style="background:radial-gradient(55% 40% at 22% 18%,#E8894A 0%,transparent 62%),
+   radial-gradient(48% 36% at 76% 30%,#C25A2E 0%,transparent 58%),
+   radial-gradient(60% 44% at 55% 78%,#6B4A2A 0%,transparent 66%),
+   linear-gradient(160deg,#3A2515,#1A1008)"></div>
+ <div class="veil" style="background:linear-gradient(180deg,rgba(12,11,10,.55),rgba(12,11,10,.86))"></div>
+ <div class="sb"><span class="mono">9:41</span><span class="mono">▮▮▮ ⌁ ▰</span></div>
+ <div class="glass" style="position:absolute;left:12px;right:12px;top:46px;z-index:4;border-radius:18px;
+      padding:12px 14px;display:flex;align-items:center;justify-content:space-between">
+   <div><div class="ttl">抖音下载器</div><div class="tsub">粘贴链接即可下载</div></div>
+   <div class="ghost">菜单</div>
+ </div>
+ <div style="position:absolute;left:12px;right:12px;top:142px;z-index:2;display:flex;flex-direction:column;gap:12px">
+   <div class="glass" style="border-radius:20px;padding:14px">
+     <div style="display:flex;align-items:center;gap:8px;background:rgba(0,0,0,.22);border-radius:13px;
+          padding:13px;border:1px solid rgba(255,255,255,.07)">
+       <span style="flex:1;font-size:13px;color:rgba(255,255,255,.45)">粘贴抖音分享链接…</span>
+       <span style="font-size:12px;font-weight:600;color:rgba(255,255,255,.62)">粘贴</span>
+     </div>
+     <button class="btn" style="margin-top:13px;background:#E8894A;color:#15100C;">解析</button>
+   </div>
+   <div class="glass" style="border-radius:20px;padding:12px 14px 4px">
+     <div class="mono" style="font-size:9.5px;letter-spacing:1px;color:rgba(255,255,255,.42);
+          text-transform:uppercase;margin-bottom:2px">最近解析</div>
+     <div class="row"><div class="ph" style="width:46px;height:46px"><div class="cap">IMG</div></div>
+       <div style="flex:1;min-width:0"><div class="rname">成都人民公园银杏</div>
+       <div class="rmeta">@成都小队长 · 视频 · 11-21</div></div></div>
+     <div class="row"><div class="ph" style="width:46px;height:46px"><div class="cap">IMG</div></div>
+       <div style="flex:1;min-width:0"><div class="rname">熊猫基地一日游 vlog</div>
+       <div class="rmeta">@蓉城日记 · 图集 9 张 · 11-20</div></div></div>
+   </div>
+ </div>
+ <div class="nav glass"><i class="on" style="">首页</i><i>历史</i><i>设置</i></div>
+ <div style="position:absolute;left:0;right:0;bottom:0;z-index:8;padding:8px 12px;
+      background:rgba(0,0,0,.55);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);
+      font-size:9.5px;color:rgba(255,255,255,.72);text-align:center;line-height:1.5">C · 取色结果 #E8894A</div>
+</div></div></div><div class="row"><div class="rlbl">冷色壁纸</div><div class="cells"><div class="screen" data-mode="强调色固定橙">
+ <div class="wall" style="background:radial-gradient(52% 38% at 25% 22%,#4A7BC8 0%,transparent 60%),
+   radial-gradient(46% 34% at 78% 26%,#7B5AC8 0%,transparent 58%),
+   radial-gradient(58% 42% at 52% 76%,#2A4A6B 0%,transparent 64%),
+   linear-gradient(160deg,#151E3A,#080A14)"></div>
+ <div class="veil" style="background:linear-gradient(180deg,rgba(12,11,10,.55),rgba(12,11,10,.86))"></div>
+ <div class="sb"><span class="mono">9:41</span><span class="mono">▮▮▮ ⌁ ▰</span></div>
+ <div class="glass" style="position:absolute;left:12px;right:12px;top:46px;z-index:4;border-radius:18px;
+      padding:12px 14px;display:flex;align-items:center;justify-content:space-between">
+   <div><div class="ttl">抖音下载器</div><div class="tsub">粘贴链接即可下载</div></div>
+   <div class="ghost">菜单</div>
+ </div>
+ <div style="position:absolute;left:12px;right:12px;top:142px;z-index:2;display:flex;flex-direction:column;gap:12px">
+   <div class="glass" style="border-radius:20px;padding:14px">
+     <div style="display:flex;align-items:center;gap:8px;background:rgba(0,0,0,.22);border-radius:13px;
+          padding:13px;border:1px solid rgba(255,255,255,.07)">
+       <span style="flex:1;font-size:13px;color:rgba(255,255,255,.45)">粘贴抖音分享链接…</span>
+       <span style="font-size:12px;font-weight:600;color:rgba(255,255,255,.62)">粘贴</span>
+     </div>
+     <button class="btn" style="margin-top:13px;background:#FF7A3A;color:#15100C;">解析</button>
+   </div>
+   <div class="glass" style="border-radius:20px;padding:12px 14px 4px">
+     <div class="mono" style="font-size:9.5px;letter-spacing:1px;color:rgba(255,255,255,.42);
+          text-transform:uppercase;margin-bottom:2px">最近解析</div>
+     <div class="row"><div class="ph" style="width:46px;height:46px"><div class="cap">IMG</div></div>
+       <div style="flex:1;min-width:0"><div class="rname">成都人民公园银杏</div>
+       <div class="rmeta">@成都小队长 · 视频 · 11-21</div></div></div>
+     <div class="row"><div class="ph" style="width:46px;height:46px"><div class="cap">IMG</div></div>
+       <div style="flex:1;min-width:0"><div class="rname">熊猫基地一日游 vlog</div>
+       <div class="rmeta">@蓉城日记 · 图集 9 张 · 11-20</div></div></div>
+   </div>
+ </div>
+ <div class="nav glass"><i class="on" style="">首页</i><i>历史</i><i>设置</i></div>
+ <div style="position:absolute;left:0;right:0;bottom:0;z-index:8;padding:8px 12px;
+      background:rgba(0,0,0,.55);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);
+      font-size:9.5px;color:rgba(255,255,255,.72);text-align:center;line-height:1.5">A · 现方案：壁纸不动，橙=主操作</div>
+</div><div class="screen" data-mode="壁纸氛围 + 橙不动">
+ <div class="wall" style="background:radial-gradient(52% 38% at 25% 22%,#4A7BC8 0%,transparent 60%),
+   radial-gradient(46% 34% at 78% 26%,#7B5AC8 0%,transparent 58%),
+   radial-gradient(58% 42% at 52% 76%,#2A4A6B 0%,transparent 64%),
+   linear-gradient(160deg,#151E3A,#080A14)"></div>
+ <div class="veil" style="background:linear-gradient(180deg,rgba(12,11,10,.72),rgba(12,11,10,.94))"></div>
+ <div class="sb"><span class="mono">9:41</span><span class="mono">▮▮▮ ⌁ ▰</span></div>
+ <div class="glass" style="position:absolute;left:12px;right:12px;top:46px;z-index:4;border-radius:18px;
+      padding:12px 14px;display:flex;align-items:center;justify-content:space-between">
+   <div><div class="ttl">抖音下载器</div><div class="tsub">粘贴链接即可下载</div></div>
+   <div class="ghost">菜单</div>
+ </div>
+ <div style="position:absolute;left:12px;right:12px;top:142px;z-index:2;display:flex;flex-direction:column;gap:12px">
+   <div class="glass" style="border-radius:20px;padding:14px">
+     <div style="display:flex;align-items:center;gap:8px;background:rgba(0,0,0,.22);border-radius:13px;
+          padding:13px;border:1px solid rgba(255,255,255,.07)">
+       <span style="flex:1;font-size:13px;color:rgba(255,255,255,.45)">粘贴抖音分享链接…</span>
+       <span style="font-size:12px;font-weight:600;color:rgba(255,255,255,.62)">粘贴</span>
+     </div>
+     <button class="btn" style="margin-top:13px;background:#FF7A3A;color:#15100C;">解析</button>
+   </div>
+   <div class="glass" style="border-radius:20px;padding:12px 14px 4px">
+     <div class="mono" style="font-size:9.5px;letter-spacing:1px;color:rgba(255,255,255,.42);
+          text-transform:uppercase;margin-bottom:2px">最近解析</div>
+     <div class="row"><div class="ph" style="width:46px;height:46px"><div class="cap">IMG</div></div>
+       <div style="flex:1;min-width:0"><div class="rname">成都人民公园银杏</div>
+       <div class="rmeta">@成都小队长 · 视频 · 11-21</div></div></div>
+     <div class="row"><div class="ph" style="width:46px;height:46px"><div class="cap">IMG</div></div>
+       <div style="flex:1;min-width:0"><div class="rname">熊猫基地一日游 vlog</div>
+       <div class="rmeta">@蓉城日记 · 图集 9 张 · 11-20</div></div></div>
+   </div>
+ </div>
+ <div class="nav glass"><i class="on" style="">首页</i><i>历史</i><i>设置</i></div>
+ <div style="position:absolute;left:0;right:0;bottom:0;z-index:8;padding:8px 12px;
+      background:rgba(0,0,0,.55);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);
+      font-size:9.5px;color:rgba(255,255,255,.72);text-align:center;line-height:1.5">B · 壁纸做极淡氛围，强调色仍是橙</div>
+</div><div class="screen" data-mode="动态取色">
+ <div class="wall" style="background:radial-gradient(52% 38% at 25% 22%,#4A7BC8 0%,transparent 60%),
+   radial-gradient(46% 34% at 78% 26%,#7B5AC8 0%,transparent 58%),
+   radial-gradient(58% 42% at 52% 76%,#2A4A6B 0%,transparent 64%),
+   linear-gradient(160deg,#151E3A,#080A14)"></div>
+ <div class="veil" style="background:linear-gradient(180deg,rgba(12,11,10,.55),rgba(12,11,10,.86))"></div>
+ <div class="sb"><span class="mono">9:41</span><span class="mono">▮▮▮ ⌁ ▰</span></div>
+ <div class="glass" style="position:absolute;left:12px;right:12px;top:46px;z-index:4;border-radius:18px;
+      padding:12px 14px;display:flex;align-items:center;justify-content:space-between">
+   <div><div class="ttl">抖音下载器</div><div class="tsub">粘贴链接即可下载</div></div>
+   <div class="ghost">菜单</div>
+ </div>
+ <div style="position:absolute;left:12px;right:12px;top:142px;z-index:2;display:flex;flex-direction:column;gap:12px">
+   <div class="glass" style="border-radius:20px;padding:14px">
+     <div style="display:flex;align-items:center;gap:8px;background:rgba(0,0,0,.22);border-radius:13px;
+          padding:13px;border:1px solid rgba(255,255,255,.07)">
+       <span style="flex:1;font-size:13px;color:rgba(255,255,255,.45)">粘贴抖音分享链接…</span>
+       <span style="font-size:12px;font-weight:600;color:rgba(255,255,255,.62)">粘贴</span>
+     </div>
+     <button class="btn" style="margin-top:13px;background:#6B8AF0;color:#15100C;">解析</button>
+   </div>
+   <div class="glass" style="border-radius:20px;padding:12px 14px 4px">
+     <div class="mono" style="font-size:9.5px;letter-spacing:1px;color:rgba(255,255,255,.42);
+          text-transform:uppercase;margin-bottom:2px">最近解析</div>
+     <div class="row"><div class="ph" style="width:46px;height:46px"><div class="cap">IMG</div></div>
+       <div style="flex:1;min-width:0"><div class="rname">成都人民公园银杏</div>
+       <div class="rmeta">@成都小队长 · 视频 · 11-21</div></div></div>
+     <div class="row"><div class="ph" style="width:46px;height:46px"><div class="cap">IMG</div></div>
+       <div style="flex:1;min-width:0"><div class="rname">熊猫基地一日游 vlog</div>
+       <div class="rmeta">@蓉城日记 · 图集 9 张 · 11-20</div></div></div>
+   </div>
+ </div>
+ <div class="nav glass"><i class="on" style="">首页</i><i>历史</i><i>设置</i></div>
+ <div style="position:absolute;left:0;right:0;bottom:0;z-index:8;padding:8px 12px;
+      background:rgba(0,0,0,.55);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);
+      font-size:9.5px;color:rgba(255,255,255,.72);text-align:center;line-height:1.5">C · 取色结果 #6B8AF0</div>
+</div></div></div>
+</body></html>
