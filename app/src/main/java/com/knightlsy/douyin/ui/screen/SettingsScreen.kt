@@ -1,4 +1,4 @@
-package com.knightlsy.douyin.screen
+package com.knightlsy.douyin.ui.screen
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable

@@ -42,11 +42,11 @@ import com.knightlsy.douyin.data.ThemeMode
 import java.io.File
 import com.knightlsy.douyin.data.UpdateChecker
 import com.knightlsy.douyin.data.UpdateResult
-import com.knightlsy.douyin.screen.AboutScreen
-import com.knightlsy.douyin.screen.HistoryScreen
-import com.knightlsy.douyin.screen.LogScreen
-import com.knightlsy.douyin.screen.MainScreen
-import com.knightlsy.douyin.screen.SettingsScreen
+import com.knightlsy.douyin.ui.screen.AboutScreen
+import com.knightlsy.douyin.ui.screen.HistoryScreen
+import com.knightlsy.douyin.ui.screen.LogScreen
+import com.knightlsy.douyin.ui.screen.MainScreen
+import com.knightlsy.douyin.ui.screen.SettingsScreen
 import com.knightlsy.douyin.ui.theme.DouyinDownloaderTheme
 import com.knightlsy.douyin.viewmodel.HistoryViewModel
 import com.knightlsy.douyin.viewmodel.MainViewModel

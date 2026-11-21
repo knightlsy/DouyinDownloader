@@ -1,4 +1,4 @@
-package com.knightlsy.douyin.screen
+package com.knightlsy.douyin.ui.screen
 
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
