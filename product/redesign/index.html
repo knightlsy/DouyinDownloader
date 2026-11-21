@@ -1,4 +1,5 @@
-<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>抖音下载器 · 细节打磨 v2</title><style>
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>抖音下载器 · 六屏</title><style>
+
 
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 body{font-family:-apple-system,"PingFang SC","Noto Sans SC",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
@@ -94,20 +95,25 @@ body{margin:0;background:#080706;color:#F2EFEC;padding:34px 26px 44px}
 h1{font-size:25px;font-weight:700;margin:0 0 6px;letter-spacing:-.5px}
 .lead{font-size:12.5px;color:#8C8580;line-height:1.9;max-width:1700px;margin:0 0 14px}
 .rule{font-size:12px;color:#9A938D;line-height:1.95;margin:0 0 22px;padding-left:14px;border-left:2px solid #FF7A3A}
-.row{display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap}
-.col{width:393px;flex:none}
+.row{display:grid;grid-template-columns:repeat(2,393px);gap:26px 30px;justify-content:start}
+.col{width:393px}
+.lbl{font-size:12.5px;font-weight:700;margin-bottom:9px;color:#C0BAB4}
+
+body{margin:0;background:#080706;color:#F2EFEC;padding:34px 26px 44px}
+h1{font-size:25px;font-weight:700;margin:0 0 6px;letter-spacing:-.5px}
+.lead{font-size:12.5px;color:#8C8580;line-height:1.9;max-width:1700px;margin:0 0 14px}
+.rule{font-size:12px;color:#9A938D;line-height:1.95;margin:0 0 22px;padding-left:14px;border-left:2px solid #FF7A3A}
+.row{display:grid;grid-template-columns:repeat(2,393px);gap:26px 30px;justify-content:start}
+.col{width:393px}
 .lbl{font-size:12.5px;font-weight:700;margin-bottom:9px;color:#C0BAB4}
 .frame{width:393px;height:852px;border-radius:26px;overflow:hidden;background:#0C0B0A;
     box-shadow:0 24px 70px #000d,0 0 0 1px #ffffff10}
 </style></head><body>
-<h1>抖音下载器 · 细节打磨 v2</h1>
-<p class="lead">按审查结果修完 5 个 P0 + 7 个 P1。底部 Tab 之前被外层 26px 圆角切掉了，现在抬到 30px。</p>
+<h1>抖音下载器 · 六屏</h1>
+<p class="lead">补齐了原 App 有两个全屏弹层：图集预览（左右翻页 + 页码点）和沉浸播放（控制层淡出）。这两个之前漏了。</p>
 <p class="rule">
-P0① 浅色主 CTA 对比度崩坏 → 改橙色实心<br>
-P0② ②③ 底部按钮被裁 → safe area 抬到 30px<br>
-P0③ 四屏无 Tab → 根因是圆角裁切，已修<br>
-P0④ 「VIDEO 16:9」被播放键压住 → 标签移到左上<br>
-P0⑤ 勾选热区不足 → 视觉 22px / 热区 44px
+④ 图集预览：对应 ImageViewerDialog。顶部玻璃条（关闭 / 页码 3-9 / 保存），底部页码点 + LIVE 标识，左右边缘细箭头暗示可滑动。<br>
+⑤ 沉浸播放：对应 VideoPlayerDialog。控制层浮在画面上，3 秒后自动隐藏（静态稿看不出来），带进度条与下载入口。
 </p>
 <div class="row"><div class="col"><div class="lbl">① 首页</div><div class="frame"><div class="screen">
  <div class="bg"><div class="glow" style="width:250px;height:250px;left:-60px;top:90px;background:rgba(196,101,43,.42)"></div>
@@ -145,7 +151,7 @@ P0⑤ 勾选热区不足 → 视觉 22px / 热区 44px
   <div style="display:flex;gap:10px;margin-top:20px">
    <button class="btn btn-glass" style="flex:0 0 34%">播放</button>
    <button class="btn btn-tint" style="flex:1">下载视频</button></div></div>
-</div></div></div><div class="col"><div class="lbl">③ 图集</div><div class="frame"><div class="screen">
+</div></div></div><div class="col"><div class="lbl">③ 图集网格</div><div class="frame"><div class="screen">
  <div class="bg" style="opacity:.72"></div>
  <div class="sb"><span class="mono">9:41</span><span class="mono">▮▮▮ ⌁ ▰</span></div>
  <div class="topglass g"><div><div class="ttl">图集 · 9 张</div>
@@ -210,7 +216,93 @@ P0⑤ 勾选热区不足 → 视觉 22px / 热区 44px
    <span style="font-size:13px;color:#A39C95">已选 <b class="mono" style="color:#6FD3A8;font-size:15px">7</b> / <span class="mono">9</span></span>
    <span style="font-size:13px;font-weight:600;color:rgba(255,255,255,.70);padding:8px 0">全选</span></div>
   <button class="btn btn-tint">下载 7 张</button></div>
-</div></div></div><div class="col"><div class="lbl">④ 浅色</div><div class="frame"><div class="screen" style="background:#F2EFEB">
+</div></div></div><div class="col"><div class="lbl">④ 图集预览 · 新增</div><div class="frame"><div class="screen" style="background:#070605">
+ <div style="position:absolute;inset:0;background:
+   radial-gradient(70% 50% at 30% 30%,#2A1D14 0%,transparent 70%),
+   radial-gradient(60% 45% at 75% 70%,#1A1410 0%,transparent 68%),#070605"></div>
+ <div class="sb"><span class="mono">9:41</span><span class="mono">▮▮▮ ⌁ ▰</span></div>
+
+ <!-- 顶部：关闭 + 页码，玻璃浮在图上 -->
+ <div class="g" style="position:absolute;left:16px;right:16px;top:52px;z-index:4;border-radius:20px;
+      padding:10px 12px;display:flex;align-items:center;justify-content:space-between">
+   <div class="ghostbtn" style="background:transparent;border:none;color:rgba(255,255,255,.82)">关闭</div>
+   <div class="mono" style="font-size:13px;color:rgba(255,255,255,.86);letter-spacing:.5px">3 / 9</div>
+   <div class="ghostbtn" style="background:transparent;border:none;color:rgba(255,255,255,.82)">保存</div>
+ </div>
+
+ <!-- 图片本体：占满中段 -->
+ <div style="position:absolute;left:20px;right:20px;top:118px;bottom:150px;z-index:1">
+   <div class="ph" style="width:100%;height:100%;border-radius:16px;border-color:rgba(255,255,255,.06)">
+     <div class="cap">IMAGE · 2160×2880</div>
+   </div>
+ </div>
+
+ <!-- 左右翻页暗示：细箭头，不抢图 -->
+ <div style="position:absolute;left:8px;top:50%;transform:translateY(-50%);z-index:3;
+      width:24px;height:48px;display:flex;align-items:center;justify-content:center;
+      border-left:2px solid rgba(255,255,255,.22);border-radius:2px"></div>
+ <div style="position:absolute;right:8px;top:50%;transform:translateY(-50%);z-index:3;
+      width:24px;height:48px;display:flex;align-items:center;justify-content:center;
+      border-right:2px solid rgba(255,255,255,.22);border-radius:2px"></div>
+
+ <!-- 底部：页码点 + 实况标识 -->
+ <div class="g-heavy g" style="position:absolute;left:16px;right:16px;bottom:30px;z-index:4;
+      border-radius:24px;padding:14px 18px">
+   <div style="display:flex;align-items:center;justify-content:center;gap:5px;margin-bottom:12px">
+     <i style="width:6px;height:4px;border-radius:2px;background:rgba(255,255,255,.30)"></i><i style="width:6px;height:4px;border-radius:2px;background:rgba(255,255,255,.30)"></i><i style="width:16px;height:4px;border-radius:2px;background:rgba(255,255,255,.92)"></i><i style="width:6px;height:4px;border-radius:2px;background:rgba(255,255,255,.30)"></i><i style="width:6px;height:4px;border-radius:2px;background:rgba(255,255,255,.30)"></i><i style="width:6px;height:4px;border-radius:2px;background:rgba(255,255,255,.30)"></i><i style="width:6px;height:4px;border-radius:2px;background:rgba(255,255,255,.30)"></i><i style="width:6px;height:4px;border-radius:2px;background:rgba(255,255,255,.30)"></i><i style="width:6px;height:4px;border-radius:2px;background:rgba(255,255,255,.30)"></i>
+   </div>
+   <div style="display:flex;align-items:center;justify-content:space-between">
+     <div style="display:flex;align-items:center;gap:6px">
+       <i style="width:5px;height:5px;border-radius:50%;background:#6FD3A8;display:block"></i>
+       <span class="mono" style="font-size:10.5px;letter-spacing:.5px;color:rgba(255,255,255,.62)">LIVE · 实况图</span>
+     </div>
+     <span style="font-size:12.5px;color:#A39C95">左右滑动切换</span>
+   </div>
+ </div>
+</div></div></div><div class="col"><div class="lbl">⑤ 沉浸播放 · 新增</div><div class="frame"><div class="screen" style="background:#050404">
+ <div style="position:absolute;inset:0;background:
+   radial-gradient(75% 55% at 28% 26%,#33200F 0%,transparent 72%),
+   radial-gradient(65% 48% at 78% 74%,#1C1208 0%,transparent 70%),#050404"></div>
+ <div class="sb"><span class="mono">9:41</span><span class="mono">▮▮▮ ⌁ ▰</span></div>
+
+ <!-- 顶部：关闭 + 标题，控制层淡出后消失 -->
+ <div class="g" style="position:absolute;left:16px;right:16px;top:52px;z-index:4;border-radius:20px;
+      padding:10px 12px;display:flex;align-items:center;gap:10px">
+   <div class="ghostbtn" style="background:transparent;border:none;color:rgba(255,255,255,.82);min-width:44px">关闭</div>
+   <div style="flex:1;min-width:0">
+     <div style="font-size:13px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">成都人民公园的银杏黄了</div>
+     <div class="mono" style="font-size:10.5px;color:rgba(255,255,255,.52);margin-top:2px">@成都小队长</div>
+   </div>
+ </div>
+
+ <!-- 画面：中央播放键（暂停态才出现） -->
+ <div style="position:absolute;left:0;right:0;top:0;bottom:0;display:flex;align-items:center;justify-content:center;z-index:1">
+   <div style="width:76px;height:76px;border-radius:50%;background:rgba(255,255,255,.10);
+        border:1px solid rgba(255,255,255,.22);-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);
+        display:flex;align-items:center;justify-content:center">
+     <div style="width:14px;height:20px;border-left:4px solid rgba(255,255,255,.92);
+          border-right:4px solid rgba(255,255,255,.92)"></div>
+   </div>
+ </div>
+
+ <!-- 底部：进度 + 时间 + 下载，玻璃条 -->
+ <div class="g-heavy g" style="position:absolute;left:16px;right:16px;bottom:30px;z-index:4;
+      border-radius:24px;padding:16px 18px">
+   <div style="height:3px;background:rgba(255,255,255,.14);border-radius:2px;overflow:hidden">
+     <i style="display:block;width:38%;height:100%;background:#FF7A3A;border-radius:2px"></i>
+     <i style="display:block;width:3px;height:13px;border-radius:2px;background:#fff;
+        transform:translate(148px,-8px)"></i>
+   </div>
+   <div style="display:flex;justify-content:space-between;margin-top:9px">
+     <span class="mono" style="font-size:11px;color:rgba(255,255,255,.72)">00:06</span>
+     <span class="mono" style="font-size:11px;color:rgba(255,255,255,.45)">00:15</span>
+   </div>
+   <div style="display:flex;gap:10px;margin-top:14px">
+     <button class="btn btn-glass" style="flex:1">循环</button>
+     <button class="btn btn-tint" style="flex:1.6">下载无水印</button>
+   </div>
+ </div>
+</div></div></div><div class="col"><div class="lbl">⑥ 浅色</div><div class="frame"><div class="screen" style="background:#F2EFEB">
  <div class="bg" style="background:
    radial-gradient(60% 44% at 24% 12%,#F0C9A8 0%,transparent 64%),
    radial-gradient(56% 42% at 80% 74%,#E3CDB6 0%,transparent 66%),

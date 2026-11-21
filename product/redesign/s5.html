@@ -1,0 +1,143 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><style>
+
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{font-family:-apple-system,"PingFang SC","Noto Sans SC",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+.mono{font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,monospace;font-variant-numeric:tabular-nums}
+.screen{width:393px;height:852px;position:relative;overflow:hidden;background:#0C0B0A;isolation:isolate;
+        display:flex;flex-direction:column}
+
+/* 玻璃：顶栏降 alpha 提升透底感（P1-6） */
+.g{position:relative;background:rgba(255,255,255,.034);
+   -webkit-backdrop-filter:blur(34px) saturate(165%) brightness(1.10);
+   backdrop-filter:blur(34px) saturate(165%) brightness(1.10);
+   border:1px solid rgba(255,255,255,.09);
+   box-shadow:0 12px 40px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.30),inset 0 -1px 0 rgba(0,0,0,.26)}
+.g::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+   background:radial-gradient(130% 90% at 50% -25%,rgba(255,255,255,.17),transparent 58%)}
+.g-heavy{background:rgba(255,255,255,.068);
+   -webkit-backdrop-filter:blur(46px) saturate(175%) brightness(1.14);
+   backdrop-filter:blur(46px) saturate(175%) brightness(1.14)}
+.g-light{position:relative;background:rgba(255,255,255,.40);
+   -webkit-backdrop-filter:blur(34px) saturate(200%) brightness(1.0);
+   backdrop-filter:blur(34px) saturate(200%) brightness(1.0);
+   border:1px solid rgba(255,255,255,.72);
+   box-shadow:0 10px 34px rgba(80,55,30,.10),inset 0 1.5px 0 rgba(255,255,255,1),inset 0 -1px 0 rgba(0,0,0,.04)}
+.g-light::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+   background:radial-gradient(130% 90% at 50% -25%,rgba(255,255,255,.55),transparent 58%)}
+
+.bg{position:absolute;inset:0;z-index:0;
+  background:
+   radial-gradient(62% 46% at 26% 14%,#C4652B 0%,transparent 66%),
+   radial-gradient(58% 44% at 78% 76%,#8A4A1E 0%,transparent 68%),
+   linear-gradient(168deg,#151210 0%,#0C0B0A 100%)}
+.glow{position:absolute;border-radius:50%;filter:blur(58px);pointer-events:none}
+
+.sb{position:relative;z-index:3;display:flex;justify-content:space-between;padding:15px 22px 8px;
+    font-size:13px;font-weight:600;color:rgba(255,255,255,.9);flex:none}
+
+/* 占位符：标签移顶部，不再和播放键抢中心（P0-4） */
+.ph{position:relative;overflow:hidden;background:
+     repeating-linear-gradient(45deg,rgba(255,255,255,.035) 0 5px,transparent 5px 10px),#1C1917;
+     border:1px solid rgba(255,255,255,.07)}
+.ph .cap{position:absolute;left:8px;top:7px;font-family:ui-monospace,SFMono-Regular,monospace;
+     font-size:10px;letter-spacing:.5px;color:rgba(255,255,255,.46);text-transform:uppercase}
+.ph .mid{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+
+.topglass{position:absolute;left:12px;right:12px;top:52px;z-index:4;border-radius:22px;padding:14px 18px;
+          display:flex;align-items:center;justify-content:space-between}
+.ttl{font-size:17px;font-weight:650;color:#fff;letter-spacing:-.2px}
+.tsub{font-size:11.5px;color:rgba(255,255,255,.56);margin-top:2px}
+.ghostbtn{min-width:44px;min-height:44px;display:flex;align-items:center;justify-content:center;
+     font-size:13px;font-weight:600;color:rgba(255,255,255,.68);padding:0 14px;border-radius:14px;
+     background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.09)}
+
+.inputcard{border-radius:24px;padding:18px}
+.inputrow{display:flex;align-items:center;gap:10px;background:rgba(0,0,0,.20);border-radius:16px;
+          padding:15px 16px;border:1px solid rgba(255,255,255,.06);min-height:52px}
+.inputph{flex:1;font-size:14px;color:rgba(255,255,255,.46)}
+.inputval{flex:1;font-size:14px;color:rgba(255,255,255,.94);overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.paste{font-size:13px;font-weight:600;color:rgba(255,255,255,.62);white-space:nowrap;padding:6px 0}
+
+.btn{border:none;border-radius:18px;font-size:16px;font-weight:650;letter-spacing:.1px;
+     display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:54px;
+     color:#fff;font-family:inherit}
+.btn-tint{background:#FF7A3A;color:#1A0E06;
+  box-shadow:0 8px 26px rgba(255,122,58,.28),inset 0 1px 0 rgba(255,255,255,.30)}
+.btn-glass{background:rgba(255,255,255,.095);border:1px solid rgba(255,255,255,.16);
+  -webkit-backdrop-filter:blur(24px) saturate(180%);backdrop-filter:blur(24px) saturate(180%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.22)}
+.btn-off{background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.06);color:rgba(255,255,255,.26)}
+
+.row{display:flex;align-items:center;gap:13px;padding:13px 0;min-height:60px}
+.row+.row{border-top:1px solid rgba(255,255,255,.06)}
+.rname{font-size:15px;font-weight:500;color:#F2EFEC;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.rmeta{font-size:12px;color:#A39C95;margin-top:3px}
+
+/* Tab：bottom 抬到 30px，避开外层 26px 圆角裁切（P0-3 根因） */
+.tabbar{position:absolute;left:16px;right:16px;bottom:30px;z-index:6;border-radius:24px;
+        display:flex;padding:7px;gap:4px}
+.tab{flex:1;display:flex;align-items:center;justify-content:center;min-height:50px;border-radius:18px;position:relative}
+.tab .tl{font-size:13px;color:rgba(255,255,255,.46);font-weight:500;letter-spacing:.2px}
+.tab.on .tl{color:#fff;font-weight:650}
+.tab.on::before{content:"";position:absolute;top:7px;width:16px;height:2px;border-radius:1px;background:#FF7A3A}
+.tab.on{background:rgba(255,255,255,.10);box-shadow:inset 0 1px 0 rgba(255,255,255,.18)}
+
+.tri{width:0;height:0;border-left:13px solid rgba(255,255,255,.92);
+      border-top:8px solid transparent;border-bottom:8px solid transparent;margin-left:4px}
+/* LIVE 胶囊徽章，不只靠文字（P1-1） */
+.livebadge{position:absolute;left:6px;bottom:6px;display:flex;align-items:center;gap:4px;
+     background:rgba(0,0,0,.6);border:1px solid rgba(255,255,255,.18);border-radius:7px;padding:3px 6px}
+.livebadge i{width:5px;height:5px;border-radius:50%;background:#6FD3A8;display:block}
+.livebadge span{font-family:ui-monospace,monospace;font-size:9px;letter-spacing:.4px;color:rgba(255,255,255,.82)}
+
+body{margin:0;background:#080706;color:#F2EFEC;padding:34px 26px 44px}
+h1{font-size:25px;font-weight:700;margin:0 0 6px;letter-spacing:-.5px}
+.lead{font-size:12.5px;color:#8C8580;line-height:1.9;max-width:1700px;margin:0 0 14px}
+.rule{font-size:12px;color:#9A938D;line-height:1.95;margin:0 0 22px;padding-left:14px;border-left:2px solid #FF7A3A}
+.row{display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap}
+.col{width:393px;flex:none}
+.lbl{font-size:12.5px;font-weight:700;margin-bottom:9px;color:#C0BAB4}
+</style></head><body style="margin:0;background:#000;display:flex;justify-content:center;padding:20px"><div class="screen" style="background:#070605">
+ <div style="position:absolute;inset:0;background:
+   radial-gradient(70% 50% at 30% 30%,#2A1D14 0%,transparent 70%),
+   radial-gradient(60% 45% at 75% 70%,#1A1410 0%,transparent 68%),#070605"></div>
+ <div class="sb"><span class="mono">9:41</span><span class="mono">▮▮▮ ⌁ ▰</span></div>
+
+ <!-- 顶部：关闭 + 页码，玻璃浮在图上 -->
+ <div class="g" style="position:absolute;left:16px;right:16px;top:52px;z-index:4;border-radius:20px;
+      padding:10px 12px;display:flex;align-items:center;justify-content:space-between">
+   <div class="ghostbtn" style="background:transparent;border:none;color:rgba(255,255,255,.82)">关闭</div>
+   <div class="mono" style="font-size:13px;color:rgba(255,255,255,.86);letter-spacing:.5px">3 / 9</div>
+   <div class="ghostbtn" style="background:transparent;border:none;color:rgba(255,255,255,.82)">保存</div>
+ </div>
+
+ <!-- 图片本体：占满中段 -->
+ <div style="position:absolute;left:20px;right:20px;top:118px;bottom:150px;z-index:1">
+   <div class="ph" style="width:100%;height:100%;border-radius:16px;border-color:rgba(255,255,255,.06)">
+     <div class="cap">IMAGE · 2160×2880</div>
+   </div>
+ </div>
+
+ <!-- 左右翻页暗示：细箭头，不抢图 -->
+ <div style="position:absolute;left:8px;top:50%;transform:translateY(-50%);z-index:3;
+      width:24px;height:48px;display:flex;align-items:center;justify-content:center;
+      border-left:2px solid rgba(255,255,255,.22);border-radius:2px"></div>
+ <div style="position:absolute;right:8px;top:50%;transform:translateY(-50%);z-index:3;
+      width:24px;height:48px;display:flex;align-items:center;justify-content:center;
+      border-right:2px solid rgba(255,255,255,.22);border-radius:2px"></div>
+
+ <!-- 底部：页码点 + 实况标识 -->
+ <div class="g-heavy g" style="position:absolute;left:16px;right:16px;bottom:30px;z-index:4;
+      border-radius:24px;padding:14px 18px">
+   <div style="display:flex;align-items:center;justify-content:center;gap:5px;margin-bottom:12px">
+     <i style="width:6px;height:4px;border-radius:2px;background:rgba(255,255,255,.30)"></i><i style="width:6px;height:4px;border-radius:2px;background:rgba(255,255,255,.30)"></i><i style="width:16px;height:4px;border-radius:2px;background:rgba(255,255,255,.92)"></i><i style="width:6px;height:4px;border-radius:2px;background:rgba(255,255,255,.30)"></i><i style="width:6px;height:4px;border-radius:2px;background:rgba(255,255,255,.30)"></i><i style="width:6px;height:4px;border-radius:2px;background:rgba(255,255,255,.30)"></i><i style="width:6px;height:4px;border-radius:2px;background:rgba(255,255,255,.30)"></i><i style="width:6px;height:4px;border-radius:2px;background:rgba(255,255,255,.30)"></i><i style="width:6px;height:4px;border-radius:2px;background:rgba(255,255,255,.30)"></i>
+   </div>
+   <div style="display:flex;align-items:center;justify-content:space-between">
+     <div style="display:flex;align-items:center;gap:6px">
+       <i style="width:5px;height:5px;border-radius:50%;background:#6FD3A8;display:block"></i>
+       <span class="mono" style="font-size:10.5px;letter-spacing:.5px;color:rgba(255,255,255,.62)">LIVE · 实况图</span>
+     </div>
+     <span style="font-size:12.5px;color:#A39C95">左右滑动切换</span>
+   </div>
+ </div>
+</div></body></html>
