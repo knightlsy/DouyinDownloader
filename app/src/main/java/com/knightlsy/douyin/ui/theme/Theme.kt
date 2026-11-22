@@ -287,7 +287,11 @@ fun DouyinDownloaderTheme(
                     .background(tokens.paper)
             ) {
                 // 壁纸层：48×48 拉伸铺满，等效重度模糊。
-                // 上面再盖 88% 纸色 —— 净贡献约 12%，只留下色温倾向，不影响任何文字对比度。
+                //
+                // 遮罩比例决定「看不看得出」：
+                //   0.88 → 壁纸只贡献 12%，在浅色壁纸上等于零，用户会以为功能坏了
+                //   0.70 → 贡献 30%，能明显看出色温与构图，同时文字对比度仍然够
+                // 原来写 0.88 过于保守，叠上各 Screen 的不透明底，效果彻底归零。
                 val art = wallpaper.backdrop
                 if (wallpaperMood && art != null) {
                     Image(
@@ -299,7 +303,7 @@ fun DouyinDownloaderTheme(
                     Box(
                         Modifier
                             .fillMaxSize()
-                            .background(tokens.paper.copy(alpha = 0.88f))
+                            .background(tokens.paper.copy(alpha = 0.70f))
                     )
                 }
                 content()

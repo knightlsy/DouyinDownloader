@@ -16,6 +16,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.knightlsy.douyin.data.ThemeMode
@@ -82,9 +83,12 @@ class MainActivity : ComponentActivity() {
                 accentFromWallpaper = accentFromWallpaper,
                 wallpaperRefreshKey = wallpaperTick.intValue + vmWallpaperTick,
             ) {
+                // color 必须透明：Theme 在 content() 之前已经画好了纸色底 + 壁纸层，
+                // Surface 再铺一层不透明 background 就会把壁纸整个盖掉。
+                // 这是「背景功能无效」的第二层遮挡（第一层是各 Screen 的 background(c.paper)）。
                 Surface(
                     modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
+                    color = Color.Transparent,
                 ) {
                     AppNavigation(mainViewModel)
                 }
