@@ -200,15 +200,8 @@ fun SettingsScreen(
                 contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 4.dp, bottom = 10.dp),
             ) {
                 SettingsSwitchRow(
-                    title = "壁纸氛围",
-                    description = "背景跟随桌面壁纸，压到很淡，只影响色温",
-                    checked = wallpaperMood,
-                    onChange = ::toggleWallpaperMood,
-                )
-                RowDivider()
-                SettingsSwitchRow(
-                    title = "强调色跟随壁纸",
-                    description = "从壁纸取色替代橙色。关闭时固定用橙色 #FF7A3A",
+                    title = "强调色跟随背景图",
+                    description = "从背景图取色替代橙色。关闭时固定用橙色 #FF7A3A",
                     checked = accentFromWallpaper,
                     onChange = ::toggleAccentFromWallpaper,
                 )
@@ -272,26 +265,6 @@ fun SettingsScreen(
                     )
                 }
                 RowDivider()
-                // 壁纸读取的真实状态。这个功能曾经「开了没反应」，
-                // 大部分是 ROM 拒绝读取，被 runCatching 吞掉后界面上毫无反馈。
-                if (wallpaperDiag.isNotEmpty() && (wallpaperMood || accentFromWallpaper)) {
-                    Text(
-                        text = wallpaperDiag,
-                        fontFamily = FontFamily.SansSerif,
-                        fontSize = 11.sp,
-                        lineHeight = 17.sp,
-                        color = c.ink3,
-                        modifier = Modifier.padding(top = 8.dp, bottom = 2.dp),
-                    )
-                }
-                Text(
-                    text = "需要 Android 12 及以上。更低版本会自动降级为预先模糊的静态背景。",
-                    fontFamily = FontFamily.SansSerif,
-                    fontSize = 11.sp,
-                    lineHeight = 17.sp,
-                    color = c.ink4,
-                    modifier = Modifier.padding(top = 10.dp, bottom = 4.dp),
-                )
             }
 
             Spacer(Modifier.height(22.dp))

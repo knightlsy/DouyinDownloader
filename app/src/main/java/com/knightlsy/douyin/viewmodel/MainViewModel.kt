@@ -113,8 +113,7 @@ class MainViewModel @JvmOverloads constructor(
             val ok = WallpaperTint.saveCustomBackdrop(getApplication<Application>(), uri)
             withContext(Dispatchers.Main) {
                 _wallpaperDiag.value = if (ok) "已设置自定义背景图" else "背景图保存失败"
-                _wallpaperMood.value = true      // 选了图就默认开启，否则选了也看不到
-                themePreferences.setWallpaperMood(true)
+                _hasCustomBackdrop.value = ok
                 _wallpaperTick.value += 1        // 触发 Theme 重算
             }
         }
@@ -125,6 +124,7 @@ class MainViewModel @JvmOverloads constructor(
             WallpaperTint.clearCustomBackdrop(getApplication<Application>())
             withContext(Dispatchers.Main) {
                 _wallpaperDiag.value = "已清除自定义背景"
+                _hasCustomBackdrop.value = false
                 _wallpaperTick.value += 1
             }
         }
@@ -134,7 +134,8 @@ class MainViewModel @JvmOverloads constructor(
     private val _wallpaperTick = MutableStateFlow(0)
     val wallpaperTick: StateFlow<Int> = _wallpaperTick.asStateFlow()
 
-    fun hasCustomBackdrop(): Boolean = themePreferences.customBackdrop() != null
+    private val _hasCustomBackdrop = MutableStateFlow(themePreferences.customBackdrop() != null)
+    val hasCustomBackdrop: StateFlow<Boolean> = _hasCustomBackdrop.asStateFlow()
 
     fun refreshWallpaperDiag() {
         _wallpaperDiag.value = runCatching { WallpaperTint.get(getApplication<Application>()).diag }

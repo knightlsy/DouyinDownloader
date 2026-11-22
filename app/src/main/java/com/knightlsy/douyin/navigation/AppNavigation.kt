@@ -90,7 +90,7 @@ fun AppNavigation(mainViewModel: MainViewModel) {
     val accentFromWallpaper by mainViewModel.accentFromWallpaper.collectAsState()
     val wallpaperDiag by mainViewModel.wallpaperDiag.collectAsState()
     val wallpaperTick by mainViewModel.wallpaperTick.collectAsState()
-    val hasCustomBackdrop = remember(wallpaperTick) { mainViewModel.hasCustomBackdrop() }
+    val hasCustomBackdrop by mainViewModel.hasCustomBackdrop.collectAsState()
 
     val nonMainScreens = listOf("history", "about", "settings", "logs")
     BackHandler(enabled = currentScreen in nonMainScreens) {

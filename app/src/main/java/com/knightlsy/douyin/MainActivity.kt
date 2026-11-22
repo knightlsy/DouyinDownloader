@@ -71,7 +71,8 @@ class MainActivity : ComponentActivity() {
             }
             val context = this@MainActivity
 
-            val wallpaperMood by mainViewModel.wallpaperMood.collectAsState()
+            // 背景只有一个来源：用户手动选的图。有图就画，没有就是纯纸色底。
+            val hasCustomBackdrop by mainViewModel.hasCustomBackdrop.collectAsState()
             val accentFromWallpaper by mainViewModel.accentFromWallpaper.collectAsState()
             // 选/清除自定义背景图时由 ViewModel 递增；与 onResume 的 tick 相加，
             // 两者任一变化都会让 Theme 里的 remember 重算。
@@ -79,7 +80,7 @@ class MainActivity : ComponentActivity() {
 
             DouyinDownloaderTheme(
                 darkTheme = isDarkMode,
-                wallpaperMood = wallpaperMood,
+                wallpaperMood = hasCustomBackdrop,
                 accentFromWallpaper = accentFromWallpaper,
                 wallpaperRefreshKey = wallpaperTick.intValue + vmWallpaperTick,
             ) {

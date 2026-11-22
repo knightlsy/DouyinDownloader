@@ -1,9 +1,7 @@
 package com.knightlsy.douyin.data
 
-import android.app.WallpaperManager
 import android.content.Context
 import android.graphics.Bitmap
-import android.os.Build
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -65,41 +63,27 @@ object WallpaperTint {
      * 失败就返回 null，调用方回退到默认橙色与纯色底，界不能因此崩掉。
      */
     fun get(context: Context): Result {
-        // ① 用户自选的背景图优先。这条路不碰 WallpaperManager，
-        //    绕开「ROM 拒绝第三方读壁纸」这个死结。
+        // 唯一数据源：用户从相册自选的图。
+        //
+        // 原先还有一条「读系统壁纸」的路径，已整条删除。原因是它在国产 ROM 上
+        // 基本不可用（WallpaperManager.drawable 对第三方应用返回 null），
+        // 而且它是不可控的 —— 用户换了壁纸，App 的配色和背景就跟着变，
+        // 一屏出现过多种强调色，与「每屏最多一处强调」的纪律冲突。
+        // 手动选图是可控的、确定的，也是唯一真正能用的。
         val customPath = runCatching { ThemePreferences(context).customBackdrop() }.getOrNull()
-        if (!customPath.isNullOrBlank()) {
-            val f = java.io.File(customPath)
-            if (f.exists()) {
-                val stamp = f.lastModified() xor f.length()
-                val hit = cached
-                if (hit != null && cachedId == stamp.toInt()) return hit
-                val fresh = runCatching { fromImageFile(f) }.getOrElse {
-                    Result(null, null, diag = "自定义背景读取失败：${it.javaClass.simpleName}")
-                }
-                cachedId = stamp.toInt()
-                cached = fresh
-                return fresh
-            }
-        }
+            ?: return Result(null, null, diag = "未选择背景图")
 
-        val wm = WallpaperManager.getInstance(context)
+        val f = java.io.File(customPath)
+        if (!f.exists()) return Result(null, null, diag = "背景图文件已丢失，请重新选择")
 
-        val id = runCatching {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                wm.getWallpaperId(WallpaperManager.FLAG_SYSTEM)
-            } else {
-                0
-            }
-        }.getOrDefault(0)
-
+        val stamp = f.lastModified() xor f.length()
         val hit = cached
-        if (hit != null && id == cachedId) return hit
+        if (hit != null && cachedId == stamp.toInt()) return hit
 
-        val fresh = runCatching { compute(wm) }.getOrElse {
-            Result(null, null, diag = "读取异常：${it.javaClass.simpleName} ${it.message ?: ""}".trim())
+        val fresh = runCatching { fromImageFile(f) }.getOrElse {
+            Result(null, null, diag = "背景图读取失败：${it.javaClass.simpleName}")
         }
-        cachedId = id
+        cachedId = stamp.toInt()
         cached = fresh
         return fresh
     }
@@ -161,35 +145,6 @@ object WallpaperTint {
             accent = accent,
             backdrop = small.asImageBitmap(),
             diag = "自定义背景 ${ow}×${oh} → 强调色 ${hex ?: "未提取到主色"}",
-        )
-    }
-
-    private fun compute(wm: WallpaperManager): Result {
-        // ROM 拒绝给出壁纸时 drawable 为 null（不少国产 ROM 对第三方应用如此），
-        // 必须把这个原因说出来，而不是静默当「没开」。
-        val src = wm.drawable ?: return Result(null, null, diag = "系统未返回壁纸 —— 动态壁纸，或 ROM 限制了第三方读取")
-        val w = src.intrinsicWidth.coerceAtLeast(1)
-        val h = src.intrinsicHeight.coerceAtLeast(1)
-
-        // 等比缩放到 SAMPLE 见方，保持画面构成不变
-        val scale = SAMPLE.toFloat() / max(w, h)
-        val tw = (w * scale).toInt().coerceAtLeast(1)
-        val th = (h * scale).toInt().coerceAtLeast(1)
-
-        val small = Bitmap.createBitmap(tw, th, Bitmap.Config.ARGB_8888)
-        val canvas = android.graphics.Canvas(small)
-        src.setBounds(0, 0, tw, th)
-        src.draw(canvas)
-
-        val accent = constrainAccent(small)
-        val hex = accent?.let { c ->
-            String.format("#%02X%02X%02X",
-                (c.red * 255).toInt(), (c.green * 255).toInt(), (c.blue * 255).toInt())
-        }
-        return Result(
-            accent = accent,
-            backdrop = small.asImageBitmap(),
-            diag = "壁纸 ${w}×${h} → 强调色 ${hex ?: "未提取到主色"}",
         )
     }
 

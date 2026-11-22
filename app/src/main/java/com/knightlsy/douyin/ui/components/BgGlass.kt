@@ -18,7 +18,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -70,7 +69,6 @@ fun BgGlassCard(
         modifier
             .clip(RoundedCornerShape(radius))
             .background(c.glass)
-            .drawBehind { drawGlassTopHighlight(c.glassTop, isDark = c.paper.luminance() < 0.5f) }
             .border(1.dp, c.glassEdge, RoundedCornerShape(radius))
             .then(if (contentPadding) Modifier.padding(padding) else Modifier)
     ) {
@@ -90,7 +88,6 @@ fun BgGlassBox(
         modifier
             .clip(RoundedCornerShape(radius))
             .background(c.glass)
-            .drawBehind { drawGlassTopHighlight(c.glassTop, isDark = c.paper.luminance() < 0.5f) }
             .border(1.dp, c.glassEdge, RoundedCornerShape(radius))
     ) {
         content()
@@ -110,7 +107,6 @@ fun Modifier.bgGlassSurface(radius: Dp = BgRadius.r3): Modifier {
     return this
         .clip(shape)
         .background(c.glass)
-        .drawBehind { drawGlassTopHighlight(c.glassTop, isDark = c.paper.luminance() < 0.5f) }
         .border(1.dp, c.glassEdge, shape)
 }
 
@@ -120,42 +116,13 @@ fun Modifier.bgGlassSurface(radius: Dp = BgRadius.r3): Modifier {
  * 不用整块渐变 —— 那会变成「上半亮下半暗」的立体感，像拟物按钮。
  * 真正的玻璃只有边缘那一圈反光。
  */
-/**
- * 玻璃上沿的水滴反光。
+/* 顶部内高光已移除。
  *
- * ## 为什么不是「一条白线」
- * 光打在弧面上，反射的是一条**中间最亮、两端渐隐**的细线 ——
- * 就像水珠边缘那道高光。画成通栏等宽的白线，看起来是「贴了条胶带」，
- * 而且深色底上 20% 白对比极强，会突兀地横在滑块上方。
- *
- * ## 为什么深浅两套参数
- * 同一个白色，在 #14110F 上和 #F2EFEB 上的视觉重量完全不同：
- * 深色底会把白色衬得刺眼，浅色底反而需要多一点才能看见边界。
- * 所以深色压到 14%，浅色给到 26%。
- *
- * @param radius 容器圆角，用于让高光跟随形状（这里只取上沿，故不用）
- * @param tint 高光色（通常是主题的 glassTop）
- * @param isDark 当前是否为深色主题
- */
-private fun DrawScope.drawGlassTopHighlight(tint: Color, isDark: Boolean) {
-    // 深色底白色对比强 → 更淡；浅色底需要多一点才看得见
-    val a = if (isDark) 0.14f else 0.26f
-    val lineH = 1.5.dp.toPx().coerceAtMost(size.height * 0.5f)
-    drawRect(
-        brush = Brush.horizontalGradient(
-            colors = listOf(
-                Color.Transparent,
-                tint.copy(alpha = a),
-                tint.copy(alpha = a),
-                Color.Transparent,
-            ),
-            startX = 0f,
-            endX = size.width,
-        ),
-        topLeft = Offset.Zero,
-        size = Size(size.width, lineH),
-    )
-}
+ * 它始终逃不掉「一条多余的横线」这个观感：画成面就是白块（浅色顶栏上很突兀），
+ * 画成贯穿全宽的细线就是横在容器里的一道白边，还因为用了 drawRect
+ * 跟圆角容器边缘对不上。玻璃的边缘表达交给 border + shadow 就够了，
+ * iOS 的 tab bar / 导航栏也没有这层内部高光。 */
+
 
 /**
  * 页面背景：纯色打底 + 两团柔光。
@@ -267,15 +234,6 @@ fun Modifier.bgHazeGlass(
                 // 极细颗粒，让模糊不至于像塑料。iOS 毛玻璃有这个
                 noiseFactor = 0.018f,
             )
-        }
-        .drawBehind {
-            // 顶部内高光：光从上方来，上沿更亮
-            if (r > 0.01f) {
-                drawGlassTopHighlight(
-                    c.glassTop.copy(alpha = c.glassTop.alpha * r),
-                    isDark = c.paper.luminance() < 0.5f,
-                )
-            }
         }
         .border(1.dp, c.glassEdge.copy(alpha = c.glassEdge.alpha * r), shape)
 }
