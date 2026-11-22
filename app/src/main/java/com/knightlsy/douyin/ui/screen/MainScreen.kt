@@ -41,6 +41,9 @@ import androidx.compose.ui.zIndex
 import com.knightlsy.douyin.ui.components.LocalBgHaze
 import com.knightlsy.douyin.ui.components.rememberBgHaze
 import com.knightlsy.douyin.ui.components.bgHazeGlass
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -98,6 +101,22 @@ fun MainScreen(
     // 玻璃采样源：AppNavigation 统一建立，各层玻璃共用。
     // 拿不到就自建一个（单独预览本屏时也不至于崩）。
     val haze = LocalBgHaze.current ?: rememberBgHaze()
+
+    // 顶栏玻璃只在滚动后出现 —— iOS 导航栏就是这么做的。
+    // 停在顶部时如果也画玻璃，它背后没有任何内容（列表从 96dp 才开始），
+    // Haze 采到的是纯色 paper，模糊纯色还是纯色，结果就是一块与背景
+    // 有微小色差的矩形。那不是玻璃，是色块。
+    val listState = rememberLazyListState()
+    val scrolled by remember {
+        derivedStateOf {
+            listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 4
+        }
+    }
+    val barReveal by animateFloatAsState(
+        targetValue = if (scrolled) 1f else 0f,
+        animationSpec = tween(durationMillis = 200),
+        label = "topBarReveal",
+    )
     val c = LocalBgColors.current
     val context = LocalContext.current
 
@@ -188,9 +207,9 @@ fun MainScreen(
                 .zIndex(1f)
                 .fillMaxWidth()
                 .padding(start = BgSpace.gutter, end = BgSpace.gutter, top = 10.dp, bottom = 8.dp)
-                .shadow(14.dp, RoundedCornerShape(BgRadius.r3), clip = false)
-                // 真玻璃：采样下方滚过的内容，模糊后透出来
-                .bgHazeGlass(haze, BgRadius.r3)
+                .shadow(14.dp * barReveal, RoundedCornerShape(BgRadius.r3), clip = false)
+                // 真玻璃：采样下方滚过的内容。停在顶部时 reveal=0，完全透明。
+                .bgHazeGlass(haze, BgRadius.r3, reveal = barReveal)
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -231,6 +250,7 @@ fun MainScreen(
         LazyColumn(
             // 这一列是玻璃的「采样源」：顶栏背后能看到列表滚过去的颜色
             Modifier.fillMaxSize().hazeSource(haze),
+            state = listState,
             // top 96dp：顶栏是叠加层不占布局空间，内容要自己让出位置
             // bottom 90dp：给悬浮的底部 Tab 栏（56dp 高 + 12dp 边距 + 手势条余量）让位
             contentPadding = PaddingValues(top = 96.dp, bottom = 90.dp),

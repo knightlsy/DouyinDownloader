@@ -220,13 +220,24 @@ fun Modifier.bgHazeGlass(
     blurRadius: Dp = 24.dp,
     tint: Color? = null,
     backgroundAlpha: Float = 0.26f,
+    /**
+     * 玻璃的显现程度。0 = 完全隐藏（只剩浮在页面上的内容），1 = 完整玻璃。
+     *
+     * 这个参数是给「滚动才出现玻璃」用的。原因是物理性的：
+     * 页面停在顶部时，顶栏背后根本没有内容可采样 —— Haze 采到的是纯色 paper，
+     * 模糊纯色还是纯色，于是整个顶栏就是一块与背景有微小色差的矩形。
+     * 那不是玻璃，是色块。iOS 导航栏的做法就是停在顶部时完全透明、滚动后才渐显。
+     */
+    reveal: Float = 1f,
 ): Modifier {
     val c = LocalBgColors.current
     val shape = RoundedCornerShape(radius)
     val tintColor = tint ?: c.glassTop
+    val r = reveal.coerceIn(0f, 1f)
     return this
         .clip(shape)
         .hazeEffect(haze) {
+            alpha = r
             style = HazeStyle(
                 // 底色压得很低 —— 高了这个效果立刻退化成一块灰膜。
                 // 0.26 是「还能看清文字」和「透出内容」的平衡点。
@@ -241,7 +252,9 @@ fun Modifier.bgHazeGlass(
         }
         .drawBehind {
             // 顶部内高光：光从上方来，上沿更亮
-            drawGlassTopHighlight(radius, c.glassTop)
+            if (r > 0.01f) {
+                drawGlassTopHighlight(radius, c.glassTop.copy(alpha = c.glassTop.alpha * r))
+            }
         }
-        .border(1.dp, c.glassEdge, shape)
+        .border(1.dp, c.glassEdge.copy(alpha = c.glassEdge.alpha * r), shape)
 }
