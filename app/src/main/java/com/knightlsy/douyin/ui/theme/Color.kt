@@ -155,11 +155,11 @@ val StatusRunningLight = Color(0xFF8A5F0D)
  */
 val GlassTintDark = Color(0x14FFFFFF)        // 8% 白：深色主题下的玻璃底
 val GlassEdgeDark = Color(0x24FFFFFF)        // 14% 白：玻璃边缘
-val GlassTopDark = Color(0x4DFFFFFF)         // 30% 白：顶部内高光
+val GlassTopDark = Color(0x33FFFFFF)         // 20% 白：顶部内高光
 
 val GlassTintLight = Color(0x70FFFFFF)       // 44% 白：浅色主题下玻璃更实（浅底透色难）
 val GlassEdgeLight = Color(0xB8FFFFFF)       // 72% 白
-val GlassTopLight = Color(0xFFFFFFFF)        // 纯白高光
+val GlassTopLight = Color(0x33FFFFFF)        // 20% 白高光（纯白会在浅色顶栏上糊成一块白板）
 
 /** 页面背景的柔光斑颜色（深色主题）。极低不透明度，只给色温。 */
 val GlowWarmDark = Color(0x2EC4652B)         // 18% 暖橙

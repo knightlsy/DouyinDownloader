@@ -120,11 +120,14 @@ fun Modifier.bgGlassSurface(radius: Dp = BgRadius.r3): Modifier {
  * 真正的玻璃只有边缘那一圈反光。
  */
 private fun DrawScope.drawGlassTopHighlight(radius: Dp, topColor: Color) {
-    val h = 22.dp.toPx().coerceAtMost(size.height)
+    // 只画边缘那一圈反光。之前是 22dp 高的整段渐变 ——
+    // 在浅色主题下那就是顶栏上横着一条 22dp 的白色块，非常突兀。
+    // 真实的玻璃高光只有上沿一条极窄的亮线，光从上方来，所以只在顶部。
+    val h = 10.dp.toPx().coerceAtMost(size.height)
     drawRoundRect(
         brush = Brush.verticalGradient(
             colors = listOf(
-                topColor,
+                topColor.copy(alpha = 0.6f),
                 Color.Transparent,
             ),
             startY = 0f,
@@ -216,7 +219,7 @@ fun Modifier.bgHazeGlass(
     radius: Dp = BgRadius.r3,
     blurRadius: Dp = 24.dp,
     tint: Color? = null,
-    backgroundAlpha: Float = 0.34f,
+    backgroundAlpha: Float = 0.26f,
 ): Modifier {
     val c = LocalBgColors.current
     val shape = RoundedCornerShape(radius)
@@ -225,10 +228,12 @@ fun Modifier.bgHazeGlass(
         .clip(shape)
         .hazeEffect(haze) {
             style = HazeStyle(
-                // 底色压得很低 —— 高了这个效果立刻退化成一块灰膜
+                // 底色压得很低 —— 高了这个效果立刻退化成一块灰膜。
+                // 0.26 是「还能看清文字」和「透出内容」的平衡点。
                 backgroundColor = c.paper.copy(alpha = backgroundAlpha),
-                // 薄薄一层高光色，给玻璃厚度
-                tints = listOf(HazeTint(tintColor.copy(alpha = 0.12f))),
+                // 薄薄一层色，给玻璃厚度。固定 6% 白而不是纯白 ——
+                // 玻璃的材质感来自采样到的内容，不是靠盖一层白。
+                tints = listOf(HazeTint(tintColor.copy(alpha = 0.06f))),
                 blurRadius = blurRadius,
                 // 极细颗粒，让模糊不至于像塑料。iOS 毛玻璃有这个
                 noiseFactor = 0.018f,
