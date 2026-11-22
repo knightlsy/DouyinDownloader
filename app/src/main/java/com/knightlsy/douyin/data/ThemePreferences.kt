@@ -74,4 +74,20 @@ class ThemePreferences(context: Context) {
     fun setAccentFromWallpaper(enabled: Boolean) {
         prefs.edit().putBoolean(accentFromWallpaperKey, enabled).apply()
     }
+
+    /* ════════ 自定义背景图 ════════
+     * 系统壁纸读取在不少国产 ROM 上被拒（WallpaperManager.drawable 返回 null），
+     * 那条路走不通时，用户从相册自选一张图 —— 不依赖任何系统权限。
+     * 存的是 App 私有目录里的路径，原图在选图时就被复制进来了。
+     */
+
+    private val customBackdropKey = "custom_backdrop_path"
+
+    fun customBackdrop(): String? = prefs.getString(customBackdropKey, null)
+
+    fun setCustomBackdrop(path: String?) {
+        prefs.edit().apply {
+            if (path == null) remove(customBackdropKey) else putString(customBackdropKey, path)
+        }.apply()
+    }
 }

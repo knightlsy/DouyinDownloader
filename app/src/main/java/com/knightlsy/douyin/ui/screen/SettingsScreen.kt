@@ -1,5 +1,7 @@
 package com.knightlsy.douyin.ui.screen
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -80,6 +82,11 @@ fun SettingsScreen(
     accentFromWallpaper: Boolean = false,
     /** 壁纸读取诊断（AppNavigation 从 ViewModel 收集后传入）。 */
     wallpaperDiag: String = "",
+    /** 是否已设置自定义背景图。 */
+    hasCustomBackdrop: Boolean = false,
+    /** 相册选中一张图后回调（复制 + 应用由 ViewModel 负责）。 */
+    onPickBackdrop: (android.net.Uri) -> Unit = {},
+    onClearBackdrop: () -> Unit = {},
     onAccentFromWallpaperChange: (Boolean) -> Unit = {},
     onBack: () -> Unit,
     /**
@@ -204,6 +211,65 @@ fun SettingsScreen(
                     checked = accentFromWallpaper,
                     onChange = ::toggleAccentFromWallpaper,
                 )
+                RowDivider()
+                // 相册自选背景图 —— 不走 WallpaperManager，绕开 ROM 限制。
+                // 系统壁纸读取在很多国产 ROM 上被直接拒绝，那条路走不通时只剩这条。
+                val picker = rememberLauncherForActivityResult(
+                    ActivityResultContracts.PickVisualMedia()
+                ) { uri -> if (uri != null) onPickBackdrop(uri) }
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(BgRadius.r2))
+                        .clickable {
+                            picker.launch(
+                                androidx.activity.result.PickVisualMediaRequest(
+                                    ActivityResultContracts.PickVisualMedia.ImageOnly
+                                )
+                            )
+                        }
+                        .padding(vertical = 14.dp, horizontal = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            text = "自定义背景图",
+                            fontFamily = FontFamily.SansSerif,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = c.ink,
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            text = if (hasCustomBackdrop) "已设置 · 点击更换"
+                            else "系统壁纸读不到？从相册挑一张，不依赖任何权限",
+                            fontFamily = FontFamily.SansSerif,
+                            fontSize = 11.5.sp,
+                            lineHeight = 16.sp,
+                            color = c.ink3,
+                        )
+                    }
+                    if (hasCustomBackdrop) {
+                        Text(
+                            text = "清除",
+                            fontFamily = FontFamily.SansSerif,
+                            fontSize = 12.sp,
+                            color = c.ink3,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(BgRadius.r1))
+                                .clickable { onClearBackdrop() }
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                        )
+                    }
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = "选择",
+                        fontFamily = FontFamily.SansSerif,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = c.accent,
+                    )
+                }
                 RowDivider()
                 // 壁纸读取的真实状态。这个功能曾经「开了没反应」，
                 // 大部分是 ROM 拒绝读取，被 runCatching 吞掉后界面上毫无反馈。

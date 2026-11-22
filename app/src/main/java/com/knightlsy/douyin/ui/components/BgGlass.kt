@@ -18,6 +18,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -69,7 +70,7 @@ fun BgGlassCard(
         modifier
             .clip(RoundedCornerShape(radius))
             .background(c.glass)
-            .drawBehind { drawGlassTopHighlight(radius, c.glassTop) }
+            .drawBehind { drawGlassTopHighlight(c.glassTop, isDark = c.paper.luminance() < 0.5f) }
             .border(1.dp, c.glassEdge, RoundedCornerShape(radius))
             .then(if (contentPadding) Modifier.padding(padding) else Modifier)
     ) {
@@ -89,7 +90,7 @@ fun BgGlassBox(
         modifier
             .clip(RoundedCornerShape(radius))
             .background(c.glass)
-            .drawBehind { drawGlassTopHighlight(radius, c.glassTop) }
+            .drawBehind { drawGlassTopHighlight(c.glassTop, isDark = c.paper.luminance() < 0.5f) }
             .border(1.dp, c.glassEdge, RoundedCornerShape(radius))
     ) {
         content()
@@ -109,7 +110,7 @@ fun Modifier.bgGlassSurface(radius: Dp = BgRadius.r3): Modifier {
     return this
         .clip(shape)
         .background(c.glass)
-        .drawBehind { drawGlassTopHighlight(radius, c.glassTop) }
+        .drawBehind { drawGlassTopHighlight(c.glassTop, isDark = c.paper.luminance() < 0.5f) }
         .border(1.dp, c.glassEdge, shape)
 }
 
@@ -119,23 +120,40 @@ fun Modifier.bgGlassSurface(radius: Dp = BgRadius.r3): Modifier {
  * 不用整块渐变 —— 那会变成「上半亮下半暗」的立体感，像拟物按钮。
  * 真正的玻璃只有边缘那一圈反光。
  */
-private fun DrawScope.drawGlassTopHighlight(radius: Dp, topColor: Color) {
-    // 只画边缘那一圈反光。之前是 22dp 高的整段渐变 ——
-    // 在浅色主题下那就是顶栏上横着一条 22dp 的白色块，非常突兀。
-    // 真实的玻璃高光只有上沿一条极窄的亮线，光从上方来，所以只在顶部。
-    val h = 10.dp.toPx().coerceAtMost(size.height)
-    drawRoundRect(
-        brush = Brush.verticalGradient(
+/**
+ * 玻璃上沿的水滴反光。
+ *
+ * ## 为什么不是「一条白线」
+ * 光打在弧面上，反射的是一条**中间最亮、两端渐隐**的细线 ——
+ * 就像水珠边缘那道高光。画成通栏等宽的白线，看起来是「贴了条胶带」，
+ * 而且深色底上 20% 白对比极强，会突兀地横在滑块上方。
+ *
+ * ## 为什么深浅两套参数
+ * 同一个白色，在 #14110F 上和 #F2EFEB 上的视觉重量完全不同：
+ * 深色底会把白色衬得刺眼，浅色底反而需要多一点才能看见边界。
+ * 所以深色压到 14%，浅色给到 26%。
+ *
+ * @param radius 容器圆角，用于让高光跟随形状（这里只取上沿，故不用）
+ * @param tint 高光色（通常是主题的 glassTop）
+ * @param isDark 当前是否为深色主题
+ */
+private fun DrawScope.drawGlassTopHighlight(tint: Color, isDark: Boolean) {
+    // 深色底白色对比强 → 更淡；浅色底需要多一点才看得见
+    val a = if (isDark) 0.14f else 0.26f
+    val lineH = 1.5.dp.toPx().coerceAtMost(size.height * 0.5f)
+    drawRect(
+        brush = Brush.horizontalGradient(
             colors = listOf(
-                topColor.copy(alpha = 0.6f),
+                Color.Transparent,
+                tint.copy(alpha = a),
+                tint.copy(alpha = a),
                 Color.Transparent,
             ),
-            startY = 0f,
-            endY = h,
+            startX = 0f,
+            endX = size.width,
         ),
         topLeft = Offset.Zero,
-        size = Size(size.width, h),
-        cornerRadius = CornerRadius(radius.toPx()),
+        size = Size(size.width, lineH),
     )
 }
 
@@ -253,7 +271,10 @@ fun Modifier.bgHazeGlass(
         .drawBehind {
             // 顶部内高光：光从上方来，上沿更亮
             if (r > 0.01f) {
-                drawGlassTopHighlight(radius, c.glassTop.copy(alpha = c.glassTop.alpha * r))
+                drawGlassTopHighlight(
+                    c.glassTop.copy(alpha = c.glassTop.alpha * r),
+                    isDark = c.paper.luminance() < 0.5f,
+                )
             }
         }
         .border(1.dp, c.glassEdge.copy(alpha = c.glassEdge.alpha * r), shape)

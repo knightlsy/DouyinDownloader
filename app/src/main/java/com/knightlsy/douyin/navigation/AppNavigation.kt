@@ -89,6 +89,8 @@ fun AppNavigation(mainViewModel: MainViewModel) {
     val wallpaperMood by mainViewModel.wallpaperMood.collectAsState()
     val accentFromWallpaper by mainViewModel.accentFromWallpaper.collectAsState()
     val wallpaperDiag by mainViewModel.wallpaperDiag.collectAsState()
+    val wallpaperTick by mainViewModel.wallpaperTick.collectAsState()
+    val hasCustomBackdrop = remember(wallpaperTick) { mainViewModel.hasCustomBackdrop() }
 
     val nonMainScreens = listOf("history", "about", "settings", "logs")
     BackHandler(enabled = currentScreen in nonMainScreens) {
@@ -153,6 +155,9 @@ fun AppNavigation(mainViewModel: MainViewModel) {
                     accentFromWallpaper = accentFromWallpaper,
                     onAccentFromWallpaperChange = { mainViewModel.setAccentFromWallpaper(it) },
                     wallpaperDiag = wallpaperDiag,
+                    hasCustomBackdrop = hasCustomBackdrop,
+                    onPickBackdrop = { uri -> mainViewModel.applyCustomBackdrop(uri) },
+                    onClearBackdrop = { mainViewModel.clearCustomBackdrop() },
                     onBack = { currentScreen = "main" }
                 )
                 "logs" -> LogScreen(onBack = { currentScreen = "settings" })

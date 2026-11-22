@@ -38,6 +38,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
@@ -105,6 +106,35 @@ class MainViewModel @JvmOverloads constructor(
     /** 壁纸读取诊断（设置页显示）。开关打开时立即取一次，失败原因直接可见。 */
     private val _wallpaperDiag = MutableStateFlow("")
     val wallpaperDiag: StateFlow<String> = _wallpaperDiag.asStateFlow()
+
+    /** 从相册选了一张背景图：复制进私有目录 + 立刻刷新诊断。 */
+    fun applyCustomBackdrop(uri: android.net.Uri) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val ok = WallpaperTint.saveCustomBackdrop(getApplication<Application>(), uri)
+            withContext(Dispatchers.Main) {
+                _wallpaperDiag.value = if (ok) "已设置自定义背景图" else "背景图保存失败"
+                _wallpaperMood.value = true      // 选了图就默认开启，否则选了也看不到
+                themePreferences.setWallpaperMood(true)
+                _wallpaperTick.value += 1        // 触发 Theme 重算
+            }
+        }
+    }
+
+    fun clearCustomBackdrop() {
+        viewModelScope.launch(Dispatchers.IO) {
+            WallpaperTint.clearCustomBackdrop(getApplication<Application>())
+            withContext(Dispatchers.Main) {
+                _wallpaperDiag.value = "已清除自定义背景"
+                _wallpaperTick.value += 1
+            }
+        }
+    }
+
+    /** 让 Theme 的 remember 重新执行（壁纸/背景图变化时）。 */
+    private val _wallpaperTick = MutableStateFlow(0)
+    val wallpaperTick: StateFlow<Int> = _wallpaperTick.asStateFlow()
+
+    fun hasCustomBackdrop(): Boolean = themePreferences.customBackdrop() != null
 
     fun refreshWallpaperDiag() {
         _wallpaperDiag.value = runCatching { WallpaperTint.get(getApplication<Application>()).diag }

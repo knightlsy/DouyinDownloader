@@ -65,6 +65,24 @@ object WallpaperTint {
      * 失败就返回 null，调用方回退到默认橙色与纯色底，界不能因此崩掉。
      */
     fun get(context: Context): Result {
+        // ① 用户自选的背景图优先。这条路不碰 WallpaperManager，
+        //    绕开「ROM 拒绝第三方读壁纸」这个死结。
+        val customPath = runCatching { ThemePreferences(context).customBackdrop() }.getOrNull()
+        if (!customPath.isNullOrBlank()) {
+            val f = java.io.File(customPath)
+            if (f.exists()) {
+                val stamp = f.lastModified() xor f.length()
+                val hit = cached
+                if (hit != null && cachedId == stamp.toInt()) return hit
+                val fresh = runCatching { fromImageFile(f) }.getOrElse {
+                    Result(null, null, diag = "自定义背景读取失败：${it.javaClass.simpleName}")
+                }
+                cachedId = stamp.toInt()
+                cached = fresh
+                return fresh
+            }
+        }
+
         val wm = WallpaperManager.getInstance(context)
 
         val id = runCatching {
@@ -84,6 +102,66 @@ object WallpaperTint {
         cachedId = id
         cached = fresh
         return fresh
+    }
+
+    /**
+     * 把相册选中的图复制进 App 私有目录并记下路径。
+     *
+     * 复制而不是记 URI：Photo Picker 给的 URI 权限是临时的，
+     * 重启后可能失效；私有目录里的文件永远读得到。
+     */
+    fun saveCustomBackdrop(context: Context, uri: android.net.Uri): Boolean = runCatching {
+        val dir = java.io.File(context.filesDir, "backdrop").apply { mkdirs() }
+        val out = java.io.File(dir, "custom.img")
+        context.contentResolver.openInputStream(uri)?.use { input ->
+            out.outputStream().use { output -> input.copyTo(output) }
+        } ?: return@runCatching false
+        ThemePreferences(context).setCustomBackdrop(out.absolutePath)
+        cachedId = Int.MIN_VALUE   // 让下次 get() 重算
+        cached = null
+        true
+    }.getOrDefault(false)
+
+    fun clearCustomBackdrop(context: Context) {
+        runCatching {
+            ThemePreferences(context).customBackdrop()?.let { java.io.File(it).delete() }
+        }
+        ThemePreferences(context).setCustomBackdrop(null)
+        cachedId = Int.MIN_VALUE
+        cached = null
+    }
+
+    /** 从任意图片文件取色 + 缩略图。逻辑与壁纸路径一致，只是数据源不同。 */
+    private fun fromImageFile(f: java.io.File): Result {
+        val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        android.graphics.BitmapFactory.decodeFile(f.absolutePath, bounds)
+        val ow = bounds.outWidth
+        val oh = bounds.outHeight
+        if (ow <= 0 || oh <= 0) return Result(null, null, diag = "图片无法解码（格式不支持？）")
+
+        // 先按 inSampleSize 粗降采样，避免一张 4000px 的照片直接解到内存
+        var sample = 1
+        while (ow / sample > SAMPLE * 4 && oh / sample > SAMPLE * 4) sample *= 2
+        val opts = android.graphics.BitmapFactory.Options().apply { inSampleSize = sample }
+        val full = android.graphics.BitmapFactory.decodeFile(f.absolutePath, opts)
+            ?: return Result(null, null, diag = "图片解码失败")
+
+        val scale = SAMPLE.toFloat() / max(full.width, full.height)
+        val tw = (full.width * scale).toInt().coerceAtLeast(1)
+        val th = (full.height * scale).toInt().coerceAtLeast(1)
+        val small = Bitmap.createScaledBitmap(full, tw, th, true)
+        if (small !== full) full.recycle()
+
+        val accent = constrainAccent(small)
+        val hex = accent?.let { c ->
+            String.format("#%02X%02X%02X",
+                (c.red * 255).toInt(), (c.green * 255).toInt(), (c.blue * 255).toInt())
+        }
+        return Result(
+            accent = accent,
+            backdrop = small.asImageBitmap(),
+            diag = "自定义背景 ${ow}×${oh} → 强调色 ${hex ?: "未提取到主色"}",
+        )
     }
 
     private fun compute(wm: WallpaperManager): Result {

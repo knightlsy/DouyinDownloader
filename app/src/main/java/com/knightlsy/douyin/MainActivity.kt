@@ -72,12 +72,15 @@ class MainActivity : ComponentActivity() {
 
             val wallpaperMood by mainViewModel.wallpaperMood.collectAsState()
             val accentFromWallpaper by mainViewModel.accentFromWallpaper.collectAsState()
+            // 选/清除自定义背景图时由 ViewModel 递增；与 onResume 的 tick 相加，
+            // 两者任一变化都会让 Theme 里的 remember 重算。
+            val vmWallpaperTick by mainViewModel.wallpaperTick.collectAsState()
 
             DouyinDownloaderTheme(
                 darkTheme = isDarkMode,
                 wallpaperMood = wallpaperMood,
                 accentFromWallpaper = accentFromWallpaper,
-                wallpaperRefreshKey = wallpaperTick.intValue,
+                wallpaperRefreshKey = wallpaperTick.intValue + vmWallpaperTick,
             ) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
