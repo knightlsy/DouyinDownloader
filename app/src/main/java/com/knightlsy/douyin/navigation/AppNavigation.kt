@@ -29,6 +29,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -207,20 +209,27 @@ private fun BottomTabBar(
     val c = LocalBgColors.current
     val selectedRoute = tabRouteOf(currentRoute)
 
+    // 系统手势条由系统绘制，App 去不掉；把它「包进来」比在它上面留一条缝好看。
+    // 做法：玻璃容器延伸到屏幕底部（含导航栏 inset），Tab 内容仍居中在 56dp 区域内，
+    // 手势条就落在玻璃里，视觉上是一个整体，而不是「胶囊 + 外面一条白线」。
+    val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     Box(
         modifier
-            .navigationBarsPadding()
-            // bottom 从 12 提到 20：12dp 时容器下缘几乎贴住系统 Home 指示条，
-            // 那条半透明的系统横条看起来像容器里多画了一条线。
-            .padding(start = BgSpace.gutter, end = BgSpace.gutter, bottom = 20.dp)
+            .padding(start = BgSpace.gutter, end = BgSpace.gutter, bottom = 0.dp)
             .fillMaxWidth()
-            .height(56.dp)
+            .height(56.dp + navBottom)
             // 外阴影先于 clip：clip=false 让它画在形状外面，浮起来才有「离开页面」的重量。
             .shadow(14.dp, RoundedCornerShape(BgRadius.r4), clip = false)
             // 真玻璃：采样页面内容，模糊后透出来
             .bgHazeGlass(haze, BgRadius.r4, blurRadius = 22.dp)
     ) {
-        BoxWithConstraints(Modifier.fillMaxSize()) {
+        // 内容只占上面 56dp，下面的 navBottom 留给手势条
+        BoxWithConstraints(
+            Modifier
+                .fillMaxWidth()
+                .height(56.dp)
+                .align(Alignment.TopCenter)
+        ) {
             val tabWidth = maxWidth / 3
             val selectedIndex = MainTabs
                 .indexOfFirst { it.first == selectedRoute }

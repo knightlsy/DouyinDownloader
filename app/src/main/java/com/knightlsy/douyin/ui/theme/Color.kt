@@ -158,7 +158,7 @@ val GlassEdgeDark = Color(0x24FFFFFF)        // 14% 白：玻璃边缘
 val GlassTopDark = Color(0x33FFFFFF)         // 20% 白：顶部内高光
 
 val GlassTintLight = Color(0x70FFFFFF)       // 44% 白：浅色主题下玻璃更实（浅底透色难）
-val GlassEdgeLight = Color(0xB8FFFFFF)       // 72% 白
+val GlassEdgeLight = Color(0x8CFFFFFF)       // 55% 白（72% 在米色底上边缘太抢眼，像多了一条白线）
 val GlassTopLight = Color(0x33FFFFFF)        // 20% 白高光（纯白会在浅色顶栏上糊成一块白板）
 
 /** 页面背景的柔光斑颜色（深色主题）。极低不透明度，只给色温。 */
