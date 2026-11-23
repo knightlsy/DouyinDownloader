@@ -213,8 +213,9 @@ private fun BottomTabBar(
             .padding(start = BgSpace.gutter, end = BgSpace.gutter, bottom = 12.dp)
             .fillMaxWidth()
             .height(56.dp)
-            // 外阴影先于 clip：clip=false 让它画在形状外面，浮起来才有「离开页面」的重量。
-            .shadow(14.dp, RoundedCornerShape(BgRadius.r4), clip = false)
+            // 去掉 shadow：clip=false 的阴影从形状边缘向外扩散、边缘处最深，
+            // 在浅色底上看起来就是贴着容器的一圈灰线 —— 用户说的「小白条 / 浅灰的线」是它，
+            // 不是之前以为的 border。先去掉验证，别的一律不动。
             // 真玻璃：采样页面内容，模糊后透出来
             .bgHazeGlass(haze, BgRadius.r4, blurRadius = 22.dp)
     ) {
