@@ -1,7 +1,6 @@
 package com.knightlsy.douyin.ui.components
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
@@ -69,7 +68,7 @@ fun BgGlassCard(
         modifier
             .clip(RoundedCornerShape(radius))
             .background(c.glass)
-            .border(1.dp, c.glassEdge, RoundedCornerShape(radius))
+            // 同上：不画描边
             .then(if (contentPadding) Modifier.padding(padding) else Modifier)
     ) {
         content()
@@ -88,7 +87,7 @@ fun BgGlassBox(
         modifier
             .clip(RoundedCornerShape(radius))
             .background(c.glass)
-            .border(1.dp, c.glassEdge, RoundedCornerShape(radius))
+            // 同上：不画描边
     ) {
         content()
     }
@@ -107,7 +106,7 @@ fun Modifier.bgGlassSurface(radius: Dp = BgRadius.r3): Modifier {
     return this
         .clip(shape)
         .background(c.glass)
-        .border(1.dp, c.glassEdge, shape)
+        // 同上：不画描边
 }
 
 /**
@@ -235,5 +234,6 @@ fun Modifier.bgHazeGlass(
                 noiseFactor = 0.018f,
             )
         }
-        .border(1.dp, c.glassEdge.copy(alpha = c.glassEdge.alpha * r), shape)
+        // 不画描边：1dp 边界在浅色底上不管是白是灰，都是一条看得见的线。
+        // 玻璃的边界交给外阴影和模糊本身。
 }
