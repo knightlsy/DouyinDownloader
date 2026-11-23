@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.knightlsy.douyin.data.LogStore
 import com.knightlsy.douyin.ui.components.BgGhostButton
+import com.knightlsy.douyin.ui.components.bgGlassSurface
 import com.knightlsy.douyin.ui.components.BgHair
 import com.knightlsy.douyin.ui.components.BgSectionLabel
 import com.knightlsy.douyin.ui.theme.BgRadius
@@ -123,8 +124,8 @@ fun LogScreen(onBack: () -> Unit) {
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(BgRadius.r2))
-                    .background(c.surface)
+                    // 和其它页面统一：卡片走玻璃，日志预览框保持实心（等宽小字在玻璃上会糊）
+                    .bgGlassSurface(BgRadius.r2)
                     .padding(horizontal = 16.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
