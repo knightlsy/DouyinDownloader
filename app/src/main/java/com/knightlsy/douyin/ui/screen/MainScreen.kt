@@ -25,7 +25,6 @@ import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -36,7 +35,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.shadow
-import com.knightlsy.douyin.ui.components.bgGlassSurface
 import androidx.compose.ui.zIndex
 import com.knightlsy.douyin.ui.components.LocalBgHaze
 import com.knightlsy.douyin.ui.components.rememberBgHaze
@@ -63,7 +61,6 @@ import com.knightlsy.douyin.data.HistoryRepository
 import com.knightlsy.douyin.data.ContentType
 import com.knightlsy.douyin.ui.components.BgMonoLabel
 import com.knightlsy.douyin.ui.components.BgSectionLabel
-import com.knightlsy.douyin.ui.components.BgWarn
 import com.knightlsy.douyin.ui.screen.components.CollectionPreviewCard
 import com.knightlsy.douyin.ui.screen.components.ImageViewerDialog
 import com.knightlsy.douyin.ui.screen.components.LinkInputCard
