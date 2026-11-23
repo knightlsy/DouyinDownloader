@@ -210,7 +210,9 @@ private fun BottomTabBar(
     Box(
         modifier
             .navigationBarsPadding()
-            .padding(start = BgSpace.gutter, end = BgSpace.gutter, bottom = 12.dp)
+            // bottom 从 12 提到 20：12dp 时容器下缘几乎贴住系统 Home 指示条，
+            // 那条半透明的系统横条看起来像容器里多画了一条线。
+            .padding(start = BgSpace.gutter, end = BgSpace.gutter, bottom = 20.dp)
             .fillMaxWidth()
             .height(56.dp)
             // 外阴影先于 clip：clip=false 让它画在形状外面，浮起来才有「离开页面」的重量。

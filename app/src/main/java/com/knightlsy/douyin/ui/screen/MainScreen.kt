@@ -214,13 +214,6 @@ fun MainScreen(
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(
-                Modifier
-                    .size(6.dp)
-                    .clip(CircleShape)
-                    .background(c.accent)
-            )
-            Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 // 标题用系统无衬线 + 粗字重 + 负字距。
                 // 之前是 Monospace 11.5sp + letterSpacing 1.8 —— 等宽中文字距还被撑开，
@@ -262,7 +255,6 @@ fun MainScreen(
                 BgSectionLabel(
                     text = "链接解析",
                     modifier = Modifier.padding(horizontal = BgSpace.gutter),
-                    accent = "PARSE",
                 )
                 Spacer(Modifier.height(10.dp))
                 LinkInputCard(
@@ -393,20 +385,6 @@ fun MainScreen(
                 SubduedStats(stats)
             }
 
-            // 空态提示（怎么用）
-            if (uiState.contentInfo == null && tasks.isEmpty() && !uiState.isLoading) {
-                item {
-                    Spacer(Modifier.height(30.dp))
-                    Column(Modifier.padding(horizontal = BgSpace.gutter)) {
-                        BgWarn(
-                            title = "怎么用",
-                            body = "在抖音里点分享 → 复制链接 → 回到这里会自动填入 → 点解析。\n" +
-                                "视频下载到相册；图集可以逐张挑选，实况图会连同动态一起保存。",
-                            critical = false,
-                        )
-                    }
-                }
-            }
         }
     }
 
@@ -495,7 +473,6 @@ private fun OnboardingGuideCard() {
     Column {
         BgSectionLabel(
             "开始使用",
-            accent = "START",
             modifier = Modifier.padding(horizontal = BgSpace.gutter),
         )
         Spacer(Modifier.height(10.dp))

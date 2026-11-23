@@ -195,6 +195,7 @@ fun LinkInputCard(
                 // 之前只能把 App 杀掉重开。
                 BgGhostButton(
                     text = "取消",
+                    modifier = Modifier.weight(0.5f),
                     height = 46.dp,
                     color = c.ink,
                     onClick = {
@@ -205,6 +206,9 @@ fun LinkInputCard(
             } else {
                 BgGhostButton(
                     text = "粘贴",
+                    // 和「解析」按 1:2 分配。原来粘贴自适应宽度、解析 weight(1f)，
+                    // 实际比例约 1:3，粘贴像附属品、解析像被拉长的背景条。
+                    modifier = Modifier.weight(0.5f),
                     height = 46.dp,
                     onClick = {
                         dismissKeyboard()

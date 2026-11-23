@@ -313,7 +313,8 @@ fun BgPrimaryButton(
             }
             .clip(RoundedCornerShape(BgRadius.r2))
             .background(if (enabled && !loading) c.accent else c.hair)
-            .bgInnerShadow(shadowAlpha)
+            // 禁用/加载中不画内阴影：底是 hair 时内阴影会变成一圈深边，看起来像脏边
+            .bgInnerShadow(if (enabled && !loading) shadowAlpha else 0f)
             .drawWithContent {
                 drawContent()
                 // 斜向白渐变带从左到右扫过；读 sweep.value 在 draw 阶段，不触发重组
