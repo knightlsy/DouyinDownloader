@@ -312,7 +312,16 @@ fun BgPrimaryButton(
                 scaleY = scale.value
             }
             .clip(RoundedCornerShape(BgRadius.r2))
-            .background(if (enabled && !loading) c.accent else c.hair)
+            // 禁用态用「淡化的主色」而不是 hair 灰：
+            // 灰块看起来像「这个按钮本来就是灰的」，用户不知道它是主操作；
+            // 淡橙则一眼能认出「是主按钮，但现在还不能点」。
+            .background(
+                when {
+                    loading -> c.hair
+                    enabled -> c.accent
+                    else -> c.accent.copy(alpha = 0.30f)
+                }
+            )
             // 禁用/加载中不画内阴影：底是 hair 时内阴影会变成一圈深边，看起来像脏边
             .bgInnerShadow(if (enabled && !loading) shadowAlpha else 0f)
             .drawWithContent {
@@ -366,7 +375,8 @@ fun BgPrimaryButton(
             Text(
                 text = text,
                 style = MaterialTheme.typography.labelLarge,
-                color = if (enabled) c.accentInk else c.ink3,
+                // 禁用态底是 30% 淡橙，白字在上面看不清，改用深色文字
+                color = if (enabled) c.accentInk else c.ink2,
                 textAlign = TextAlign.Center,
             )
         }
@@ -406,7 +416,8 @@ fun BgGhostButton(
                 scaleY = scale.value
             }
             .clip(RoundedCornerShape(BgRadius.r2))
-            .border(BorderStroke(1.dp, c.hair), RoundedCornerShape(BgRadius.r2))
+            // 次按钮描边压淡，避免和主按钮抢注意力
+            .border(BorderStroke(1.dp, c.hair.copy(alpha = 0.6f)), RoundedCornerShape(BgRadius.r2))
             .alpha(if (enabled) 1f else 0.45f)
             .bgInnerShadow(shadowAlpha)
             .then(
