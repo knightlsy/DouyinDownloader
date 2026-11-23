@@ -158,7 +158,12 @@ val GlassEdgeDark = Color(0x24FFFFFF)        // 14% 白：玻璃边缘
 val GlassTopDark = Color(0x33FFFFFF)         // 20% 白：顶部内高光
 
 val GlassTintLight = Color(0x70FFFFFF)       // 44% 白：浅色主题下玻璃更实（浅底透色难）
-val GlassEdgeLight = Color(0x8CFFFFFF)       // 55% 白（72% 在米色底上边缘太抢眼，像多了一条白线）
+/**
+ * 浅色主题的玻璃描边用**极淡的暗边**，不是白边。
+ * 浅色玻璃叠在米色底上，白描边只会变成一条白线（用户看到的「小白条」就是它）；
+ * 而一点点暗边才能把玻璃从背景里分离出来 —— iOS 浅色毛玻璃就是这么做的。
+ */
+val GlassEdgeLight = Color(0x14000000)       // 8% 黑
 val GlassTopLight = Color(0x33FFFFFF)        // 20% 白高光（纯白会在浅色顶栏上糊成一块白板）
 
 /** 页面背景的柔光斑颜色（深色主题）。极低不透明度，只给色温。 */
