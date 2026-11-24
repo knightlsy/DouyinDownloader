@@ -57,6 +57,9 @@ import com.knightlsy.douyin.viewmodel.MainViewModel
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.ui.draw.alpha
 
 /**
  * 底部 Tab 的三个一级路由。关于页（about）与日志页（logs）是设置页的
@@ -121,6 +124,10 @@ fun AppNavigation(mainViewModel: MainViewModel) {
      * 否则会算两次。
      */
     Column(Modifier.fillMaxSize().systemBarsPadding()) {
+        // 标题区。位置和高度在任何页面都不变，只有透明度跟着页面走 ——
+        // 这样 Tab 栏永远贴在标题正下方，切页时不会跳。
+        HomeHeader(visible = currentScreen == "main")
+
         TabBar(
             currentRoute = currentScreen,
             onSelect = { route -> if (route != currentScreen) currentScreen = route },
@@ -185,6 +192,60 @@ fun AppNavigation(mainViewModel: MainViewModel) {
             }
         }
       }
+    }
+}
+
+
+/**
+ * 首页标题栏（「抖音下载器 / 粘贴链接即可下载」）。
+ *
+ * 提到这一层是为了结构稳定：用户要的是固定的「标题 > Tab > 内容」三段。
+ * 如果标题留在 MainScreen 内部，它要么被 Tab 顶掉，要么跟着内容一起滑走。
+ *
+ * 用 alpha 淡出而不是 AnimatedVisibility：后者会把自己从布局里摘掉，
+ * 高度瞬间塌陷，Tab 栏就往上跳一截。这里必须始终占住同样高度。
+ */
+@Composable
+private fun HomeHeader(visible: Boolean) {
+    val c = LocalBgColors.current
+    val alpha by animateFloatAsState(
+        targetValue = if (visible) 1f else 0f,
+        animationSpec = tween(durationMillis = if (visible) 220 else 140),
+        label = "home_header_alpha",
+    )
+
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(start = BgSpace.gutter, end = BgSpace.gutter, top = 10.dp, bottom = 8.dp)
+            .alpha(alpha)
+            .clip(RoundedCornerShape(BgRadius.r3))
+            .background(c.glass)
+            .border(1.dp, c.glassEdge, RoundedCornerShape(BgRadius.r3))
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            // 系统无衬线 + 粗字重 + 负字距。等宽只适合数字和代码，
+            // 中文笔画密度高，等宽加字距会把标题撑散。
+            Text(
+                text = "抖音下载器",
+                fontFamily = FontFamily.SansSerif,
+                fontSize = 17.sp,
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = (-0.2).sp,
+                color = c.ink,
+            )
+            Spacer(Modifier.height(1.dp))
+            Text(
+                text = "粘贴链接即可下载",
+                fontFamily = FontFamily.SansSerif,
+                fontSize = 11.5.sp,
+                fontWeight = FontWeight.Normal,
+                letterSpacing = 0.sp,
+                color = c.ink3,
+            )
+        }
     }
 }
 

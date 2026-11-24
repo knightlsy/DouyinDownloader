@@ -1,6 +1,5 @@
 package com.knightlsy.douyin.ui.screen
 
-import dev.chrisbanes.haze.hazeSource
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
@@ -33,14 +32,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.zIndex
-import com.knightlsy.douyin.ui.components.LocalBgHaze
-import com.knightlsy.douyin.ui.components.rememberBgHaze
-import com.knightlsy.douyin.ui.components.bgHazeGlass
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.runtime.derivedStateOf
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -101,27 +93,9 @@ fun MainScreen(
      */
     onSelectTab: (String) -> Unit = {},
 ) {
-    // 玻璃采样源。本屏自己建：顶栏和 Tab 栏的玻璃都采它，
-    // 源是下面的 LazyColumn（滚动的内容从玻璃后面透出来）。
-    // 注意 LocalBgHaze 目前没有任何地方 provides，实际总走兜底分支 ——
-    // 保留读取是为了将来真要跨屏共享时不用改调用方。
-    val haze = LocalBgHaze.current ?: rememberBgHaze()
+    // 顶栏和 Tab 栏都移到 AppNavigation 了，本屏不再有玻璃，也就不需要采样源。
 
-    // 顶栏玻璃只在滚动后出现 —— iOS 导航栏就是这么做的。
-    // 停在顶部时如果也画玻璃，它背后没有任何内容（列表从 96dp 才开始），
-    // Haze 采到的是纯色 paper，模糊纯色还是纯色，结果就是一块与背景
-    // 有微小色差的矩形。那不是玻璃，是色块。
     val listState = rememberLazyListState()
-    val scrolled by remember {
-        derivedStateOf {
-            listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 4
-        }
-    }
-    val barReveal by animateFloatAsState(
-        targetValue = if (scrolled) 1f else 0f,
-        animationSpec = tween(durationMillis = 200),
-        label = "topBarReveal",
-    )
     val c = LocalBgColors.current
     val context = LocalContext.current
 
@@ -205,55 +179,13 @@ fun MainScreen(
             }
     ) {
 
-        /* ── 顶栏：玻璃悬浮条，只留身份信息 ── */
-        Row(
-            Modifier
-                .align(Alignment.TopCenter)
-                // Box 子节点按声明顺序绘制；顶栏声明在 LazyColumn 之前，不抬层级会被内容盖住
-                .zIndex(1f)
-                .fillMaxWidth()
-                .padding(start = BgSpace.gutter, end = BgSpace.gutter, top = 10.dp, bottom = 8.dp)
-                .shadow(14.dp * barReveal, RoundedCornerShape(BgRadius.r3), clip = false)
-                // 真玻璃：采样下方滚过的内容。停在顶部时 reveal=0，完全透明。
-                .bgHazeGlass(haze, BgRadius.r3, reveal = barReveal)
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(Modifier.weight(1f)) {
-                // 标题用系统无衬线 + 粗字重 + 负字距。
-                // 之前是 Monospace 11.5sp + letterSpacing 1.8 —— 等宽中文字距还被撑开，
-                // 比正文还小，等于没标题。中文笔画密度高，等宽只适合数字和代码。
-                // 按设计稿参数：17px/650 + 副标题 11.5px。20sp Bold 在玻璃条里太重，
-                // 和 12sp 副标题的对比也过于悬殊，观感笨 —— 回到稿子的量级。
-                Text(
-                    text = "抖音下载器",
-                    fontFamily = FontFamily.SansSerif,
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    letterSpacing = (-0.2).sp,
-                    color = c.ink,
-                )
-                Spacer(Modifier.height(1.dp))
-                Text(
-                    text = "粘贴链接即可下载",
-                    fontFamily = FontFamily.SansSerif,
-                    fontSize = 11.5.sp,
-                    fontWeight = FontWeight.Normal,
-                    letterSpacing = 0.sp,
-                    color = c.ink3,
-                )
-            }
-        }
-
         /* ── 内容 ── */
         LazyColumn(
-            // 这一列是玻璃的「采样源」：顶栏背后能看到列表滚过去的颜色
-            Modifier.fillMaxSize().hazeSource(haze),
+            Modifier.fillMaxSize(),
             state = listState,
-            // top 96dp：顶栏是叠加层不占布局空间，内容要自己让出位置。
-            // Tab 栏已经移到 AppNavigation 里固定住（在内容动画之外），不在本屏内，
-            // 所以这里不用再算它的高度。bottom 24dp —— 底部没有悬浮栏了。
-            contentPadding = PaddingValues(top = 96.dp, bottom = 24.dp),
+            // 顶栏和 Tab 栏都在 AppNavigation 里，占的是布局空间，本屏内容
+            // 从它们下面开始即可 —— 只留 12dp 呼吸空间。bottom 24dp 避手势条。
+            contentPadding = PaddingValues(top = 12.dp, bottom = 24.dp),
         ) {
 
             // 链接输入 —— 唯一主角，紧跟顶栏
