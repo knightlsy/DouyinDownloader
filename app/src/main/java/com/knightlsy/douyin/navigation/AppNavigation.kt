@@ -1,9 +1,5 @@
 package com.knightlsy.douyin.navigation
 
-import dev.chrisbanes.haze.HazeState
-import com.knightlsy.douyin.ui.components.bgHazeGlass
-import com.knightlsy.douyin.ui.components.rememberBgHaze
-import dev.chrisbanes.haze.hazeSource
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
@@ -58,6 +54,9 @@ import com.knightlsy.douyin.ui.theme.BgSpace
 import com.knightlsy.douyin.ui.theme.LocalBgColors
 import com.knightlsy.douyin.viewmodel.HistoryViewModel
 import com.knightlsy.douyin.viewmodel.MainViewModel
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.shape.RoundedCornerShape
 
 /**
  * 底部 Tab 的三个一级路由。关于页（about）与日志页（logs）是设置页的
@@ -111,11 +110,22 @@ fun AppNavigation(mainViewModel: MainViewModel) {
         }
     }
 
-    // Tab 栏已经搬进 MainScreen（顶栏下方），这里不再需要 Haze 源 ——
-    // 原来的 haze 只服务于底部悬浮 Tab，现在没有消费者。
-    // 各屏自己的玻璃各建各的源（MainScreen 用它的 LazyColumn）。
-    Box(Modifier.fillMaxSize()) {
-      Box(Modifier.fillMaxSize()) {
+    /*
+     * 布局：Tab 栏固定在顶部，内容区在它下面单独做转场。
+     *
+     * 上一版把 Tab 搬进 MainScreen 内部，结果它成了 AnimatedContent 的一部分 ——
+     * 点 Tab 时整个首页（连 Tab 一起）缩到 92% 滑走，观感是「进入二级菜单」。
+     * 用户要的是「卡片在 Tab 下面左右线性切换」，Tab 本身必须静止。
+     *
+     * 状态栏内边距在这里统一处理，各页面自己的 systemBarsPadding 已移除，
+     * 否则会算两次。
+     */
+    Column(Modifier.fillMaxSize().systemBarsPadding()) {
+        TabBar(
+            currentRoute = currentScreen,
+            onSelect = { route -> if (route != currentScreen) currentScreen = route },
+        )
+        Box(Modifier.weight(1f)) {
         AnimatedContent(
             targetState = currentScreen,
             transitionSpec = {
@@ -175,18 +185,18 @@ fun AppNavigation(mainViewModel: MainViewModel) {
             }
         }
       }
-
-        // Tab 栏移到首页内部了（「链接解析」上方）。
-        // 它原来悬浮在屏幕底部，56dp 高 + 12dp 边距直接压在内容上，
-        // 设置页滚到底时最后几行字被盖住 —— 那是布局问题，不是内容问题。
     }
 }
 
 /**
- * 底部 Tab 栏。
+ * 一级导航 Tab 栏（首页 / 历史 / 设置），固定在内容区顶部。
  *
- * 结构上是悬浮玻璃条：rgba(255,255,255,.045) 底 + 1dp 边线 + 26dp 圆角，
- * 高 56dp，通过 navigationBarsPadding 避开手势条。选中的表达只有两处：
+ * 位置是页面顶部而不是底部：底部悬浮时会压住设置页最后一屏文字。
+ * 关键性质是**它不参与页面转场** —— 内容在它下面缩放滑动，它自己静止，
+ * 这才是「卡片在 Tab 下方切换」的观感。放进 AnimatedContent 里就会变成
+ * 「进入二级菜单」那种整页被替换的效果。
+ *
+ * 结构：半透明卡片 + 1dp 边线 + 26dp 圆角，高 56dp。选中的表达只有两处：
  * 文字提亮加粗 + 下方 2dp 橙色指示条 —— 不整片染色（motion-spec ③）。
  *
  * 指示条随选中项横向滑动（240ms · cubic-bezier(.34,1.45,.64,1)，
@@ -197,7 +207,6 @@ fun AppNavigation(mainViewModel: MainViewModel) {
 internal fun TabBar(
     currentRoute: String,
     onSelect: (String) -> Unit,
-    haze: HazeState,
     modifier: Modifier = Modifier,
 ) {
     val c = LocalBgColors.current
@@ -207,11 +216,13 @@ internal fun TabBar(
         modifier
             .fillMaxWidth()
             .height(56.dp)
-            // 去掉 shadow：clip=false 的阴影从形状边缘向外扩散、边缘处最深，
-            // 在浅色底上看起来就是贴着容器的一圈灰线 —— 用户说的「小白条 / 浅灰的线」是它，
-            // 不是之前以为的 border。先去掉验证，别的一律不动。
-            // 真玻璃：采样页面内容，模糊后透出来
-            .bgHazeGlass(haze, BgRadius.r4, blurRadius = 22.dp)
+            // 不再采 Haze：Tab 栏现在固定在内容动画之外，背后是各页面的标题栏
+            // 而不是滚动的列表，采样意义不大；半透明 + 细边就够，也省掉一层模糊开销。
+            // 注意去掉 shadow：clip=false 的阴影边缘处最深，浅色底上看着就是一圈灰线
+            // （用户说的「小白条」是它，不是 border）。
+            .clip(RoundedCornerShape(BgRadius.r4))
+            .background(c.glass)
+            .border(1.dp, c.glassEdge, RoundedCornerShape(BgRadius.r4))
     ) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val tabWidth = maxWidth / 3

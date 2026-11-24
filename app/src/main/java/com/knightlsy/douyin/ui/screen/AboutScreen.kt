@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -129,7 +128,6 @@ fun AboutScreen(onBack: () -> Unit) {
             .fillMaxSize()
             // 不铺纸色：Theme 已经铺过底，这里再铺一层会把壁纸层整个盖住
             // （这就是「背景功能开了没效果」的根因 —— 跟壁纸读不到无关）
-            .systemBarsPadding()
     ) {
         // 顶栏
         Row(

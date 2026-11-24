@@ -21,7 +21,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -75,9 +74,6 @@ import com.knightlsy.douyin.viewmodel.MainViewModel
 import com.knightlsy.douyin.data.DownloadStatus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import com.knightlsy.douyin.navigation.TabBar
-import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalDensity
 
 /**
  * 主页。
@@ -85,7 +81,8 @@ import androidx.compose.ui.platform.LocalDensity
  * 本轮（底部导航重构）的结构变化：
  *
  *  1. 顶栏去掉「历史」「设置」两个文字按钮 —— 一级入口收进 Tab 栏
- *     （见本文件的 TabBar 调用 / navigation.TabBar 定义），顶栏只留身份信息：6dp 圆点 +
+ *     （Tab 栏由 AppNavigation 渲染，位置在内容动画之外，转场时保持静止），
+ *     顶栏只留身份信息：6dp 圆点 +
  *     应用名 + 副标题，并改成玻璃悬浮条（16dp 圆角 + 白 4.2% 底 + 1dp 白 13% 边）。
  *  2. 信息顺序按「打开 App 是为了粘贴链接」重排：链接解析 → 预览 →
  *     空态/最近解析 → 任务 → 统计（弱化）。统计仍保留三个读数，只是
@@ -98,8 +95,9 @@ import androidx.compose.ui.platform.LocalDensity
 fun MainScreen(
     viewModel: MainViewModel = viewModel(),
     /**
-     * 切换一级页面。Tab 栏从屏幕底部挪到「链接解析」上方之后由本屏负责渲染，
-     * 所以要把回调传进来。默认空实现，单独预览本屏时不会崩。
+     * 保留参数位：Tab 栏现在由 AppNavigation 统一渲染（在内容动画外层，转场时静止），
+     * 本屏不再需要它。留空实现是为了不让外层调用点编译失败，将来若要
+     * 在页面内部放跳转入口可以直接复用。
      */
     onSelectTab: (String) -> Unit = {},
 ) {
@@ -127,11 +125,6 @@ fun MainScreen(
     val c = LocalBgColors.current
     val context = LocalContext.current
 
-    // 顶栏实测高度。初值 78dp 只用于首帧，onSizeChanged 之后立刻被真实值替换。
-    val density = LocalDensity.current
-    var topBarHeight by remember { mutableStateOf(78.dp) }
-    // Tab 栏高 56dp + 与顶栏之间 12dp 间距
-    val chromeHeight = topBarHeight + 56.dp + 12.dp
 
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val tasks by viewModel.downloadTasks.collectAsStateWithLifecycle()
@@ -210,7 +203,6 @@ fun MainScreen(
                     center = Offset(size.width * 0.92f, size.height * 0.72f),
                 )
             }
-            .systemBarsPadding()
     ) {
 
         /* ── 顶栏：玻璃悬浮条，只留身份信息 ── */
@@ -220,11 +212,6 @@ fun MainScreen(
                 // Box 子节点按声明顺序绘制；顶栏声明在 LazyColumn 之前，不抬层级会被内容盖住
                 .zIndex(1f)
                 .fillMaxWidth()
-                // 实测顶栏高度，给下面的 Tab 栏和列表起始位置用。
-                // 不能用常量：顶栏高度由 17sp 标题 + 11.5sp 副标题的行高决定，
-                // sp 随系统字体缩放和 CJK 字体度量变化，大字号下会比默认高十几 dp，
-                // 硬编码就会让 Tab 栏压住副标题。
-                .onSizeChanged { topBarHeight = with(density) { it.height.toDp() } }
                 .padding(start = BgSpace.gutter, end = BgSpace.gutter, top = 10.dp, bottom = 8.dp)
                 .shadow(14.dp * barReveal, RoundedCornerShape(BgRadius.r3), clip = false)
                 // 真玻璃：采样下方滚过的内容。停在顶部时 reveal=0，完全透明。
@@ -258,33 +245,15 @@ fun MainScreen(
             }
         }
 
-        /* ── Tab 栏：首页 / 历史 / 设置 ──
-          原来悬浮在屏幕底部，56dp 高 + 12dp 边距压在内容上，
-          设置页滚到底时最后几行被盖住。挪到标题下方、链接解析上方，
-          变成页面的一部分，不再遮挡任何东西。 */
-        Box(
-            Modifier
-                .align(Alignment.TopCenter)
-                .zIndex(1f)
-                .fillMaxWidth()
-                .padding(start = BgSpace.gutter, end = BgSpace.gutter, top = topBarHeight),
-        ) {
-            TabBar(
-                currentRoute = "main",
-                onSelect = onSelectTab,
-                haze = haze,
-            )
-        }
-
         /* ── 内容 ── */
         LazyColumn(
             // 这一列是玻璃的「采样源」：顶栏背后能看到列表滚过去的颜色
             Modifier.fillMaxSize().hazeSource(haze),
             state = listState,
-            // 顶栏和 Tab 栏都是叠加层、不占布局空间，内容要自己让出位置。
-            // top 用实测值算（顶栏高度 + 56dp Tab + 12dp 间距），不写死常量 ——
-            // 写死的话字号一变就和实际位置对不上。
-            contentPadding = PaddingValues(top = chromeHeight, bottom = 24.dp),
+            // top 96dp：顶栏是叠加层不占布局空间，内容要自己让出位置。
+            // Tab 栏已经移到 AppNavigation 里固定住（在内容动画之外），不在本屏内，
+            // 所以这里不用再算它的高度。bottom 24dp —— 底部没有悬浮栏了。
+            contentPadding = PaddingValues(top = 96.dp, bottom = 24.dp),
         ) {
 
             // 链接输入 —— 唯一主角，紧跟顶栏
