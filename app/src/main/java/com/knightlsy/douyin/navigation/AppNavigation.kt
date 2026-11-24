@@ -131,6 +131,9 @@ fun AppNavigation(mainViewModel: MainViewModel) {
         TabBar(
             currentRoute = currentScreen,
             onSelect = { route -> if (route != currentScreen) currentScreen = route },
+            // 标题卡自身 bottom 有 8dp，这里再加 4dp，两者合计 12dp。
+            // 原来只有 8dp，标题和 Tab 粘在一起，分组关系看不出来。
+            modifier = Modifier.padding(top = 4.dp),
         )
         Box(Modifier.weight(1f)) {
         AnimatedContent(
@@ -275,6 +278,10 @@ internal fun TabBar(
 
     Box(
         modifier
+            // 左右留和标题卡、输入框、步骤卡一样的 gutter（20dp）。
+            // 少了这一层，Tab 会横跨整屏、边距只剩几像素，和上面下面所有卡片的
+            // 左边缘对不齐 —— 一眼就能看出来的栅格破坏。
+            .padding(start = BgSpace.gutter, end = BgSpace.gutter)
             .fillMaxWidth()
             .height(56.dp)
             // 不再采 Haze：Tab 栏现在固定在内容动画之外，背后是各页面的标题栏
