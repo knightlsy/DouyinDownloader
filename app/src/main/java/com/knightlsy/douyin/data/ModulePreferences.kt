@@ -126,12 +126,15 @@ object ModulePreferences {
                         .query(Uri.parse(HISTORY_URI), null, null, null, null)
                         ?.use { true } ?: false
                 } catch (error: Exception) {
-                    // 没权限 / 进程挂了 / authority 不存在，一律当作读不到
+                    // 打完整信息：这一步失败的原因有好几种，而界面上只有
+                    // 「读不到数据」四个字，不给日志根本分不清是哪一种 ——
+                    // authority 不存在（模块版本旧）/ 权限被拒 / 模块进程挂了。
+                    Log.w(TAG, "query 失败 uri=$HISTORY_URI", error)
                     false
                 }
             }.get(PROBE_TIMEOUT_MS, TimeUnit.MILLISECONDS)
         } catch (error: Exception) {
-            Log.d(TAG, "模块探测失败：${error.javaClass.simpleName}")
+            Log.w(TAG, "模块探测超时或提交失败", error)
             false
         }
         return if (readable) ModuleState.ACTIVE else ModuleState.INSTALLED
