@@ -3,6 +3,7 @@ package com.knightlsy.douyin.data
 import android.content.Context
 
 class HistoryRepository(context: Context) {
+    private val appContext = context.applicationContext
     private val dao = AppDatabase.getDatabase(context).historyDao()
     private val shared = SharedHistoryClient(context)
 
@@ -15,6 +16,9 @@ class HistoryRepository(context: Context) {
      */
     fun getAll(): List<DownloadHistoryItem> {
         val local = dao.getAll().map { it.toDownloadHistoryItem() }
+        // 联动默认关闭：不装模块、或者用户没主动打开，就完全不碰外部数据源。
+        // 这样模块卸载了、崩了、权限变了，本应用的行为都跟没装一样。
+        if (!ModulePreferences.isEnabled(appContext)) return local
         val remote = shared.read()
         if (remote.isEmpty()) return local
 

@@ -52,6 +52,11 @@ import com.knightlsy.douyin.ui.components.BgSectionLabel
 import com.knightlsy.douyin.ui.theme.BgRadius
 import com.knightlsy.douyin.ui.theme.BgSpace
 import com.knightlsy.douyin.ui.theme.LocalBgColors
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
+import com.knightlsy.douyin.data.ModulePreferences
 
 /**
  * 设置页：主题（三分段直选）、背景（壁纸氛围 / 强调色跟随壁纸）、日志入口、关于入口。
@@ -174,6 +179,12 @@ fun SettingsScreen(
                 .padding(horizontal = BgSpace.gutter)
                 .padding(top = 18.dp, bottom = 40.dp)
         ) {
+    val context = LocalContext.current
+    val uriHandler = LocalUriHandler.current
+    // 每次进入设置页都重新探测一次，不做缓存 —— 用户可能刚在 LSPosed 里勾了作用域
+    var moduleState by remember { mutableStateOf(ModulePreferences.state(context)) }
+    var moduleEnabled by remember { mutableStateOf(ModulePreferences.isEnabled(context)) }
+
             BgSectionLabel("外观", accent = null)
 
             SettingsCard(
@@ -265,6 +276,69 @@ fun SettingsScreen(
                     )
                 }
                 RowDivider()
+            }
+
+            Spacer(Modifier.height(22.dp))
+            BgSectionLabel("增强模块", accent = null)
+
+            /*
+             * 抖仙人（LSPosed 模块）是可选的第二数据源：装了它能直接在抖音里下载，
+             * 记录同步到这里。不装、或者关掉联动，本应用的核心功能完全不受影响 ——
+             * 所以开关默认关闭，也从不弹窗催用户去装。
+             */
+            SettingsCard(
+                contentPadding = PaddingValues(horizontal = 18.dp, vertical = 4.dp),
+            ) {
+                Column(Modifier.padding(vertical = 14.dp)) {
+                    Text(
+                        text = "抖仙人",
+                        fontFamily = FontFamily.SansSerif,
+                        fontSize = 14.5.sp,
+                        fontWeight = FontWeight.W500,
+                        color = c.ink,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = "可选的增强模块。装上之后可以直接在抖音里下载作品，" +
+                            "下载记录会同步到历史页。不装也能正常用这个 App。",
+                        fontFamily = FontFamily.SansSerif,
+                        fontSize = 11.5.sp,
+                        lineHeight = 17.sp,
+                        color = c.ink3,
+                    )
+                }
+                RowDivider()
+
+                // 点一下重新探测：用户可能刚在 LSPosed 里启用、或者刚重启完抖音
+                SettingsNavRow(
+                    title = "状态",
+                    value = ModulePreferences.describe(moduleState),
+                    onClick = { moduleState = ModulePreferences.state(context) },
+                )
+                RowDivider()
+                SettingsSwitchRow(
+                    title = "启用联动",
+                    description = if (moduleEnabled) {
+                        "历史页会合并模块下载的记录"
+                    } else {
+                        "关闭时完全不读取模块数据"
+                    },
+                    checked = moduleEnabled,
+                    onChange = { enabled ->
+                        moduleEnabled = enabled
+                        ModulePreferences.setEnabled(context, enabled)
+                        // 打开时顺手探测一次，状态不准会让用户以为没生效
+                        if (enabled) moduleState = ModulePreferences.state(context)
+                    },
+                )
+                RowDivider()
+                SettingsNavRow(
+                    title = "获取模块",
+                    value = "GitHub",
+                    onClick = {
+                        runCatching { uriHandler.openUri(ModulePreferences.MODULE_URL) }
+                    },
+                )
             }
 
             Spacer(Modifier.height(22.dp))
