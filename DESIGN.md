@@ -70,3 +70,43 @@
 | 日志 | ✅ 暂无日志 | — | — | ⚠ 未验证 | — |
 
 `⚠ 未验证` = 代码里没有明确处理，或者没在真机上看过。
+
+## 发版检查清单
+
+发版前逐条过。每条都对应一次真实翻车。
+
+### 代码
+
+- [ ] 工作区干净，`git status --porcelain` 无输出
+- [ ] 版本号递增（`versionCode` +1，`versionName` 去掉 `-preview`）
+- [ ] 批量改过 import 后确认 `getValue` / `setValue` 还在 —— 它们是 `by` 委托的隐式依赖，
+      按「正文搜不到就删」会被误删，直接编译失败（踩过两次）
+
+### 产物
+
+- [ ] **从 Release asset 下载验证，不是 CI artifact** —— 用户点下载拿的是前者
+- [ ] 不用 CDN 镜像（gh-proxy / jsdelivr 会静默截断大文件，9.65MB 截成 2.3MB 且不报错）
+- [ ] `aapt2 dump badging` 确认 versionCode / versionName
+- [ ] `apksigner verify --print-certs` 确认签名 `CN=DouyinDownloader`
+- [ ] 文件大小与上版对比，显著变小要查（可能是截断）
+
+### 更新日志
+
+- [ ] **`RELEASE_NOTES.md` 是这一版的内容** —— 曾经写在 workflow 里，发版忘了改，
+      用户看到的还是 v1.7 的文案
+- [ ] Release body 落到了页面上（`GET /releases/tags/vX` 看 `body` 字段）
+- [ ] `/api/check-update` 返回的新 `release_notes` 与 `RELEASE_NOTES.md` 一致
+
+### 分发
+
+- [ ] NAS 共享目录
+- [ ] 飞书
+
+### 不构成证据的东西
+
+- CI 绿了 —— 只证明能编译
+- 「应该没问题」—— 不是证据
+- 版本号对 —— 不证明内容对（R8 可能剥离了运行时需要的字符串）
+
+如果需要验证某个字符串真的进了包（比如诊断日志），从 APK 提取 `classes.dex` 用字符串搜索确认，
+并与上一版对比：只有「上版没有、这版有」才有意义。
