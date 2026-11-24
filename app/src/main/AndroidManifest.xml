@@ -2,6 +2,18 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!--
+      Android 11（API 30）起默认看不到别的已安装应用，除非显式声明可见性。
+      少了这段，ModulePreferences 里的 getPackageInfo("com.zz.douyin")
+      会抛 NameNotFoundException，界面上就一直显示「未安装」——
+      模块装得好好的，只是本应用「看不见」它。
+    -->
+    <queries>
+        <package android:name="com.zz.douyin" />
+        <!-- 抖仙人的 debug 变体（applicationIdSuffix=".debug"），排查时用 -->
+        <package android:name="com.zz.douyin.debug" />
+    </queries>
+
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />

@@ -18,8 +18,13 @@ import android.util.Log
 class SharedHistoryClient(private val context: Context) {
 
     fun read(): List<DownloadHistoryItem> {
+        // 包名可能带 .debug 后缀（模块的 debug 变体），所以不能写死 URI
+        val uri = ModulePreferences.installedPackage(context)?.let {
+            Uri.parse("content://$it.shared/history")
+        } ?: return emptyList()
+
         val cursor = try {
-            context.contentResolver.query(URI, null, null, null, null)
+            context.contentResolver.query(uri, null, null, null, null)
         } catch (error: Exception) {
             // 模块没装时有些 ROM 会抛 IllegalArgumentException 而不是返回 null
             Log.d(TAG, "模块历史不可用：${error.javaClass.simpleName}")
@@ -65,9 +70,6 @@ class SharedHistoryClient(private val context: Context) {
 
     companion object {
         private const val TAG = "SharedHistory"
-
-        /** 模块 Provider 的只读历史入口。 */
-        private val URI: Uri = Uri.parse("content://com.zz.douyin.shared/history")
 
         /** 记录来源：App 自己解析下载。 */
         const val SOURCE_APP = "app"

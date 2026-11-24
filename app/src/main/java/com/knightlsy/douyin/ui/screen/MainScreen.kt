@@ -75,6 +75,7 @@ import com.knightlsy.douyin.viewmodel.MainViewModel
 import com.knightlsy.douyin.data.DownloadStatus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import com.knightlsy.douyin.navigation.TabBar
 
 /**
  * 主页。
@@ -94,6 +95,11 @@ import kotlinx.coroutines.withContext
 @Composable
 fun MainScreen(
     viewModel: MainViewModel = viewModel(),
+    /**
+     * 切换一级页面。Tab 栏从屏幕底部挪到「链接解析」上方之后由本屏负责渲染，
+     * 所以要把回调传进来。默认空实现，单独预览本屏时不会崩。
+     */
+    onSelectTab: (String) -> Unit = {},
 ) {
     // 玻璃采样源：AppNavigation 统一建立，各层玻璃共用。
     // 拿不到就自建一个（单独预览本屏时也不至于崩）。
@@ -237,14 +243,32 @@ fun MainScreen(
             }
         }
 
+        /* ── Tab 栏：首页 / 历史 / 设置 ──
+          原来悬浮在屏幕底部，56dp 高 + 12dp 边距压在内容上，
+          设置页滚到底时最后几行被盖住。挪到标题下方、链接解析上方，
+          变成页面的一部分，不再遮挡任何东西。 */
+        Box(
+            Modifier
+                .align(Alignment.TopCenter)
+                .zIndex(1f)
+                .fillMaxWidth()
+                .padding(start = BgSpace.gutter, end = BgSpace.gutter, top = 78.dp),
+        ) {
+            TabBar(
+                currentRoute = "main",
+                onSelect = onSelectTab,
+                haze = haze,
+            )
+        }
+
         /* ── 内容 ── */
         LazyColumn(
             // 这一列是玻璃的「采样源」：顶栏背后能看到列表滚过去的颜色
             Modifier.fillMaxSize().hazeSource(haze),
             state = listState,
-            // top 96dp：顶栏是叠加层不占布局空间，内容要自己让出位置
-            // bottom 90dp：给悬浮的底部 Tab 栏（56dp 高 + 12dp 边距 + 手势条余量）让位
-            contentPadding = PaddingValues(top = 96.dp, bottom = 90.dp),
+            // top 146dp：顶栏（96dp）+ Tab 栏（56dp + 12dp 间距）都是叠加层不占布局空间，
+            // 内容要自己让出位置。bottom 回到 24dp —— 底部已经没有悬浮栏了。
+            contentPadding = PaddingValues(top = 146.dp, bottom = 24.dp),
         ) {
 
             // 链接输入 —— 唯一主角，紧跟顶栏

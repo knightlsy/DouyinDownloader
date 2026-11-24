@@ -141,7 +141,10 @@ fun AppNavigation(mainViewModel: MainViewModel) {
             label = "screen_transition"
         ) { screen ->
             when (screen) {
-                "main" -> MainScreen(viewModel = mainViewModel)
+                "main" -> MainScreen(
+                    viewModel = mainViewModel,
+                    onSelectTab = { route -> if (route != currentScreen) currentScreen = route },
+                )
                 "settings" -> SettingsScreen(
                     themeMode = themeMode,
                     onCycleTheme = { mainViewModel.toggleDarkMode() },
@@ -171,15 +174,9 @@ fun AppNavigation(mainViewModel: MainViewModel) {
         }
       }
 
-        // 底部 Tab 栏（首页 / 历史 / 设置），叠在内容之上、贴屏幕底部。
-        BottomTabBar(
-            currentRoute = currentScreen,
-            onSelect = { route ->
-                if (route != currentScreen) currentScreen = route
-            },
-            haze = haze,
-            modifier = Modifier.align(Alignment.BottomCenter),
-        )
+        // Tab 栏移到首页内部了（「链接解析」上方）。
+        // 它原来悬浮在屏幕底部，56dp 高 + 12dp 边距直接压在内容上，
+        // 设置页滚到底时最后几行字被盖住 —— 那是布局问题，不是内容问题。
     }
 }
 
@@ -195,7 +192,7 @@ fun AppNavigation(mainViewModel: MainViewModel) {
  * 不依赖每个 Tab 的实测宽度，切换时不会跳变。
  */
 @Composable
-private fun BottomTabBar(
+internal fun TabBar(
     currentRoute: String,
     onSelect: (String) -> Unit,
     haze: HazeState,
@@ -206,8 +203,6 @@ private fun BottomTabBar(
 
     Box(
         modifier
-            .navigationBarsPadding()
-            .padding(start = BgSpace.gutter, end = BgSpace.gutter, bottom = 12.dp)
             .fillMaxWidth()
             .height(56.dp)
             // 去掉 shadow：clip=false 的阴影从形状边缘向外扩散、边缘处最深，

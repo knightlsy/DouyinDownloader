@@ -26,6 +26,9 @@ object ModulePreferences {
     /** 模块包名。改这里要同步改 SharedProvider 的白名单。 */
     const val MODULE_PACKAGE = "com.zz.douyin"
 
+    /** 模块的所有可能包名：release 变体 + debug 变体（applicationIdSuffix=".debug"）。 */
+    private val MODULE_PACKAGES = listOf(MODULE_PACKAGE, "$MODULE_PACKAGE.debug")
+
     /** 模块的下载页。走 GitHub Releases —— 用户自己装到 LSPosed 里。 */
     const val MODULE_URL = "https://github.com/knightlsy/douyim/releases/latest"
 
@@ -45,19 +48,33 @@ object ModulePreferences {
         prefs(context).edit().putBoolean(KEY_ENABLED, enabled).apply()
     }
 
-    /** 模块 App 是否已安装（不代表 LSPosed 里启用了）。 */
-    fun isInstalled(context: Context): Boolean = try {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            context.packageManager.getPackageInfo(
-                MODULE_PACKAGE, PackageManager.PackageInfoFlags.of(0)
-            )
-        } else {
-            @Suppress("DEPRECATION")
-            context.packageManager.getPackageInfo(MODULE_PACKAGE, 0)
+    /**
+     * 模块 App 是否已安装（不代表 LSPosed 里启用了）。
+     *
+     * 两个变体都查：正式包和 debug 包（applicationIdSuffix=".debug"）。
+     * 注意 Manifest 里必须声明 <queries>，否则 Android 11+ 一律查不到 ——
+     * 那种情况下这里会误报「未安装」，而模块其实装得好好的。
+     */
+    fun isInstalled(context: Context): Boolean = installedPackage(context) != null
+
+    /** 返回实际装着的那个包名，没装返回 null。 */
+    fun installedPackage(context: Context): String? {
+        for (name in MODULE_PACKAGES) {
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    context.packageManager.getPackageInfo(
+                        name, PackageManager.PackageInfoFlags.of(0)
+                    )
+                } else {
+                    @Suppress("DEPRECATION")
+                    context.packageManager.getPackageInfo(name, 0)
+                }
+                return name
+            } catch (error: PackageManager.NameNotFoundException) {
+                // 继续试下一个
+            }
         }
-        true
-    } catch (error: PackageManager.NameNotFoundException) {
-        false
+        return null
     }
 
     /**
@@ -68,8 +85,8 @@ object ModulePreferences {
      * 所以「能查到包」不等于「能用」，必须实际读一次。
      */
     fun state(context: Context): ModuleState {
-        if (!isInstalled(context)) return ModuleState.NOT_INSTALLED
-        val uri = Uri.parse("content://$MODULE_PACKAGE.shared/history")
+        val pkg = installedPackage(context) ?: return ModuleState.NOT_INSTALLED
+        val uri = Uri.parse("content://$pkg.shared/history")
         val cursor = try {
             context.contentResolver.query(uri, null, null, null, null)
         } catch (error: Exception) {
