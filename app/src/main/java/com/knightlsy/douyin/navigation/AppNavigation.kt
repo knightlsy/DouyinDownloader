@@ -217,15 +217,29 @@ private fun HomeHeader(visible: Boolean) {
         label = "home_header_alpha",
     )
 
+    /*
+     * 刻意不加背景和边框。
+     *
+     * 原来的顶栏是 bgHazeGlass(reveal = barReveal)：停在顶部时 reveal = 0，
+     * 完全透明，只有列表滚上去才浮现玻璃 —— 标题就是浮在背景上的一行字。
+     * 搬到这里之后我给它套了固定底色 + 1dp 描边，凭空多出一个框，
+     * 把标题和下面的内容切成两块，整页读起来是断的。
+     *
+     * 这里恢复成无框。左边 16dp 是原来玻璃条的内边距，保留是为了让标题文字
+     * 和下面卡片里的文字左边缘对得上；去掉它就只剩 gutter，会比卡片内容更靠左。
+     */
     Row(
         Modifier
             .fillMaxWidth()
-            .padding(start = BgSpace.gutter, end = BgSpace.gutter, top = 10.dp, bottom = 8.dp)
-            .alpha(alpha)
-            .clip(RoundedCornerShape(BgRadius.r3))
-            .background(c.glass)
-            .border(1.dp, c.glassEdge, RoundedCornerShape(BgRadius.r3))
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .padding(
+                start = BgSpace.gutter + 16.dp,
+                end = BgSpace.gutter + 16.dp,
+                // 无框之后顶部只留 12dp 会贴着状态栏。原来是 10dp 外边距
+                // 加玻璃条内 12dp 内边距，共 22dp —— 这里取 18dp 折中。
+                top = 18.dp,
+                bottom = 8.dp,
+            )
+            .alpha(alpha),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
