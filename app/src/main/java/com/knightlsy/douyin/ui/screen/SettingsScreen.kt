@@ -57,6 +57,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import com.knightlsy.douyin.data.ModulePreferences
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
+import com.knightlsy.douyin.data.ModuleState
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * 设置页：主题（三分段直选）、背景（壁纸氛围 / 强调色跟随壁纸）、日志入口、关于入口。
@@ -181,9 +187,20 @@ fun SettingsScreen(
         ) {
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
-    // 每次进入设置页都重新探测一次，不做缓存 —— 用户可能刚在 LSPosed 里勾了作用域
-    var moduleState by remember { mutableStateOf(ModulePreferences.state(context)) }
+    val scope = rememberCoroutineScope()
+
+    // 初值不能写 ModulePreferences.state(context) —— remember 的 lambda 在首次
+    // composition 执行，而 state() 内部是 ContentResolver.query，跨进程同步 IPC。
+    // 模块进程慢或没起来时会把主线程钉在那里，滚设置页就掉帧甚至 ANR。
+    // 初值给 NOT_INSTALLED，真实状态在 LaunchedEffect 里到 IO 线程去探。
+    var moduleState by remember { mutableStateOf(ModuleState.NOT_INSTALLED) }
     var moduleEnabled by remember { mutableStateOf(ModulePreferences.isEnabled(context)) }
+    var probing by remember { mutableStateOf(true) }
+
+    LaunchedEffect(Unit) {
+        moduleState = withContext(Dispatchers.IO) { ModulePreferences.state(context) }
+        probing = false
+    }
 
             BgSectionLabel("外观", accent = null)
 
@@ -312,8 +329,17 @@ fun SettingsScreen(
                 // 点一下重新探测：用户可能刚在 LSPosed 里启用、或者刚重启完抖音
                 SettingsNavRow(
                     title = "状态",
-                    value = ModulePreferences.describe(moduleState),
-                    onClick = { moduleState = ModulePreferences.state(context) },
+                    value = if (probing) "检测中…" else ModulePreferences.describe(moduleState),
+                    onClick = {
+                        if (probing) return@SettingsNavRow
+                        probing = true
+                        scope.launch {
+                            moduleState = withContext(Dispatchers.IO) {
+                                ModulePreferences.state(context)
+                            }
+                            probing = false
+                        }
+                    },
                 )
                 RowDivider()
                 SettingsSwitchRow(
@@ -327,8 +353,15 @@ fun SettingsScreen(
                     onChange = { enabled ->
                         moduleEnabled = enabled
                         ModulePreferences.setEnabled(context, enabled)
-                        // 打开时顺手探测一次，状态不准会让用户以为没生效
-                        if (enabled) moduleState = ModulePreferences.state(context)
+                        // 打开时顺手重新探测 —— 状态不准会让用户以为没生效。
+                        // 同样不能在回调里同步 query：这个 lambda 跑在主线程。
+                        if (enabled) {
+                            scope.launch {
+                                moduleState = withContext(Dispatchers.IO) {
+                                    ModulePreferences.state(context)
+                                }
+                            }
+                        }
                     },
                 )
                 RowDivider()
