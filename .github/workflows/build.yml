@@ -91,14 +91,10 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: app-release*.apk
-          # 手写更新日志：不使用自动生成（避免把内部实现细节带进用户可见的说明里）
+          # 手写更新日志，手动维护在 RELEASE_NOTES.md。
+          # 之前是写死在这段 YAML 里的 —— 发版时忘了改，用户看到的还是 v1.7 的内容。
+          # 改成 body_path 后，发版只需要改 RELEASE_NOTES.md，版本控制里也有记录。
           generate_release_notes: false
-          body: |
-            更新内容：
-
-            · 应用内更新更省事：去系统里开启「安装未知应用」权限后返回，直接继续安装，不用重新下载安装包
-            · 更新下载改为按实测下载速度选线路，并优先使用加速镜像（同时清掉了几条已经失效的镜像）
-            · 下载过程中会显示这次从哪条线路下、速度多少
-            · 「检查更新」在已是最新版本时，也会显示当前这一版的更新内容
+          body_path: RELEASE_NOTES.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
