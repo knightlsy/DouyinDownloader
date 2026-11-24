@@ -27,7 +27,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -92,7 +91,12 @@ fun AppNavigation(mainViewModel: MainViewModel) {
     val nonMainScreens = listOf("history", "about", "settings", "logs")
     BackHandler(enabled = currentScreen in nonMainScreens) {
         // logs 的上级是 settings，其余页面上级都是 main
-        currentScreen = if (currentScreen == "logs") "settings" else "main"
+        // about 是从设置页进的，上级也应该是设置页 —— 原来直接跳回首页，层级断层
+        currentScreen = if (currentScreen == "logs" || currentScreen == "about") {
+            "settings"
+        } else {
+            "main"
+        }
     }
 
     // 历史页点「重新解析」时会把 url 放进 pendingReparseUrl。
@@ -107,13 +111,11 @@ fun AppNavigation(mainViewModel: MainViewModel) {
         }
     }
 
-    // Tab 栏放在 AnimatedContent 外面：切换页面时内容走原有的
-    // 350ms 缩放 + 横滑动效，Tab 栏本身保持静止（motion-spec「页面级：不动」）。
-    // 底部 Tab 要「透」出页面内容，所以页面内容必须注册成 Haze 的采样源。
-    // 源和效果是兄弟关系：Tab 栏在源外面，否则它采样的就是它自己。
-    val haze = rememberBgHaze()
+    // Tab 栏已经搬进 MainScreen（顶栏下方），这里不再需要 Haze 源 ——
+    // 原来的 haze 只服务于底部悬浮 Tab，现在没有消费者。
+    // 各屏自己的玻璃各建各的源（MainScreen 用它的 LazyColumn）。
     Box(Modifier.fillMaxSize()) {
-      Box(Modifier.fillMaxSize().hazeSource(haze)) {
+      Box(Modifier.fillMaxSize()) {
         AnimatedContent(
             targetState = currentScreen,
             transitionSpec = {
@@ -169,7 +171,7 @@ fun AppNavigation(mainViewModel: MainViewModel) {
                         currentScreen = "main"
                     }
                 )
-                "about" -> AboutScreen(onBack = { currentScreen = "main" })
+                "about" -> AboutScreen(onBack = { currentScreen = "settings" })
             }
         }
       }

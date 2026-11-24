@@ -3,6 +3,8 @@ package com.knightlsy.douyin.data
 import android.content.Context
 import android.net.Uri
 import android.util.Log
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.Executors
 
 /**
  * 读取 LSPosed 模块（抖仙人 / com.zz.douyin）下载过的作品记录。
@@ -18,10 +20,26 @@ import android.util.Log
 class SharedHistoryClient(private val context: Context) {
 
     fun read(): List<DownloadHistoryItem> {
-        // 包名可能带 .debug 后缀（模块的 debug 变体），所以不能写死 URI
-        val uri = ModulePreferences.installedPackage(context)?.let {
-            Uri.parse("content://$it.shared/history")
-        } ?: return emptyList()
+        // 跨进程 query 没有内建超时：对端活着但卡住时既不抛异常也不返回，
+        // 调用方会一直等下去（历史页停在旧数据、没有任何报错线索）。
+        // 用线程池 + Future.get 主动放弃，超时就当作没有模块记录。
+        return try {
+            PROBE.submit<List<DownloadHistoryItem>> { readBlocking() }
+                .get(PROBE_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+        } catch (error: Exception) {
+            Log.d(TAG, "读取模块历史失败：${error.javaClass.simpleName}")
+            emptyList()
+        }
+    }
+
+    /** 阻塞版实现，只在 [PROBE] 线程上跑。 */
+    private fun readBlocking(): List<DownloadHistoryItem> {
+        // authority 用固定值，不跟探测到的包名拼接。
+        // 模块 AndroidManifest 里 provider 的 authority 写死是 com.zz.douyin.shared，
+        // applicationIdSuffix=".debug" 只改包名、不改 authority ——
+        // 之前按包名拼成 com.zz.douyin.debug.shared，query 打到一个不存在的
+        // authority 上，debug 变体下整条联动链路静默断掉。
+        val uri = Uri.parse(HISTORY_URI)
 
         val cursor = try {
             context.contentResolver.query(uri, null, null, null, null)
@@ -70,6 +88,24 @@ class SharedHistoryClient(private val context: Context) {
 
     companion object {
         private const val TAG = "SharedHistory"
+
+        /**
+         * 模块 Provider 的只读历史入口。
+         *
+         * 注意这里是**固定** authority：模块 manifest 里写死 com.zz.douyin.shared，
+         * 不随 applicationIdSuffix 变化。改模块 side 的 authority 时才同步改这里。
+         */
+        const val HISTORY_URI = "content://com.zz.douyin.shared/history"
+
+        private const val PROBE_TIMEOUT_MS = 3_000L
+
+        /**
+         * 固定 2 线程：binder 调用不响应中断，被放弃的任务仍占着线程。
+         * 卡死时影响有界，退化成「读不到」而不是拖住历史页。
+         */
+        private val PROBE = Executors.newFixedThreadPool(2) { runnable ->
+            Thread(runnable, "shared-history-read").apply { isDaemon = true }
+        }
 
         /** 记录来源：App 自己解析下载。 */
         const val SOURCE_APP = "app"

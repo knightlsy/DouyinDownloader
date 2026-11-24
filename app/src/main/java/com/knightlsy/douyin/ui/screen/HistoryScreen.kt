@@ -59,6 +59,7 @@ import com.knightlsy.douyin.viewmodel.HistoryViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import com.knightlsy.douyin.data.SharedHistoryClient
 
 /**
  * 下载历史。
@@ -326,7 +327,7 @@ fun HistoryItemCard(
                     )
                     // 模块下载的记录标一下来源：用户得知道这条不是在本应用里下载的，
                     // 「重新解析」对它们不适用（原链接模块没存）
-                    if (item.source == "xposed") {
+                    if (item.source == SharedHistoryClient.SOURCE_XPOSED) {
                         Spacer(Modifier.width(6.dp))
                         Text(
                             text = "模块",
@@ -355,6 +356,11 @@ fun HistoryItemCard(
                     checked = isSelected,
                     onToggle = onClick,
                 )
+            } else if (item.source == SharedHistoryClient.SOURCE_XPOSED) {
+                // 模块记录没有 originalUrl（模块下载时不记原链接），
+                // 「重新解析」点了只会拿空串去解析然后弹错。
+                // 留一个等宽的占位，保持右侧对齐。
+                Spacer(Modifier.size(44.dp))
             } else {
                 Box(
                     Modifier

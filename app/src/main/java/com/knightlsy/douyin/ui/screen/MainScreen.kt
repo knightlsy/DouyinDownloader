@@ -76,19 +76,21 @@ import com.knightlsy.douyin.data.DownloadStatus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import com.knightlsy.douyin.navigation.TabBar
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 
 /**
  * 主页。
  *
  * 本轮（底部导航重构）的结构变化：
  *
- *  1. 顶栏去掉「历史」「设置」两个文字按钮 —— 一级入口全部收进底部 Tab
- *     （见 AppNavigation 的 BottomTabBar），顶栏只留身份信息：6dp 圆点 +
+ *  1. 顶栏去掉「历史」「设置」两个文字按钮 —— 一级入口收进 Tab 栏
+ *     （见本文件的 TabBar 调用 / navigation.TabBar 定义），顶栏只留身份信息：6dp 圆点 +
  *     应用名 + 副标题，并改成玻璃悬浮条（16dp 圆角 + 白 4.2% 底 + 1dp 白 13% 边）。
  *  2. 信息顺序按「打开 App 是为了粘贴链接」重排：链接解析 → 预览 →
  *     空态/最近解析 → 任务 → 统计（弱化）。统计仍保留三个读数，只是
  *     从主角降为参考：位置移到任务之后，字号降一档、颜色统一 ink3。
- *  3. LazyColumn 底部留 90dp，给悬浮 Tab 栏让位。
+ *  3. Tab 栏在顶栏下方、链接解析上方，是页面的一部分；底部不再需要让位。
  *
  * 其余交互修正都在子组件里，这里只负责编排。
  */
@@ -101,8 +103,10 @@ fun MainScreen(
      */
     onSelectTab: (String) -> Unit = {},
 ) {
-    // 玻璃采样源：AppNavigation 统一建立，各层玻璃共用。
-    // 拿不到就自建一个（单独预览本屏时也不至于崩）。
+    // 玻璃采样源。本屏自己建：顶栏和 Tab 栏的玻璃都采它，
+    // 源是下面的 LazyColumn（滚动的内容从玻璃后面透出来）。
+    // 注意 LocalBgHaze 目前没有任何地方 provides，实际总走兜底分支 ——
+    // 保留读取是为了将来真要跨屏共享时不用改调用方。
     val haze = LocalBgHaze.current ?: rememberBgHaze()
 
     // 顶栏玻璃只在滚动后出现 —— iOS 导航栏就是这么做的。
@@ -122,6 +126,12 @@ fun MainScreen(
     )
     val c = LocalBgColors.current
     val context = LocalContext.current
+
+    // 顶栏实测高度。初值 78dp 只用于首帧，onSizeChanged 之后立刻被真实值替换。
+    val density = LocalDensity.current
+    var topBarHeight by remember { mutableStateOf(78.dp) }
+    // Tab 栏高 56dp + 与顶栏之间 12dp 间距
+    val chromeHeight = topBarHeight + 56.dp + 12.dp
 
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val tasks by viewModel.downloadTasks.collectAsStateWithLifecycle()
@@ -210,6 +220,11 @@ fun MainScreen(
                 // Box 子节点按声明顺序绘制；顶栏声明在 LazyColumn 之前，不抬层级会被内容盖住
                 .zIndex(1f)
                 .fillMaxWidth()
+                // 实测顶栏高度，给下面的 Tab 栏和列表起始位置用。
+                // 不能用常量：顶栏高度由 17sp 标题 + 11.5sp 副标题的行高决定，
+                // sp 随系统字体缩放和 CJK 字体度量变化，大字号下会比默认高十几 dp，
+                // 硬编码就会让 Tab 栏压住副标题。
+                .onSizeChanged { topBarHeight = with(density) { it.height.toDp() } }
                 .padding(start = BgSpace.gutter, end = BgSpace.gutter, top = 10.dp, bottom = 8.dp)
                 .shadow(14.dp * barReveal, RoundedCornerShape(BgRadius.r3), clip = false)
                 // 真玻璃：采样下方滚过的内容。停在顶部时 reveal=0，完全透明。
@@ -252,7 +267,7 @@ fun MainScreen(
                 .align(Alignment.TopCenter)
                 .zIndex(1f)
                 .fillMaxWidth()
-                .padding(start = BgSpace.gutter, end = BgSpace.gutter, top = 78.dp),
+                .padding(start = BgSpace.gutter, end = BgSpace.gutter, top = topBarHeight),
         ) {
             TabBar(
                 currentRoute = "main",
@@ -266,9 +281,10 @@ fun MainScreen(
             // 这一列是玻璃的「采样源」：顶栏背后能看到列表滚过去的颜色
             Modifier.fillMaxSize().hazeSource(haze),
             state = listState,
-            // top 146dp：顶栏（96dp）+ Tab 栏（56dp + 12dp 间距）都是叠加层不占布局空间，
-            // 内容要自己让出位置。bottom 回到 24dp —— 底部已经没有悬浮栏了。
-            contentPadding = PaddingValues(top = 146.dp, bottom = 24.dp),
+            // 顶栏和 Tab 栏都是叠加层、不占布局空间，内容要自己让出位置。
+            // top 用实测值算（顶栏高度 + 56dp Tab + 12dp 间距），不写死常量 ——
+            // 写死的话字号一变就和实际位置对不上。
+            contentPadding = PaddingValues(top = chromeHeight, bottom = 24.dp),
         ) {
 
             // 链接输入 —— 唯一主角，紧跟顶栏
