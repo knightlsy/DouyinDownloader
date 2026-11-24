@@ -60,6 +60,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.ui.draw.alpha
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.width
 
 /**
  * 底部 Tab 的三个一级路由。关于页（about）与日志页（logs）是设置页的

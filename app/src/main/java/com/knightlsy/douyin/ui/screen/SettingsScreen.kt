@@ -76,7 +76,18 @@ import kotlinx.coroutines.withContext
  * 读写，等渲染层接入后再上提到 ViewModel。
  *
  * ## 顶栏返回按钮
-,
+ * 设置页计划改为底部 Tab 直入，届时顶栏「← 返回」可能不再需要，
+ * 但 AppNavigation 正在并行改造，先保留（入口从哪进都不崩）。
+ */
+@Composable
+fun SettingsScreen(
+    themeMode: ThemeMode,
+    onCycleTheme: () -> Unit,
+    onNavigateToLogs: () -> Unit,
+    onNavigateToAbout: () -> Unit,
+    /** 壁纸氛围开关的当前值。由 ViewModel 驱动，Theme 读同一个源。 */
+    wallpaperMood: Boolean = false,
+    onWallpaperMoodChange: (Boolean) -> Unit = {},
     /** 强调色跟随壁纸开关的当前值。 */
     accentFromWallpaper: Boolean = false,
     /** 壁纸读取诊断（AppNavigation 从 ViewModel 收集后传入）。 */
