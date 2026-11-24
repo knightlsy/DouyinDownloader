@@ -316,12 +316,29 @@ fun HistoryItemCard(
             Spacer(Modifier.width(11.dp))
 
             Column(Modifier.weight(1f)) {
-                Text(
-                    text = item.title.ifBlank { "无标题" },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = c.ink,
-                    maxLines = 1,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = item.title.ifBlank { "无标题" },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = c.ink,
+                        maxLines = 1,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                    // 模块下载的记录标一下来源：用户得知道这条不是在本应用里下载的，
+                    // 「重新解析」对它们不适用（原链接模块没存）
+                    if (item.source == "xposed") {
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = "模块",
+                            fontSize = 9.sp,
+                            color = c.accent,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(BgRadius.r1))
+                                .background(c.accent.copy(alpha = 0.14f))
+                                .padding(horizontal = 5.dp, vertical = 1.dp),
+                        )
+                    }
+                }
                 Spacer(Modifier.height(4.dp))
                 Text(
                     text = "@${item.author.ifBlank { "未知" }} · $typeLabel · ${timeFormat.format(Date(item.downloadTime))}",

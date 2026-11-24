@@ -92,5 +92,10 @@ data class DownloadHistoryItem(
     val contentType: ContentType,
     val originalUrl: String,
     val downloadTime: Long,
-    val downloadedFiles: List<String> = emptyList()
+    val downloadedFiles: List<String> = emptyList(),
+    /**
+     * 记录来源：`app` = 本应用解析下载，`xposed` = LSPosed 模块在抖音里下载。
+     * 不进 Room（表里没这列），只在内存合并时用于显示角标。
+     */
+    val source: String = "app",
 )
