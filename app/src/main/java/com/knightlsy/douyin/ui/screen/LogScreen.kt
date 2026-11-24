@@ -71,44 +71,6 @@ fun LogScreen(onBack: () -> Unit) {
             // 不铺纸色：Theme 已经铺过底，这里再铺一层会把壁纸层整个盖住
             // （这就是「背景功能开了没效果」的根因 —— 跟壁纸读不到无关）
     ) {
-        // 顶栏
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(start = BgSpace.gutter, end = BgSpace.gutter, top = 10.dp, bottom = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(
-                Modifier
-                    .size(6.dp)
-                    .clip(CircleShape)
-                    .background(c.accent)
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(
-                text = "日志",
-                fontFamily = FontFamily.Monospace,
-                fontSize = 11.5.sp,
-                fontWeight = FontWeight.Medium,
-                letterSpacing = 1.8.sp,
-                color = c.ink,
-            )
-            Spacer(Modifier.weight(1f))
-            Text(
-                text = "← 返回",
-                fontFamily = FontFamily.Monospace,
-                fontSize = 11.sp,
-                color = c.ink2,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(BgRadius.r2))
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = onBack,
-                    )
-                    .padding(horizontal = 6.dp, vertical = 4.dp),
-            )
-        }
 
         BgHair()
 

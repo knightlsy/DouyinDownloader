@@ -123,10 +123,18 @@ fun AppNavigation(mainViewModel: MainViewModel) {
      * 状态栏内边距在这里统一处理，各页面自己的 systemBarsPadding 已移除，
      * 否则会算两次。
      */
+    // 返回层级：logs/about 的上级是 settings，其余回首页。
+    // 与下面 BackHandler 的规则保持一致，避免标题栏的返回键和系统返回键去不同地方。
+    val goBack: () -> Unit = {
+        currentScreen = when (currentScreen) {
+            "logs", "about" -> "settings"
+            else -> "main"
+        }
+    }
+
     Column(Modifier.fillMaxSize().systemBarsPadding()) {
-        // 标题区。位置和高度在任何页面都不变，只有透明度跟着页面走 ——
-        // 这样 Tab 栏永远贴在标题正下方，切页时不会跳。
-        HomeHeader(visible = currentScreen == "main")
+        // 标题区：所有页面共用，位置和高度恒定，Tab 栏永远贴在它正下方。
+        AppHeader(screen = currentScreen, onBack = goBack)
 
         TabBar(
             currentRoute = currentScreen,
@@ -200,70 +208,99 @@ fun AppNavigation(mainViewModel: MainViewModel) {
 
 
 /**
- * 首页标题栏（「抖音下载器 / 粘贴链接即可下载」）。
+ * 统一页面标题栏。所有一级/二级页面共用这一份，位置在 Tab 栏上方。
  *
- * 提到这一层是为了结构稳定：用户要的是固定的「标题 > Tab > 内容」三段。
- * 如果标题留在 MainScreen 内部，它要么被 Tab 顶掉，要么跟着内容一起滑走。
+ * ## 为什么提到这一层
+ * 原来每个页面各写一套顶栏，风格还不一样（设置/日志是小圆点 + 等宽小字，
+ * 历史/关于是返回圆钮 + 大标题），首页则是大标题 + 副标题。
+ * 摆在一起就是：首页标题在 Tab 上面，其他页标题在 Tab 下面 ——
+ * 同一个 App 里出现两种头部层级。
  *
- * 用 alpha 淡出而不是 AnimatedVisibility：后者会把自己从布局里摘掉，
- * 高度瞬间塌陷，Tab 栏就往上跳一截。这里必须始终占住同样高度。
+ * ## 为什么固定「标题 + 副标题」两行
+ * 高度必须恒定，否则切页时 Tab 栏会跟着上下跳。首页本来就是两行，
+ * 其他页也补一行副标题，五个页面高度一致。
+ *
+ * ## 无框
+ * 不加背景和描边。原来的顶栏是 bgHazeGlass(reveal = barReveal)，
+ * 停在顶部时完全透明，只有滚动才浮现玻璃 —— 它本来就是浮在背景上的一行字。
  */
 @Composable
-private fun HomeHeader(visible: Boolean) {
+private fun AppHeader(screen: String, onBack: () -> Unit) {
     val c = LocalBgColors.current
-    val alpha by animateFloatAsState(
-        targetValue = if (visible) 1f else 0f,
-        animationSpec = tween(durationMillis = if (visible) 220 else 140),
-        label = "home_header_alpha",
-    )
+    // 返回 0 表示没有上一级（首页）
+    val hasBack = screen != "main"
 
-    /*
-     * 刻意不加背景和边框。
-     *
-     * 原来的顶栏是 bgHazeGlass(reveal = barReveal)：停在顶部时 reveal = 0，
-     * 完全透明，只有列表滚上去才浮现玻璃 —— 标题就是浮在背景上的一行字。
-     * 搬到这里之后我给它套了固定底色 + 1dp 描边，凭空多出一个框，
-     * 把标题和下面的内容切成两块，整页读起来是断的。
-     *
-     * 这里恢复成无框。左边 16dp 是原来玻璃条的内边距，保留是为了让标题文字
-     * 和下面卡片里的文字左边缘对得上；去掉它就只剩 gutter，会比卡片内容更靠左。
-     */
     Row(
         Modifier
             .fillMaxWidth()
+            .heightIn(min = 52.dp)
             .padding(
-                start = BgSpace.gutter + 16.dp,
+                start = BgSpace.gutter + if (hasBack) 2.dp else 16.dp,
                 end = BgSpace.gutter + 16.dp,
-                // 无框之后顶部只留 12dp 会贴着状态栏。原来是 10dp 外边距
-                // 加玻璃条内 12dp 内边距，共 22dp —— 这里取 18dp 折中。
+                // 无框之后顶部留 18dp 才不贴着状态栏（原来是外边距 10 + 玻璃条内 12）
                 top = 18.dp,
                 bottom = 8.dp,
-            )
-            .alpha(alpha),
+            ),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        if (hasBack) {
+            // 38dp 触摸区，视觉是个 ← 字符
+            Box(
+                Modifier
+                    .size(38.dp)
+                    .clip(CircleShape)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = onBack,
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(text = "←", fontSize = 17.sp, color = c.ink2)
+            }
+            Spacer(Modifier.width(4.dp))
+        }
+
         Column(Modifier.weight(1f)) {
-            // 系统无衬线 + 粗字重 + 负字距。等宽只适合数字和代码，
-            // 中文笔画密度高，等宽加字距会把标题撑散。
             Text(
-                text = "抖音下载器",
+                text = headerTitle(screen),
                 fontFamily = FontFamily.SansSerif,
                 fontSize = 17.sp,
                 fontWeight = FontWeight.SemiBold,
                 letterSpacing = (-0.2).sp,
                 color = c.ink,
+                maxLines = 1,
             )
             Spacer(Modifier.height(1.dp))
             Text(
-                text = "粘贴链接即可下载",
+                text = headerSubtitle(screen),
                 fontFamily = FontFamily.SansSerif,
                 fontSize = 11.5.sp,
                 fontWeight = FontWeight.Normal,
                 letterSpacing = 0.sp,
                 color = c.ink3,
+                maxLines = 1,
             )
         }
     }
+}
+
+private fun headerTitle(screen: String): String = when (screen) {
+    "main" -> "抖音下载器"
+    "history" -> "下载历史"
+    "settings" -> "设置"
+    "logs" -> "日志"
+    "about" -> "关于"
+    else -> ""
+}
+
+private fun headerSubtitle(screen: String): String = when (screen) {
+    "main" -> "粘贴链接即可下载"
+    "history" -> "下载过的视频和图集"
+    "settings" -> "外观、背景与增强模块"
+    "logs" -> "运行过程中的诊断信息"
+    "about" -> "版本与说明"
+    else -> ""
 }
 
 /**

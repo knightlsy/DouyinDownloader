@@ -129,33 +129,6 @@ fun AboutScreen(onBack: () -> Unit) {
             // 不铺纸色：Theme 已经铺过底，这里再铺一层会把壁纸层整个盖住
             // （这就是「背景功能开了没效果」的根因 —— 跟壁纸读不到无关）
     ) {
-        // 顶栏
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(start = 10.dp, end = BgSpace.gutter, top = 8.dp, bottom = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(
-                Modifier
-                    .size(38.dp)
-                    .clip(CircleShape)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = onBack,
-                    ),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text("←", fontSize = 17.sp, color = c.ink2)
-            }
-            Spacer(Modifier.width(4.dp))
-            Text(
-                text = "关于",
-                style = MaterialTheme.typography.displayMedium,
-                color = c.ink,
-            )
-        }
 
         BgHair()
 

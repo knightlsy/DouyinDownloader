@@ -95,37 +95,26 @@ fun HistoryScreen(
             // 不铺纸色：Theme 已经铺过底，这里再铺一层会把壁纸层整个盖住
             // （这就是「背景功能开了没效果」的根因 —— 跟壁纸读不到无关）
     ) {
-        /* ── 顶栏 ── */
+        /* ── 操作工具条 ──
+           返回键和「下载历史」标题都移到外层 AppHeader 了，这里只留右侧操作。
+           注意：原来退出选择模式靠顶栏那个返回键（isSelectMode 时变成 ✕），
+           现在它在外层，这里必须补一个「取消」，否则进了选择模式出不来。 */
         Row(
             Modifier
                 .fillMaxWidth()
-                .padding(start = 10.dp, end = BgSpace.gutter, top = 8.dp, bottom = 10.dp),
+                .padding(start = BgSpace.gutter, end = BgSpace.gutter, top = 8.dp, bottom = 10.dp),
+            horizontalArrangement = Arrangement.End,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(
-                Modifier
-                    .size(38.dp)
-                    .clip(CircleShape)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = { if (isSelectMode) viewModel.toggleSelectMode() else onBack() },
-                    ),
-                contentAlignment = Alignment.Center,
-            ) {
+            if (isSelectMode) {
                 Text(
-                    text = if (isSelectMode) "✕" else "←",
-                    fontSize = 17.sp,
+                    text = "已选 ${selectedIds.size}",
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 11.5.sp,
                     color = c.ink2,
                 )
+                Spacer(Modifier.width(10.dp))
             }
-            Spacer(Modifier.width(4.dp))
-            Text(
-                text = if (isSelectMode) "已选 ${selectedIds.size}" else "下载历史",
-                style = MaterialTheme.typography.displayMedium,
-                color = c.ink,
-                modifier = Modifier.weight(1f),
-            )
 
             if (isSelectMode) {
                 BgMonoLabel(
@@ -159,6 +148,19 @@ fun HistoryScreen(
                             .padding(horizontal = 8.dp, vertical = 6.dp),
                     )
                 }
+                Spacer(Modifier.width(4.dp))
+                BgMonoLabel(
+                    text = "取消",
+                    color = c.ink2,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(BgRadius.r1))
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            onClick = { viewModel.toggleSelectMode() },
+                        )
+                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                )
             } else {
                 if (items.isNotEmpty()) {
                     BgMonoLabel(
