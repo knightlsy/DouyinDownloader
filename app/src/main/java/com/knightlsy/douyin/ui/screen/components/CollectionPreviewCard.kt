@@ -71,6 +71,10 @@ fun CollectionPreviewCard(
     val liveCount = collection.animatedUrls.count { it != null }
     val selectedUrls = selected.sorted().map { collection.imageUrls[it] }
 
+    // 下载前弹选图浮层：图集动辄十几二十张，在长页面里翻着勾容易漏选，
+    // 勾到后半段也记不住前面选了什么。浮层一屏看完、网格独立滚动。
+    var showPicker by remember(collection.id) { mutableStateOf(false) }
+
     Column(modifier.fillMaxWidth().padding(horizontal = BgSpace.gutter)) {
 
         // ── 工具栏：类型 + 已选数 + 全选 ──
@@ -201,29 +205,43 @@ fun CollectionPreviewCard(
                 .fillMaxWidth()
                 .height(48.dp)
                 .clip(RoundedCornerShape(BgRadius.r2))
-                .background(if (selected.isEmpty()) c.hair else c.success)
-                .then(
-                    if (selected.isNotEmpty()) {
-                        Modifier.clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null,
-                            onClick = { onDownloadSelected(selectedUrls) },
-                        )
-                    } else Modifier
+                // 不再依赖「先勾再点」：按钮始终可点，点开浮层在里面选。
+                .background(c.success)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = { showPicker = true },
                 ),
             contentAlignment = Alignment.Center,
         ) {
             Text(
-                text = if (selected.isEmpty()) "请先选择图片" else "↓  下载 ${selected.size} 张图片",
+                text = if (selected.isEmpty()) {
+                    "↓  选择并下载图片"
+                } else {
+                    "↓  下载 ${selected.size} 张图片"
+                },
                 fontFamily = FontFamily.Monospace,
                 fontSize = 11.5.sp,
                 letterSpacing = 1.4.sp,
-                color = if (selected.isEmpty()) c.ink3 else Color(0xFF052A2A),
+                color = Color(0xFF052A2A),
             )
         }
     }
-}
 
+    // 浮层是 Dialog，独立于布局树，不影响 Column 排版。
+    // 初始选择沿用卡片里已勾好的，用户不必重选。
+    if (showPicker) {
+        ImageSelectionSheet(
+            collection = collection,
+            initialSelection = selected,
+            onDismiss = { showPicker = false },
+            onConfirm = { urls ->
+                showPicker = false
+                onDownloadSelected(urls)
+            },
+        )
+    }
+}
 /**
  * 网格单元。
  *
