@@ -1,6 +1,11 @@
 package com.knightlsy.douyin.data
 
 import android.content.Context
+import androidx.core.graphics.drawable.toBitmap
+import androidx.core.content.ContextCompat
+import android.graphics.Color
+import android.graphics.Canvas
+import android.graphics.Bitmap
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -34,8 +39,12 @@ object MiuiIslandProbe {
     private const val TAG = "MiuiIsland"
     private const val CHANNEL_ID = "island_probe"
     private const val NOTIFICATION_ID = 0x1501
+    /** 纯文字变体：有文字区但不给任何 picInfo */
+    private const val NOTIFICATION_ID_TEXT_ONLY = 0x1503
     /** 对照用：不带 focus 参数的普通通知 */
     private const val NOTIFICATION_ID_PLAIN = 0x1502
+    /** 图片键，JSON 里引用它，Bundle 里按同名挂实体 */
+    private const val PIC_KEY = "miui.focus.pic_icon"
 
     /**
      * 写一条诊断记录。
@@ -155,11 +164,7 @@ object MiuiIslandProbe {
     fun sendProbeNotification(context: Context, title: String, text: String): Boolean {
         val manager = NotificationManagerCompat.from(context)
         val notificationsEnabled = manager.areNotificationsEnabled()
-        record(
-            context,
-            "开始发送测试通知 通知开关=$notificationsEnabled"
-                    + " | channel=$CHANNEL_ID",
-        )
+        record(context, "开始发送测试通知 通知开关=$notificationsEnabled | channel=$CHANNEL_ID")
         if (!notificationsEnabled) {
             record(context, "中止：通知权限未授予，连普通通知都发不出去")
             return false
@@ -173,35 +178,145 @@ object MiuiIslandProbe {
         )
 
         /*
-         * param_v2 结构（照抄官方示例模板）。
+         * 三路对照实验，一次点击同时发三条，用「哪条上了岛」定位问题层：
          *
-         * 结构以社区库 hyperisland_kit（github.com/D4vidDf/HyperIsland-ToolKit）为准，
-         * 它是跑通过的真机实现。官方文档里那份示例是另一个模板版本，
-         * 直接照抄会被系统静默忽略（通知在、岛不出）。
+         *   5377  完整   —— 有图标 + 有文字区
+         *   5376  纯文字 —— 有文字区、**完全不给 picInfo**
+         *   5378  对照   —— 不带 miui.focus.param，纯普通通知
          *
-         * 与官方文档示例的实质差异：
-         *  · protocol 要给 3（库的默认值），文档说的「1 = OS2/OS3 通用」在 OS3 上不生效
-         *  · 左侧文字区是 "textInfo"，不是 "miui.focus.paramtextInfo"
-         *  · 文字字段是 title/content/showHighlightColor，不是 frontTitle/useHighLight
-         *  · 要带 islandPriority（库默认 2）
-         *  · baseInfo.type 用 1（Template 1），文档示例里的 2 对应另一套版式
+         * 为什么要这个纯文字变体：前几轮我把候选原因收窄到
+         * 「图标解析失败导致整个岛布局被丢弃」。如果纯文字那条能上岛，
+         * 就证明协议结构没问题、锅在图标（VectorDrawable 跨进程渲染不可靠）。
          *
-         * 前两次失败的教训：
-         *  · timeout = -1 是「5 秒后消失」，测的时候根本来不及看
-         *  · param_island 的 bigIslandArea / smallIslandArea 是**必选且要按模板填**，
-         *    之前给的是空 {}，系统没有内容可渲染，直接跳过岛 —— 所以通知在、
-         *    岛不在。这个字段不是"可选装饰"，是岛的正文。
-         *
-         * picInfo.pic 只是**键引用**，真实图标要从 extras 里的
-         * "miui.focus.pics" Bundle 取（见下面的 pics），否则图标是空的。
+         * 图标同时从 VectorDrawable 换成 Bitmap：焦点通知由 SystemUI 进程解析，
+         * Icon.createWithResource 指向 .xml 矢量图时跨进程可能拿不到实际像素。
          */
-        val params = """
+        val icon = buildBitmapIcon(context)
+
+        val fullParams = islandParams(withPic = true, title = title, text = text)
+        val textOnlyParams = islandParams(withPic = false, title = title, text = text)
+
+        val results = mutableListOf<String>()
+
+        // ① 完整变体
+        results += notifyOne(
+            context, manager, NOTIFICATION_ID, title, text, fullParams, icon,
+            label = "完整(带Bitmap图标)",
+        )
+        // ② 纯文字变体
+        results += notifyOne(
+            context, manager, NOTIFICATION_ID_TEXT_ONLY, "$title（纯文字）", text,
+            textOnlyParams, null, label = "纯文字(无picInfo)",
+        )
+        // ③ 普通对照
+        results += runCatching {
+            val plain = NotificationCompat.Builder(context, CHANNEL_ID)
+                .setSmallIcon(android.R.drawable.stat_sys_download)
+                .setContentTitle("$title（普通）")
+                .setContentText("不带 miui.focus.param，用来对照")
+                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                .build()
+            manager.notify(NOTIFICATION_ID_PLAIN, plain)
+            record(context, "已发对照通知 id=$NOTIFICATION_ID_PLAIN（不带 miui.focus.param）")
+            "对照=已发"
+        }.getOrElse {
+            record(context, "对照通知发送失败：${it.javaClass.simpleName} ${it.message}")
+            "对照=失败"
+        }
+
+        record(context, "本批结果：${results.joinToString(" | ")}")
+        return true
+    }
+
+    /** 发一条带焦点参数的岛通知，返回「是否进了系统活跃列表」的简短结论。 */
+    private fun notifyOne(
+        context: Context,
+        manager: NotificationManagerCompat,
+        id: Int,
+        title: String,
+        text: String,
+        params: String,
+        icon: Icon?,
+        label: String,
+    ): String {
+        val extras = Bundle().apply {
+            putString("miui.focus.param", params)
+            // 只有真的给了图标才挂 pics Bundle；纯文字变体连这个都不给，
+            // 这样才能干净地区分「结构问题」和「图标问题」
+            icon?.let { putBundle("miui.focus.pics", Bundle().apply { putParcelable(PIC_KEY, it) }) }
+        }
+        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.stat_sys_download)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setAutoCancel(false)
+            .addExtras(extras)
+            .build()
+        return runCatching {
+            manager.notify(id, notification)
+            val active = runCatching { manager.activeNotifications?.map { it.id } }.getOrNull()
+            val inSystem = active?.contains(id) == true
+            record(
+                context,
+                "[$label] id=$id 已发送 | 在活跃列表=$inSystem | param=${params.replace(Regex("\\s+"), "")}",
+            )
+            "$label=${if (inSystem) "在" else "不在"}"
+        }.getOrElse {
+            record(context, "[$label] id=$id 发送异常：${it.javaClass.simpleName} ${it.message}")
+            "$label=异常"
+        }
+    }
+
+    /**
+     * 把 App 图标渲染成 Bitmap 再包成 Icon。
+     *
+     * 不用 Icon.createWithResource(context, R.drawable.ic_cloud_download)：
+     * 那是 VectorDrawable，SystemUI 进程解析时拿不到像素的风险较高。
+     * 万一 toBitmap 失败，退回一块纯色，至少保证图标存在。
+     */
+    private fun buildBitmapIcon(context: Context): Icon? {
+        return runCatching {
+            val drawable = ContextCompat.getDrawable(context, R.mipmap.ic_launcher)
+            if (drawable != null) {
+                Icon.createWithBitmap(drawable.toBitmap(96, 96))
+            } else {
+                solidIcon()
+            }
+        }.getOrElse {
+            record(context, "图标渲染失败，退回纯色：${it.javaClass.simpleName}")
+            runCatching { solidIcon() }.getOrNull()
+        }
+    }
+
+    private fun solidIcon(): Icon {
+        val bitmap = Bitmap.createBitmap(96, 96, Bitmap.Config.ARGB_8888)
+        Canvas(bitmap).drawColor(Color.parseColor("#FF7A3A"))
+        return Icon.createWithBitmap(bitmap)
+    }
+
+    /**
+     * 生成 param_v2。结构以社区库 hyperisland_kit
+     * （github.com/D4vidDf/HyperIsland-ToolKit，已发布在 Maven Central）为准，
+     * 它是真机跑通过的实现；官方文档那份示例的字段名对不上当前系统。
+     *
+     * @param withPic false 时**完全不输出任何 picInfo**，用来做「纯文字岛」对照
+     */
+    private fun islandParams(withPic: Boolean, title: String, text: String): String {
+        // 注意：picInfo 段必须整体出现或整体消失，留半个对象反而是非法结构
+        val leftPic = if (withPic) """"picInfo":{"type":1,"pic":"$PIC_KEY"},""" else ""
+        val rightPic = if (withPic) ""","picInfo":{"type":1,"pic":"$PIC_KEY"}""" else ""
+        // SmallIslandArea 只有 combinePicInfo / picInfo 两个字段，没有 type。
+        // 少了 picInfo 就是一个合法的空对象 {}
+        val smallPic = if (withPic) """"picInfo":{"type":1,"pic":"$PIC_KEY"}""" else ""
+        val tickerPic = if (withPic) """"tickerPic":"$PIC_KEY",""" else ""
+        return """
             {"param_v2":{
               "protocol":3,
               "business":"download",
               "updatable":true,
               "ticker":"抖音下载器",
-              "tickerPic":"miui.focus.pic_icon",
+              $tickerPic
               "enableFloat":true,
               "islandFirstFloat":true,
               "timeout":5,
@@ -213,89 +328,28 @@ object MiuiIslandProbe {
                 "bigIslandArea":{
                   "imageTextInfoLeft":{
                     "type":1,
-                    "picInfo":{"type":1,"pic":"miui.focus.pic_icon"},
+                    $leftPic
                     "textInfo":{
-                      "title":"超级岛测试",
-                      "content":"能看到这条说明岛通了",
+                      "title":"$title",
+                      "content":"$text",
                       "showHighlightColor":false
                     }
-                  },
-                  "picInfo":{"type":1,"pic":"miui.focus.pic_icon"}
+                  }$rightPic
                 },
                 "smallIslandArea":{
-                  "picInfo":{"type":1,"pic":"miui.focus.pic_icon"}
+                  $smallPic
                 }
               },
               "baseInfo":{
                 "type":1,
                 "title":"抖音下载器",
-                "content":"超级岛联通性测试",
+                "content":"$text",
                 "colorTitle":"#FF7A3A"
               }
             }}
-        """.trimIndent()
-
-        // 岛 JSON 里引用的 miui.focus.pic_xxx，实体图标从这个 Bundle 取
-        val pics = Bundle().apply {
-            putParcelable(
-                "miui.focus.pic_icon",
-                Icon.createWithResource(context, R.drawable.ic_cloud_download),
-            )
-        }
-        val notificationExtras = Bundle().apply {
-            putString("miui.focus.param", params)
-            putBundle("miui.focus.pics", pics)
-        }
-        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.stat_sys_download)
-            .setContentTitle(title)
-            .setContentText(text)
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-            // 焦点通知要能更新/常驻观察，先不自动取消
-            .setAutoCancel(false)
-            .setOngoing(false)
-            .addExtras(notificationExtras)
-            .build()
-
-        /*
-         * 先发一条**不带** miui.focus.param 的普通通知做对照。
-         *
-         * 有了它，一次点击就能区分三种失败：
-         *  · 两条都出现 → 通知系统正常，是 focus 协议体没被系统识别
-         *  · 只有普通那条 → focus 协议体被判非法，整条被丢弃
-         *  · 两条都没有 → 通知权限/渠道层面就没通，跟岛无关
-         */
-        runCatching {
-            val plain = NotificationCompat.Builder(context, CHANNEL_ID)
-                .setSmallIcon(android.R.drawable.stat_sys_download)
-                .setContentTitle("$title（普通）")
-                .setContentText("不带 miui.focus.param，用来对照")
-                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-                .build()
-            manager.notify(NOTIFICATION_ID_PLAIN, plain)
-            record(context, "已发对照通知 id=$NOTIFICATION_ID_PLAIN（不带 miui.focus.param）")
-        }.onFailure { record(context, "对照通知发送失败：${it.javaClass.simpleName} ${it.message}") }
-
-        return try {
-            manager.notify(NOTIFICATION_ID, notification)
-            // 发送后立刻回读活跃通知：能看到 id 说明通知真的进了系统，
-            // 看不到说明被系统层直接丢弃（协议体非法时就是这样）
-            val active = runCatching { manager.activeNotifications?.map { it.id } }
-                .getOrNull()
-            record(context, "已发焦点通知 id=$NOTIFICATION_ID")
-            record(context, "param_v2=${params.replace(Regex("\\s+"), "")}")
-            record(
-                context,
-                "发送后活跃通知=${active?.joinToString(",") ?: "读取失败"}"
-                        + " | 包含焦点通知=${active?.contains(NOTIFICATION_ID) == true}"
-                        + " | 包含对照通知=${active?.contains(NOTIFICATION_ID_PLAIN) == true}",
-            )
-            true
-        } catch (throwable: Throwable) {
-            Log.w(TAG, "发送测试通知失败", throwable)
-            false
-        }
+        """.trimIndent().replace(Regex(",\\s*,", RegexOption.IGNORE_CASE), ",")
     }
+
 
     /** 反射读 boolean 系统属性。取不到按 false。 */
     private fun readBooleanProperty(key: String): Boolean {
