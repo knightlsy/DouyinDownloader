@@ -6,11 +6,15 @@ import coil.ImageLoaderFactory
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
 import com.knightlsy.douyin.data.LogStore
+import com.zz.douyin.XposedServiceBridge
 
 class App : Application(), ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
         LogStore.init(this)
+        // 绑定 LSPosed 服务。设置页里那些开关必须通过它写远程偏好，
+        // 直接写 SharedPreferences 是另一套存储，hook 侧读不到。
+        XposedServiceBridge.attach(this)
     }
     override fun newImageLoader(): ImageLoader {
         return ImageLoader.Builder(this)

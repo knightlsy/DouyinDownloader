@@ -125,8 +125,14 @@ final class SharedHistoryStore {
         }
     }
 
-    /** 读回所有行。解析失败的行跳过，不影响其余。 */
-    static synchronized List<String> read(Context context) {
+    /**
+     * 读回所有行。解析失败的行跳过，不影响其余。
+     *
+     * 必须是 public：调用方在 com.knightlsy.douyin.data（Kotlin），
+     * 与这个类不在同一个包，包私有访问不到。合并之前两边是两个 App，
+     * 现在是同一个 APK 的两个包。
+     */
+    public static synchronized List<String> read(Context context) {
         return readAllLines(file(context));
     }
 

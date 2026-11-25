@@ -55,8 +55,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.launch
-import android.content.Context
 import com.zz.douyin.FilterPreferences
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.draw.alpha
+import com.zz.douyin.XposedServiceBridge
 
 /**
  * 设置页：主题（三分段直选）、背景（壁纸氛围 / 强调色跟随壁纸）、日志入口、关于入口。
@@ -142,28 +145,49 @@ fun SettingsScreen(
             val context = LocalContext.current
 
             /*
-             * 三个开关都写 FilterPreferences 那一份（content_filter）。
-             * hook 侧通过 getRemotePreferences(FilterPreferences.NAME) 读同一个文件 ——
-             * prefs 名必须严格一致，写错就是「开关能拨但没有任何效果」。
+             * 这些开关写的是「远程偏好」—— 必须经 XposedService 拿，
+             * 不能自己 getSharedPreferences。
              *
-             * SharedPreferences 首次加载要读磁盘，所以放在 remember 里只读一次。
+             * hook 侧的 getRemotePreferences 读的是 LSPosed 守护进程按
+             * 「模块包名 + userId」管理的那一份，跟本 APK 的 shared_prefs
+             * 目录是两个存储。直接写本地 XML 的话，开关能拨、值也存下来了，
+             * 但 hook 永远读不到，而且没有任何报错。
+             *
+             * service 没连上（LSPosed 没启用本模块 / 管理器没起来）时
+             * prefs() 返回 null，UI 上整块置灰 —— 不让用户拨一个空开关。
              */
-            val filterPrefs = remember {
-                context.getSharedPreferences(FilterPreferences.NAME, Context.MODE_PRIVATE)
+            var bridgeConnected by remember { mutableStateOf(XposedServiceBridge.isConnected()) }
+            var bridgeDesc by remember { mutableStateOf(XposedServiceBridge.describe()) }
+            var moduleEnabled by remember { mutableStateOf(true) }
+            var immersiveEnabled by remember { mutableStateOf(true) }
+            var skipAds by remember { mutableStateOf(FilterPreferences.DEFAULT_SKIP_ADS) }
+            var skipImages by remember { mutableStateOf(FilterPreferences.DEFAULT_SKIP_IMAGES) }
+            var skipLives by remember { mutableStateOf(FilterPreferences.DEFAULT_SKIP_LIVES) }
+
+            // 从远程偏好重读全部开关。service 绑定是异步的，
+            // 首次进入设置页时可能还没连上，所以连接状态变化也要触发重读。
+            fun reloadModulePrefs() {
+                bridgeConnected = XposedServiceBridge.isConnected()
+                bridgeDesc = XposedServiceBridge.describe()
+                val prefs = XposedServiceBridge.prefs() ?: return
+                moduleEnabled = FilterPreferences.readModuleEnabled(prefs)
+                immersiveEnabled = FilterPreferences.readImmersiveEnabled(prefs)
+                val values = FilterPreferences.read(prefs)
+                skipAds = values.skipAds
+                skipImages = values.skipImages
+                skipLives = values.skipLives
             }
-            var moduleEnabled by remember {
-                mutableStateOf(FilterPreferences.readModuleEnabled(filterPrefs))
+
+            LaunchedEffect(Unit) { reloadModulePrefs() }
+            DisposableEffect(Unit) {
+                val listener = Runnable { reloadModulePrefs() }
+                XposedServiceBridge.addListener(listener)
+                onDispose { XposedServiceBridge.removeListener(listener) }
             }
-            var immersiveEnabled by remember {
-                mutableStateOf(FilterPreferences.readImmersiveEnabled(filterPrefs))
-            }
-            var skipAds by remember {
-                mutableStateOf(
-                    filterPrefs.getBoolean(
-                        FilterPreferences.KEY_SKIP_ADS,
-                        FilterPreferences.DEFAULT_SKIP_ADS,
-                    )
-                )
+
+            // 写不进去（service 断开）就什么都不做，UI 那边已经置灰了
+            fun writeModulePref(key: String, value: Boolean) {
+                XposedServiceBridge.prefs()?.edit()?.putBoolean(key, value)?.apply()
             }
 
             BgSectionLabel("外观", accent = null)
@@ -289,21 +313,36 @@ fun SettingsScreen(
                          lineHeight = 17.sp,
                          color = c.ink3,
                      )
+                     Spacer(Modifier.height(6.dp))
+                     // 连接状态必须显式显示：没连上时开关是灰的，
+                     // 不解释原因用户只会觉得「设置坏了」
+                     Text(
+                         text = if (bridgeConnected) {
+                             "已连接 · $bridgeDesc"
+                         } else {
+                             "未连接 LSPosed，设置不可修改"
+                         },
+                         fontFamily = FontFamily.SansSerif,
+                         fontSize = 11.sp,
+                         color = if (bridgeConnected) c.accent else c.ink3,
+                     )
                  }
                  RowDivider()
                  SettingsSwitchRow(
                      title = "启用模块功能",
+                     // 两个方向的实际生效速度不同：
+                     // 关 → 开：hook 压根没装（onPackageReady 直接 return），必须重启抖音
+                     // 开 → 关：各 hook 内部有 OnSharedPreferenceChangeListener，近似即时
                      description = if (moduleEnabled) {
-                         "关闭后不再拦截抖音，改动需重启抖音"
+                         "已启用 · 关闭后立刻停止拦截"
                      } else {
-                         "已停用，抖音保持原样"
+                         "已停用 · 重新打开需要重启抖音"
                      },
                      checked = moduleEnabled,
+                     enabled = bridgeConnected,
                      onChange = { enabled ->
                          moduleEnabled = enabled
-                         filterPrefs.edit()
-                             .putBoolean(FilterPreferences.KEY_MODULE_ENABLED, enabled)
-                             .apply()
+                         writeModulePref(FilterPreferences.KEY_MODULE_ENABLED, enabled)
                      },
                  )
                  RowDivider()
@@ -311,11 +350,10 @@ fun SettingsScreen(
                      title = "沉浸式播放",
                      description = "全屏沉浸、隐藏原生控件",
                      checked = immersiveEnabled,
+                     enabled = bridgeConnected,
                      onChange = { enabled ->
                          immersiveEnabled = enabled
-                         filterPrefs.edit()
-                             .putBoolean(FilterPreferences.KEY_IMMERSIVE_ENABLED, enabled)
-                             .apply()
+                         writeModulePref(FilterPreferences.KEY_IMMERSIVE_ENABLED, enabled)
                      },
                  )
                  RowDivider()
@@ -323,11 +361,35 @@ fun SettingsScreen(
                      title = "跳过广告",
                      description = "自动划走信息流广告",
                      checked = skipAds,
+                     enabled = bridgeConnected,
                      onChange = { enabled ->
                          skipAds = enabled
-                         filterPrefs.edit()
-                             .putBoolean(FilterPreferences.KEY_SKIP_ADS, enabled)
-                             .apply()
+                         writeModulePref(FilterPreferences.KEY_SKIP_ADS, enabled)
+                     },
+                 )
+                 RowDivider()
+                 // 这两个默认是 true（FilterPreferences.DEFAULT_SKIP_IMAGES/LIVES），
+                 // 之前没有入口 —— 用户在抖音里会莫名其妙被自动划走图文和直播，
+                 // 却找不到任何开关能关掉。
+                 SettingsSwitchRow(
+                     title = "跳过图文",
+                     description = "自动划走纯图文作品",
+                     checked = skipImages,
+                     enabled = bridgeConnected,
+                     onChange = { enabled ->
+                         skipImages = enabled
+                         writeModulePref(FilterPreferences.KEY_SKIP_IMAGES, enabled)
+                     },
+                 )
+                 RowDivider()
+                 SettingsSwitchRow(
+                     title = "跳过直播",
+                     description = "自动划走直播推荐",
+                     checked = skipLives,
+                     enabled = bridgeConnected,
+                     onChange = { enabled ->
+                         skipLives = enabled
+                         writeModulePref(FilterPreferences.KEY_SKIP_LIVES, enabled)
                      },
                  )
              }
@@ -457,7 +519,10 @@ private fun SettingsSwitchRow(
         Modifier
             .fillMaxWidth()
             .heightIn(min = 56.dp)
-            .padding(vertical = 10.dp),
+            .padding(vertical = 10.dp)
+            // 不可用时整行置灰。不是「点了没反应」，而是看起来就不能点 ——
+            // 远程偏好拿不到时拨开关只会写进一份没人读的数据。
+            .alpha(if (enabled) 1f else 0.45f),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
@@ -480,7 +545,7 @@ private fun SettingsSwitchRow(
         Spacer(Modifier.width(14.dp))
         BgSettingSwitch(
             checked = checked,
-            onChange = onChange,
+            onChange = { if (enabled) onChange(it) },
         )
     }
 }
