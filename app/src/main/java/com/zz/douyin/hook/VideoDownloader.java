@@ -99,8 +99,23 @@ final class VideoDownloader {
         dismissChooser();
         chooser = new AlertDialog.Builder(activity)
                 .setTitle(photo ? "下载当前图文" : "下载当前内容")
-                .setItems(labels.toArray(new String[0]),
-                        (dialog, which) -> download(activity, snapshot, kinds.get(which), refresher))
+                .setItems(labels.toArray(new String[0]), (dialog, which) -> {
+                    Kind kind = kinds.get(which);
+                    if (kind == Kind.IMAGE && images > 1) {
+                        // 多于一张先让用户勾选：图文动辄十几张，
+                        // 全下之后还得回相册删掉不要的
+                        dialog.dismiss();
+                        ImagePickerDialog.show(
+                                activity,
+                                snapshot.imageUrls(),
+                                picked -> download(
+                                        activity, snapshot, Kind.IMAGE, refresher, picked
+                                )
+                        );
+                    } else {
+                        download(activity, snapshot, kind, refresher, null);
+                    }
+                })
                 .setNegativeButton("取消", null)
                 .create();
         chooser.setOnDismissListener(dialog -> { if (chooser == dialog) chooser = null; });
@@ -122,7 +137,9 @@ final class VideoDownloader {
             Activity activity,
             FeedContentTracker.Snapshot snapshot,
             Kind kind,
-            SnapshotSupplier refresher
+            SnapshotSupplier refresher,
+            /** 图集选中的下标；null 表示全下 */
+            List<Integer> selectedIndices
     ) {
         if (!ImmersiveUi.isModuleEnabled()) return;
         if (activity == null || snapshot == null) {
@@ -163,7 +180,7 @@ final class VideoDownloader {
                 ensureEnabled();
                 result = switch (kind) {
                     case AUDIO -> downloadAudio(context, snapshot, baseName + ".mp3", refresher);
-                    case IMAGE -> downloadImages(context, snapshot, baseName);
+                    case IMAGE -> downloadImages(context, snapshot, baseName, selectedIndices);
                     case VIDEO -> downloadVideo(context, snapshot, baseName + ".mp4", refresher);
                 };
             } catch (Throwable error) {
@@ -266,7 +283,35 @@ final class VideoDownloader {
             FeedContentTracker.Snapshot snapshot,
             String baseName
     ) throws IOException {
-        List<FeedContentTracker.ImageUrl> candidates = snapshot.imageUrls();
+        return downloadImages(context, snapshot, baseName, null);
+    }
+
+    /**
+     * @param selectedIndices 用户勾选的下标；null/空表示全部下载
+     */
+    private static DownloadResult downloadImages(
+            Context context,
+            FeedContentTracker.Snapshot snapshot,
+            String baseName,
+            List<Integer> selectedIndices
+    ) throws IOException {
+        List<FeedContentTracker.ImageUrl> all = snapshot.imageUrls();
+        List<FeedContentTracker.ImageUrl> candidates;
+        if (selectedIndices == null || selectedIndices.isEmpty()) {
+            candidates = all;
+        } else {
+            // 按用户勾选的顺序（ImagePickerDialog 已排序）挑出来，
+            // 越界的下标直接跳过，不因为一条脏数据整批失败
+            candidates = new ArrayList<>();
+            for (int picked : selectedIndices) {
+                if (picked >= 0 && picked < all.size()) {
+                    candidates.add(all.get(picked));
+                }
+            }
+        }
+        if (candidates.isEmpty()) {
+            throw new IOException("没有可下载的图片");
+        }
         int total = candidates.size();
         int saved = 0;
         // 收集实际落盘的文件名，一起交给 publishHistory —— 否则历史里的
