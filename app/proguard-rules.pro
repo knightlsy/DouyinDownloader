@@ -63,7 +63,10 @@
 -renamesourcefileattribute SourceFile
 
 # ── Xposed 模块（从抖仙人合并进来）──
-# 入口类由框架按 java_init.list 里的全限定名加载，名字绝不能变
+# 关键：入口类会被允许改名，而 java_init.list 里写的是原始全限定名。
+# 若不同步改写声明文件，框架按原名去找就找不到类 —— 模块静默不加载。
+# 这一行让 R8 在混淆后把 java_init.list 的内容替换成改名后的类名。
+-adaptresourcefilecontents META-INF/xposed/java_init.list
 -keep,allowoptimization,allowobfuscation public class * extends io.github.libxposed.api.XposedModule {
     public <init>();
 }
