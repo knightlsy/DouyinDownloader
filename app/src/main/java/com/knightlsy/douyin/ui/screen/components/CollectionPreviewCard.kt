@@ -58,6 +58,14 @@ fun CollectionPreviewCard(
     collection: ContentInfo.ImageCollection,
     onDownloadSelected: (List<String>) -> Unit,
     onImageClick: (Int) -> Unit,
+    /**
+     * 请求弹出「选图浮层」。
+     *
+     * 浮层不在这里渲染 —— 本卡是 LazyColumn 的 item，item 被回收（滚动、数据刷新）时
+     * 内部的一切都会被销毁，全屏 Dialog 寄生在这里会跟着消失。
+     * 提到调用方那层渲染才稳。
+     */
+    onRequestPick: (ContentInfo.ImageCollection) -> Unit = { onDownloadSelected(it.imageUrls) },
     modifier: Modifier = Modifier,
 ) {
     val c = LocalBgColors.current
@@ -70,9 +78,6 @@ fun CollectionPreviewCard(
 
     val liveCount = collection.animatedUrls.count { it != null }
 
-    // 下载前弹选图浮层：图集动辄十几二十张，在长页面里翻着勾容易漏选，
-    // 勾到后半段也记不住前面选了什么。浮层一屏看完、网格独立滚动。
-    var showPicker by remember(collection.id) { mutableStateOf(false) }
 
     Column(modifier.fillMaxWidth().padding(horizontal = BgSpace.gutter)) {
 
@@ -212,7 +217,15 @@ fun CollectionPreviewCard(
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
-                    onClick = { showPicker = true },
+                    onClick = {
+                        // 留一条日志：出问题时能一眼分清是「点击没触发」
+                        // 还是「浮层没渲染」。adb logcat -s ImagePicker
+                        android.util.Log.i(
+                            "ImagePicker",
+                            "点开选图：${collection.imageUrls.size} 张",
+                        )
+                        onRequestPick(collection)
+                    },
                 ),
             contentAlignment = Alignment.Center,
         ) {
@@ -230,19 +243,6 @@ fun CollectionPreviewCard(
         }
     }
 
-    // 浮层是 Dialog，独立于布局树，不影响 Column 排版。
-    // 初始选择沿用卡片里已勾好的，用户不必重选。
-    if (showPicker) {
-        ImageSelectionSheet(
-            collection = collection,
-            initialSelection = selected,
-            onDismiss = { showPicker = false },
-            onConfirm = { urls ->
-                showPicker = false
-                onDownloadSelected(urls)
-            },
-        )
-    }
 }
 /**
  * 网格单元。

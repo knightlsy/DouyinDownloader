@@ -53,6 +53,7 @@ import com.knightlsy.douyin.data.ContentType
 import com.knightlsy.douyin.ui.components.BgMonoLabel
 import com.knightlsy.douyin.ui.components.BgSectionLabel
 import com.knightlsy.douyin.ui.screen.components.CollectionPreviewCard
+import com.knightlsy.douyin.ui.screen.components.ImageSelectionSheet
 import com.knightlsy.douyin.ui.screen.components.ImageViewerDialog
 import com.knightlsy.douyin.ui.screen.components.LinkInputCard
 import com.knightlsy.douyin.ui.screen.components.TaskCard
@@ -108,6 +109,15 @@ fun MainScreen(
     var playingUrl by remember { mutableStateOf<String?>(null) }
     // 看图：图片列表 + 起始序号（null = 没在看）
     var viewer by remember { mutableStateOf<Pair<List<String>, Int>?>(null) }
+
+    /**
+     * 正在选图的图集。null = 没在选。
+     *
+     * 浮层放在这一层而不是 CollectionPreviewCard 内部：那张卡是 LazyColumn 的
+     * item，item 被回收（滚动、数据刷新）时内部的一切都会被销毁 ——
+     * 全屏 Dialog 寄生在那里会跟着消失。
+     */
+    var pickingCollection by remember { mutableStateOf<ContentInfo.ImageCollection?>(null) }
 
     // 空状态填充：无解析内容时，首次显示引导、有历史则显示最近解析
     var recentHistory by remember { mutableStateOf<List<DownloadHistoryItem>>(emptyList()) }
@@ -243,6 +253,7 @@ fun MainScreen(
                                     viewModel.startDownloadSelected(urls)
                                 },
                                 onImageClick = { idx -> viewer = info.imageUrls to idx },
+                                onRequestPick = { pickingCollection = it },
                             )
 
                             else -> Unit
@@ -350,6 +361,24 @@ fun MainScreen(
             onDismiss = { viewer = null },
         )
     }
+
+    // 图集选图浮层。和上面的看图 Dialog 一样放在函数末尾 ——
+    // 只有在这一层，列表滚动和数据刷新才不会把它连带销毁。
+    pickingCollection?.let { target ->
+        androidx.compose.runtime.LaunchedEffect(target.id) {
+            android.util.Log.i("ImagePicker", "渲染选图浮层：${target.imageUrls.size} 张")
+        }
+        ImageSelectionSheet(
+            collection = target,
+            initialSelection = target.imageUrls.indices.toSet(),
+            onDismiss = { pickingCollection = null },
+            onConfirm = { urls ->
+                pickingCollection = null
+                viewModel.startDownloadSelected(urls)
+            },
+        )
+    }
+
 }
 
 /**
