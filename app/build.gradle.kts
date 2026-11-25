@@ -103,8 +103,11 @@ android {
 dependencies {
     // Xposed 模块能力。api 用 compileOnly：运行时的 XposedModule 由框架注入，
     // 打进 APK 会和宿主里的那份冲突。
+    // 只留 api：hook 代码只 import 了 XposedModule 一个类，没碰 service。
+    // service:102 及其传递依赖 interface:102 的 AAR 元数据要求 compileSdk 37，
+    // 而本工程 AGP 8.9 官方只支持到 35（现在硬用 36）。去掉它就不触发那条检查。
+    // 运行时 XposedModule 由框架注入，compileOnly 不进 APK。
     compileOnly("io.github.libxposed:api:102.0.0")
-    implementation("io.github.libxposed:service:102.0.0")
     // 抖仙人的音频转码（MP3 下载）依赖
     implementation("de.sciss:jump3r:1.0.5")
     implementation("androidx.core:core-ktx:1.12.0")
