@@ -4,6 +4,8 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import com.knightlsy.douyin.R
+import android.graphics.drawable.Icon
 import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
@@ -171,32 +173,65 @@ object MiuiIslandProbe {
         )
 
         /*
-         * param_v2 是文档里的根对象。
+         * param_v2 结构（照抄官方示例模板）。
          *
-         * 上一版的两个坑（导致「通知栏都看不到」）：
-         *  1. timeout = -1 按文档是「5 秒后消失」，太快了，测的时候根本来不及看。
-         *     现在用 1（分钟），留足观察时间。
-         *  2. param_island 只给了 islandProperty，缺 bigIslandArea / smallIslandArea /
-         *     shareData。官方示例里这三个是有的 —— 协议体不完整时系统很可能
-         *     直接丢弃整条通知，连普通通知形态都不剩。
+         * 前两次失败的教训：
+         *  · timeout = -1 是「5 秒后消失」，测的时候根本来不及看
+         *  · param_island 的 bigIslandArea / smallIslandArea 是**必选且要按模板填**，
+         *    之前给的是空 {}，系统没有内容可渲染，直接跳过岛 —— 所以通知在、
+         *    岛不在。这个字段不是"可选装饰"，是岛的正文。
+         *
+         * picInfo.pic 只是**键引用**，真实图标要从 extras 里的
+         * "miui.focus.pics" Bundle 取（见下面的 pics），否则图标是空的。
          */
         val params = """
             {"param_v2":{
-              "business":"download",
               "protocol":1,
-              "timeout":1,
-              "islandFirstFloat":true,
+              "business":"download",
+              "enableFloat":true,
+              "updatable":true,
+              "ticker":"抖音下载器",
+              "tickerPic":"miui.focus.pic_icon",
+              "timeout":5,
               "param_island":{
                 "islandProperty":1,
-                "bigIslandArea":{},
-                "smallIslandArea":{},
-                "shareData":{}
+                "islandTimeout":120,
+                "bigIslandArea":{
+                  "imageTextInfoLeft":{
+                    "type":1,
+                    "picInfo":{"type":1,"pic":"miui.focus.pic_icon"},
+                    "miui.focus.paramtextInfo":{
+                      "frontTitle":"抖音下载器",
+                      "title":"超级岛测试",
+                      "content":"能看到这条说明岛通了",
+                      "useHighLight":false
+                    }
+                  },
+                  "picInfo":{"type":1,"pic":"miui.focus.pic_icon"}
+                },
+                "smallIslandArea":{
+                  "picInfo":{"type":1,"pic":"miui.focus.pic_icon"}
+                }
+              },
+              "baseInfo":{
+                "title":"抖音下载器",
+                "content":"超级岛联通性测试",
+                "colorTitle":"#FF7A3A",
+                "type":2
               }
             }}
         """.trimIndent()
 
-        val extras = Bundle().apply {
+        // 岛 JSON 里引用的 miui.focus.pic_xxx，实体图标从这个 Bundle 取
+        val pics = Bundle().apply {
+            putParcelable(
+                "miui.focus.pic_icon",
+                Icon.createWithResource(context, R.drawable.ic_cloud_download),
+            )
+        }
+        val notificationExtras = Bundle().apply {
             putString("miui.focus.param", params)
+            putBundle("miui.focus.pics", pics)
         }
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_download)
@@ -206,7 +241,7 @@ object MiuiIslandProbe {
             // 焦点通知要能更新/常驻观察，先不自动取消
             .setAutoCancel(false)
             .setOngoing(false)
-            .addExtras(extras)
+            .addExtras(notificationExtras)
             .build()
 
         /*
