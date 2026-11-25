@@ -513,6 +513,11 @@ private fun SettingsSwitchRow(
     description: String,
     checked: Boolean,
     onChange: (Boolean) -> Unit,
+    /**
+     * false 时整行置灰、点击无效。远程偏好拿不到（LSPosed 服务未连接）时用这个 ——
+     * 让用户看见「这不能用」，而不是拨一个只会写进死数据的开关。
+     */
+    enabled: Boolean = true,
 ) {
     val c = LocalBgColors.current
     Row(

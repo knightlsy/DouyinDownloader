@@ -30,7 +30,7 @@ import java.util.List;
  * JSONL：一行一条，只追加。写坏一行不影响其它行。
  * 字段定义见仓库根的 SHARED-DATA.md。
  */
-final class SharedHistoryStore {
+public final class SharedHistoryStore {
 
     private static final String TAG = "DouyinShared";
     private static final String FILE_NAME = "shared_history.jsonl";
