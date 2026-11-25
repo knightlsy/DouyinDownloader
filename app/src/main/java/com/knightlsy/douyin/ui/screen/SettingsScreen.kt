@@ -60,6 +60,11 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.draw.alpha
 import com.zz.douyin.XposedServiceBridge
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import com.knightlsy.douyin.data.MiuiIslandProbe
+import android.widget.Toast
 
 /**
  * 设置页：主题（三分段直选）、背景（壁纸氛围 / 强调色跟随壁纸）、日志入口、关于入口。
@@ -142,6 +147,10 @@ fun SettingsScreen(
                 .padding(top = 18.dp, bottom = 40.dp)
         ) {
             val context = LocalContext.current
+            val scope = rememberCoroutineScope()
+            // 超级岛探测结果。null = 还没探过；点击那行会发一条测试通知
+            var islandResult by remember { mutableStateOf<MiuiIslandProbe.Result?>(null) }
+            var islandProbing by remember { mutableStateOf(false) }
 
             /*
              * 这些开关写的是「远程偏好」—— 必须经 XposedService 拿，
@@ -404,6 +413,48 @@ fun SettingsScreen(
                     value = if (LogStore.isEnabled()) "${LogStore.lineCount()} 条" else "已关闭",
                     onClick = onNavigateToLogs,
                 )
+
+                // 小米焦点通知 / 超级岛探测。只查不写，零风险。
+                // 点一下发一条 timeout=-1 的测试通知（5 秒自动消失）。
+                if (MiuiIslandProbe.isXiaomiDevice()) {
+                    RowDivider()
+                    SettingsNavRow(
+                        title = "超级岛",
+                        value = when {
+                            islandProbing -> "探测中…"
+                            islandResult == null -> "—"
+                            else -> islandResult!!.shortLabel
+                        },
+                        onClick = {
+                            val current = islandResult
+                            if (current == null) {
+                                islandProbing = true
+                                scope.launch {
+                                    islandResult = withContext(Dispatchers.IO) {
+                                        MiuiIslandProbe.probe(context)
+                                    }
+                                    islandProbing = false
+                                }
+                            } else {
+                                val sent = MiuiIslandProbe.sendProbeNotification(
+                                    context,
+                                    "抖音下载器 · 超级岛测试",
+                                    if (current.hasFocusPermission) {
+                                        "能看到这条，说明可以直接接岛"
+                                    } else {
+                                        "看不到是正常的：本应用不在焦点通知白名单"
+                                    },
+                                )
+                                Toast.makeText(
+                                    context,
+                                    if (sent) "已发送 · " + current.describe()
+                                    else "通知权限没开，发不出去",
+                                    Toast.LENGTH_LONG,
+                                ).show()
+                            }
+                        },
+                    )
+                }
             }
 
             Spacer(Modifier.height(22.dp))
