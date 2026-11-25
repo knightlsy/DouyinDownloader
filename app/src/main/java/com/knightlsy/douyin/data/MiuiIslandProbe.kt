@@ -319,11 +319,11 @@ object MiuiIslandProbe {
               $tickerPic
               "enableFloat":true,
               "islandFirstFloat":true,
-              "timeout":5,
+              "timeout":2,
               "param_island":{
                 "islandProperty":1,
                 "islandPriority":2,
-                "islandTimeout":120,
+                "islandTimeout":15,
                 "needCloseAnimation":true,
                 "bigIslandArea":{
                   "imageTextInfoLeft":{

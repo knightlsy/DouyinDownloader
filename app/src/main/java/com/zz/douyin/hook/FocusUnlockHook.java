@@ -8,7 +8,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.WeakHashMap;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * HyperOS 焦点通知 / 超级岛白名单解锁。
@@ -76,7 +75,7 @@ final class FocusUnlockHook {
      * 拦到的每一次都写日志会拖慢通知流程、把 logcat 刷满，所以只记第一次命中，
      * 用来确认 hook 真的在生效，之后安静放行。
      */
-    private static final AtomicBoolean WHITELIST_HIT = new AtomicBoolean(false);
+    private static volatile boolean whitelistHitLogged = false;
 
     private FocusUnlockHook() {
     }
@@ -185,7 +184,11 @@ final class FocusUnlockHook {
                             .setId("focus-unlock-whitelist-" + signature)
                             .setExceptionMode(DouyinModule.ExceptionMode.PROTECTIVE)
                             .intercept(chain -> {
-                                if (WHITELIST_HIT.compareAndSet(false, true)) {
+                                // 高频路径：用 volatile 普通读而不是 CAS。
+                                // 并发下极少数情况会重复记一次日志，但那条路径上
+                                // 省下的原子操作比一条重复日志值钱。
+                                if (!whitelistHitLogged) {
+                                    whitelistHitLogged = true;
                                     host.log(Log.INFO, DouyinModule.TAG,
                                             "whitelist hook active (first hit): " + signature);
                                 }
