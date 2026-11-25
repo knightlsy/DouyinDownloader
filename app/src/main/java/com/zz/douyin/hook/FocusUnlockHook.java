@@ -8,6 +8,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.WeakHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * HyperOS 焦点通知 / 超级岛白名单解锁。
@@ -69,6 +70,13 @@ final class FocusUnlockHook {
     private static final Set<ClassLoader> HOOKED_LOADERS = Collections.synchronizedSet(
             Collections.newSetFromMap(new WeakHashMap<ClassLoader, Boolean>())
     );
+
+    /**
+     * canShowFocus 在 SystemUI 里是高频调用（每条通知都查一遍白名单）。
+     * 拦到的每一次都写日志会拖慢通知流程、把 logcat 刷满，所以只记第一次命中，
+     * 用来确认 hook 真的在生效，之后安静放行。
+     */
+    private static final AtomicBoolean WHITELIST_HIT = new AtomicBoolean(false);
 
     private FocusUnlockHook() {
     }
@@ -165,6 +173,10 @@ final class FocusUnlockHook {
                     if (!"canShowFocus".equals(name) && !"canCustomFocus".equals(name)) {
                         continue;
                     }
+                    // 编译期生成的桥接/合成方法同名但语义不同，hook 它没意义
+                    if (method.isSynthetic() || method.isBridge()) {
+                        continue;
+                    }
                     if (method.getReturnType() != boolean.class) {
                         continue;
                     }
@@ -173,8 +185,10 @@ final class FocusUnlockHook {
                             .setId("focus-unlock-whitelist-" + signature)
                             .setExceptionMode(DouyinModule.ExceptionMode.PROTECTIVE)
                             .intercept(chain -> {
-                                host.log(Log.DEBUG, DouyinModule.TAG,
-                                        "canShowFocus overridden: " + signature);
+                                if (WHITELIST_HIT.compareAndSet(false, true)) {
+                                    host.log(Log.INFO, DouyinModule.TAG,
+                                            "whitelist hook active (first hit): " + signature);
+                                }
                                 return Boolean.TRUE;
                             });
                     host.log(Log.INFO, DouyinModule.TAG,
@@ -249,11 +263,19 @@ final class FocusUnlockHook {
                         "method b(error) not found in " + AUTH_SESSION_CLASS);
                 return;
             }
+            // b() 的返回类型不确定（可能是 void，也可能返回 boolean）。
+            // 对 void 方法必须返回 null，返回非 null 会让 libxposed 类型不匹配，
+            // 异常被 PROTECTIVE 吞掉后功能静默失效 —— 所以先记住类型再决定。
+            final Class<?> authReturnType = target.getReturnType();
             host.hook(target)
                     .setId("focus-unlock-auth")
                     .setExceptionMode(DouyinModule.ExceptionMode.PROTECTIVE)
                     .intercept(chain -> {
-                        Object error = chain.getArgs().get(0);
+                        List<Object> args = chain.getArgs();
+                        if (args == null || args.isEmpty()) {
+                            return chain.proceed();
+                        }
+                        Object error = args.get(0);
                         if (error == null) {
                             return chain.proceed();
                         }
@@ -263,9 +285,14 @@ final class FocusUnlockHook {
                                     "auth error intercepted, original code=" + original
                                             + ", forcing 0");
                             writeField(error, "a", 0);
+                            // h() 找不到或调用失败会抛，由下面的 catch 兜住走原逻辑。
+                            // 这里不能把"调用失败"当成"成功但返回 null" —— 那会
+                            // 错误地跳掉原始的失败回调。
                             Object success = callNoArg(chain.getThisObject(), "h");
                             host.log(Log.INFO, DouyinModule.TAG, "auth bypassed");
-                            // 拿到成功回调结果就返回它，跳过原始的失败回调
+                            if (authReturnType == void.class) {
+                                return null;
+                            }
                             return success != null ? success : Boolean.TRUE;
                         } catch (Throwable failed) {
                             // 绕过失败就老老实实走原逻辑，别把 XMSF 搞崩
@@ -322,9 +349,15 @@ final class FocusUnlockHook {
         return null;
     }
 
-    private static Object callNoArg(Object instance, String name) {
+    /**
+     * 调用无参方法。
+     *
+     * 找不到方法、或者调用本身抛异常，都向上抛 —— 让调用方走「fall back 到原逻辑」。
+     * 不能返回 null 冒充成功：调用方拿 null 会以为"回调返回空"而跳掉原始流程。
+     */
+    private static Object callNoArg(Object instance, String name) throws Throwable {
         if (instance == null) {
-            return null;
+            throw new NoSuchMethodException(name + " (null receiver)");
         }
         Class<?> type = instance.getClass();
         while (type != null) {
@@ -334,15 +367,12 @@ final class FocusUnlockHook {
                 return method.invoke(instance);
             } catch (NoSuchMethodException absent) {
                 type = type.getSuperclass();
-            } catch (Throwable failed) {
-                return null;
             }
         }
-        return null;
+        throw new NoSuchMethodException(name);
     }
 
     private static String joinParams(Method method) {
-        List<Class<?>> ignored = null;
         StringBuilder builder = new StringBuilder();
         Class<?>[] types = method.getParameterTypes();
         for (int i = 0; i < types.length; i++) {
