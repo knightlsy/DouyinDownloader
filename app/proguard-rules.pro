@@ -75,3 +75,15 @@
 -keep class com.zz.douyin.FilterPreferences { *; }
 -keep class com.zz.douyin.HistoryReceiver { *; }
 -keep class com.zz.douyin.SharedHistoryStore { *; }
+# 来自 libxposed api 的 AAR proguard.txt（改成本地 jar 后不会自动合并）
+-dontwarn io.github.libxposed.annotation.**
+-keep,allowoptimization public class io.github.libxposed.api.** {
+    public <fields>;
+    protected <fields>;
+    public <methods>;
+    protected <methods>;
+    public <init>(...);
+    protected <init>(...);
+}
+# service 库的 Provider 由 manifest 引用，名字不能变
+-keep class io.github.libxposed.service.XposedProvider { *; }

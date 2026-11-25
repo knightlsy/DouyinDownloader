@@ -9,7 +9,7 @@ plugins {
 
 android {
     namespace = "com.knightlsy.douyin"
-    compileSdk = 37
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.knightlsy.douyin"
@@ -108,13 +108,27 @@ android {
 dependencies {
     // Xposed 模块能力。api 用 compileOnly：运行时的 XposedModule 由框架注入，
     // 打进 APK 会和宿主里的那份冲突。
-    // api 走 compileOnly：XposedModule 这类契约由框架提供，打进 APK 会和宿主冲突。
-    compileOnly("io.github.libxposed:api:102.0.0")
-    // service 必须 implementation —— 上一版我为了绕开 AAR 元数据检查把它删了，
-    // 结果 getRemotePreferences 的实现类（io.github.libxposed.service.*、
-    // IXposedService）一个都没进 APK，模块一加载就 NoClassDefFoundError。
-    // 编译期看不出来（compileOnly 的 api 里有方法签名），只有真机会崩。
-    implementation("io.github.libxposed:service:102.0.0")
+    /*
+     * libxposed 三个包用本地 jar，不用 Maven 坐标。
+     *
+     * 原因：AAR 元数据里要求 compileSdk >= 37，而 AGP 8.9 官方只认到 35，
+     * SDK 37 平台在官方仓库里也还没发布（sdkmanager 报 Failed to find package
+     * 'platforms;android-37'）。升 AGP 到 9.x 会牵动 Compose 和整个构建配置，
+     * 为三个几十 KB 的 jar 不值。
+     *
+     * 三个包的职责：
+     *  - api        compileOnly。XposedModule 等契约由框架在运行时注入，
+     *               打进 APK 会和宿主里那份重复。
+     *  - service    implementation。getRemotePreferences 的实现就在这里
+     *               （io.github.libxposed.service.*、XposedProvider）。
+     *               上一版删掉它，编译照样过，但模块加载时 NoClassDefFoundError。
+     *  - interface  implementation。service 的传递依赖。
+     *
+     * 注意：service 的 AAR 里带一个 XposedProvider 声明，改成本地 jar 之后
+     * 那部分 manifest 不会自动合并，已在 AndroidManifest.xml 里手写补上。
+     */
+    compileOnly(files("libs/libxposed-api.jar"))
+    implementation(files("libs/libxposed-service.jar", "libs/libxposed-interface.jar"))
     // 抖仙人的音频转码（MP3 下载）依赖
     implementation("de.sciss:jump3r:1.0.5")
     implementation("androidx.core:core-ktx:1.12.0")

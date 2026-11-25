@@ -27,16 +27,6 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      # libxposed 102 要求 compileSdk 37。runner 自带的 SDK 里没有 37，
-      # 不装的话 AGP 会报 "Failed to find target with hash string 'android-37'"。
-      - name: Install SDK 37
-        run: |
-          set -o pipefail
-          SDKM=$(find "${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}" -name sdkmanager -type f 2>/dev/null | head -1)
-          yes | "$SDKM" --licenses > /dev/null 2>&1 || true
-          "$SDKM" "platforms;android-37" "build-tools;37.0.0" 2>&1 | tail -5
-          echo "--- 已装 platforms ---"
-          ls "${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}/platforms"
 
       - name: Restore signing key
         env:

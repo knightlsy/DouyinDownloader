@@ -28,12 +28,6 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      # compileSdk 37（libxposed 102 的要求），runner 自带 SDK 里没有
-      - name: Install SDK 37
-        run: |
-          SDKM=$(find "${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}" -name sdkmanager -type f 2>/dev/null | head -1)
-          yes | "$SDKM" --licenses > /dev/null 2>&1 || true
-          "$SDKM" "platforms;android-37" "build-tools;37.0.0" 2>&1 | tail -5
 
       - name: Restore signing key
         env:

@@ -80,6 +80,19 @@
             </intent-filter>
         </receiver>
 
+
+        <!--
+          libxposed service 库的 AAR 里原本带这个声明，改成 libs/*.jar 之后
+          不会自动合并，必须手写。getRemotePreferences 就是通过它拿数据的，
+          少了它 hook 侧读不到任何偏好设置。authorities 用 ${applicationId}
+          前缀，跟 AAR 里一致。
+        -->
+        <provider
+            android:name="io.github.libxposed.service.XposedProvider"
+            android:authorities="${applicationId}.XposedService"
+            android:exported="true"
+            tools:ignore="ExportedContentProvider" />
+
     </application>
 
 </manifest>
