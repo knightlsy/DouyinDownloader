@@ -32,6 +32,8 @@ object MiuiIslandProbe {
     private const val TAG = "MiuiIsland"
     private const val CHANNEL_ID = "island_probe"
     private const val NOTIFICATION_ID = 0x1501
+    /** 对照用：不带 focus 参数的普通通知 */
+    private const val NOTIFICATION_ID_PLAIN = 0x1502
 
     data class Result(
         /** 系统属性 persist.sys.feature.island */
@@ -147,32 +149,73 @@ object MiuiIslandProbe {
                 .build()
         )
 
-        // param_v2 是文档里的根对象；business 与 param_island 为必选。
-        // timeout = -1 → 5 秒后自动消失（-1 是文档约定的特殊值）
+        /*
+         * param_v2 是文档里的根对象。
+         *
+         * 上一版的两个坑（导致「通知栏都看不到」）：
+         *  1. timeout = -1 按文档是「5 秒后消失」，太快了，测的时候根本来不及看。
+         *     现在用 1（分钟），留足观察时间。
+         *  2. param_island 只给了 islandProperty，缺 bigIslandArea / smallIslandArea /
+         *     shareData。官方示例里这三个是有的 —— 协议体不完整时系统很可能
+         *     直接丢弃整条通知，连普通通知形态都不剩。
+         */
         val params = """
             {"param_v2":{
-              "business":"download_probe",
+              "business":"download",
               "protocol":1,
-              "timeout":-1,
+              "timeout":1,
               "islandFirstFloat":true,
-              "param_island":{"islandProperty":1}
+              "param_island":{
+                "islandProperty":1,
+                "bigIslandArea":{},
+                "smallIslandArea":{},
+                "shareData":{}
+              }
             }}
         """.trimIndent()
 
+        val extras = Bundle().apply {
+            putString("miui.focus.param", params)
+        }
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .setContentTitle(title)
             .setContentText(text)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-            .setAutoCancel(true)
+            // 焦点通知要能更新/常驻观察，先不自动取消
+            .setAutoCancel(false)
+            .setOngoing(false)
+            .addExtras(extras)
             .build()
-            .apply {
-                extras.putString("miui.focus.param", params)
-            }
+
+        /*
+         * 先发一条**不带** miui.focus.param 的普通通知做对照。
+         *
+         * 有了它，一次点击就能区分三种失败：
+         *  · 两条都出现 → 通知系统正常，是 focus 协议体没被系统识别
+         *  · 只有普通那条 → focus 协议体被判非法，整条被丢弃
+         *  · 两条都没有 → 通知权限/渠道层面就没通，跟岛无关
+         */
+        runCatching {
+            val plain = NotificationCompat.Builder(context, CHANNEL_ID)
+                .setSmallIcon(android.R.drawable.stat_sys_download)
+                .setContentTitle("$title（普通）")
+                .setContentText("不带 miui.focus.param，用来对照")
+                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                .build()
+            manager.notify(NOTIFICATION_ID_PLAIN, plain)
+        }.onFailure { Log.w(TAG, "普通对照通知发送失败", it) }
 
         return try {
             manager.notify(NOTIFICATION_ID, notification)
-            Log.i(TAG, "已发送焦点通知测试（含 miui.focus.param）")
+            val active = manager.activeNotifications
+            Log.i(
+                TAG,
+                "已发送焦点通知测试 id=$NOTIFICATION_ID"
+                        + " param=${params.replace("\n", "")}"
+                        + " 当前活跃通知数=${active.size}"
+                        + " channel锁=${manager.areNotificationsEnabled()}",
+            )
             true
         } catch (throwable: Throwable) {
             Log.w(TAG, "发送测试通知失败", throwable)
