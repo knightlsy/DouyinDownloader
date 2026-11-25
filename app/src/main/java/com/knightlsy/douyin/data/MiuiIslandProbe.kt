@@ -175,6 +175,17 @@ object MiuiIslandProbe {
         /*
          * param_v2 结构（照抄官方示例模板）。
          *
+         * 结构以社区库 hyperisland_kit（github.com/D4vidDf/HyperIsland-ToolKit）为准，
+         * 它是跑通过的真机实现。官方文档里那份示例是另一个模板版本，
+         * 直接照抄会被系统静默忽略（通知在、岛不出）。
+         *
+         * 与官方文档示例的实质差异：
+         *  · protocol 要给 3（库的默认值），文档说的「1 = OS2/OS3 通用」在 OS3 上不生效
+         *  · 左侧文字区是 "textInfo"，不是 "miui.focus.paramtextInfo"
+         *  · 文字字段是 title/content/showHighlightColor，不是 frontTitle/useHighLight
+         *  · 要带 islandPriority（库默认 2）
+         *  · baseInfo.type 用 1（Template 1），文档示例里的 2 对应另一套版式
+         *
          * 前两次失败的教训：
          *  · timeout = -1 是「5 秒后消失」，测的时候根本来不及看
          *  · param_island 的 bigIslandArea / smallIslandArea 是**必选且要按模板填**，
@@ -186,25 +197,27 @@ object MiuiIslandProbe {
          */
         val params = """
             {"param_v2":{
-              "protocol":1,
+              "protocol":3,
               "business":"download",
-              "enableFloat":true,
               "updatable":true,
               "ticker":"抖音下载器",
               "tickerPic":"miui.focus.pic_icon",
+              "enableFloat":true,
+              "islandFirstFloat":true,
               "timeout":5,
               "param_island":{
                 "islandProperty":1,
+                "islandPriority":2,
                 "islandTimeout":120,
+                "needCloseAnimation":true,
                 "bigIslandArea":{
                   "imageTextInfoLeft":{
                     "type":1,
                     "picInfo":{"type":1,"pic":"miui.focus.pic_icon"},
-                    "miui.focus.paramtextInfo":{
-                      "frontTitle":"抖音下载器",
+                    "textInfo":{
                       "title":"超级岛测试",
                       "content":"能看到这条说明岛通了",
-                      "useHighLight":false
+                      "showHighlightColor":false
                     }
                   },
                   "picInfo":{"type":1,"pic":"miui.focus.pic_icon"}
@@ -214,10 +227,10 @@ object MiuiIslandProbe {
                 }
               },
               "baseInfo":{
+                "type":1,
                 "title":"抖音下载器",
                 "content":"超级岛联通性测试",
-                "colorTitle":"#FF7A3A",
-                "type":2
+                "colorTitle":"#FF7A3A"
               }
             }}
         """.trimIndent()
