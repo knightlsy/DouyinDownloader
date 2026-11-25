@@ -54,14 +54,9 @@ import com.knightlsy.douyin.ui.theme.LocalBgColors
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalUriHandler
-import com.knightlsy.douyin.data.ModulePreferences
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.rememberCoroutineScope
-import com.knightlsy.douyin.data.ModuleState
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import android.content.Context
+import com.zz.douyin.FilterPreferences
 
 /**
  * 设置页：主题（三分段直选）、背景（壁纸氛围 / 强调色跟随壁纸）、日志入口、关于入口。
@@ -144,22 +139,32 @@ fun SettingsScreen(
                 .padding(horizontal = BgSpace.gutter)
                 .padding(top = 18.dp, bottom = 40.dp)
         ) {
-    val context = LocalContext.current
-    val uriHandler = LocalUriHandler.current
-    val scope = rememberCoroutineScope()
+            val context = LocalContext.current
 
-    // 初值不能写 ModulePreferences.state(context) —— remember 的 lambda 在首次
-    // composition 执行，而 state() 内部是 ContentResolver.query，跨进程同步 IPC。
-    // 模块进程慢或没起来时会把主线程钉在那里，滚设置页就掉帧甚至 ANR。
-    // 初值给 NOT_INSTALLED，真实状态在 LaunchedEffect 里到 IO 线程去探。
-    var moduleState by remember { mutableStateOf(ModuleState.NOT_INSTALLED) }
-    var moduleEnabled by remember { mutableStateOf(ModulePreferences.isEnabled(context)) }
-    var probing by remember { mutableStateOf(true) }
-
-    LaunchedEffect(Unit) {
-        moduleState = withContext(Dispatchers.IO) { ModulePreferences.state(context) }
-        probing = false
-    }
+            /*
+             * 三个开关都写 FilterPreferences 那一份（content_filter）。
+             * hook 侧通过 getRemotePreferences(FilterPreferences.NAME) 读同一个文件 ——
+             * prefs 名必须严格一致，写错就是「开关能拨但没有任何效果」。
+             *
+             * SharedPreferences 首次加载要读磁盘，所以放在 remember 里只读一次。
+             */
+            val filterPrefs = remember {
+                context.getSharedPreferences(FilterPreferences.NAME, Context.MODE_PRIVATE)
+            }
+            var moduleEnabled by remember {
+                mutableStateOf(FilterPreferences.readModuleEnabled(filterPrefs))
+            }
+            var immersiveEnabled by remember {
+                mutableStateOf(FilterPreferences.readImmersiveEnabled(filterPrefs))
+            }
+            var skipAds by remember {
+                mutableStateOf(
+                    filterPrefs.getBoolean(
+                        FilterPreferences.KEY_SKIP_ADS,
+                        FilterPreferences.DEFAULT_SKIP_ADS,
+                    )
+                )
+            }
 
             BgSectionLabel("外观", accent = null)
 
@@ -256,82 +261,76 @@ fun SettingsScreen(
 
             Spacer(Modifier.height(22.dp))
             BgSectionLabel("增强模块", accent = null)
-
-            /*
-             * 抖仙人（LSPosed 模块）是可选的第二数据源：装了它能直接在抖音里下载，
-             * 记录同步到这里。不装、或者关掉联动，本应用的核心功能完全不受影响 ——
-             * 所以开关默认关闭，也从不弹窗催用户去装。
-             */
-            SettingsCard(
-                contentPadding = PaddingValues(horizontal = 18.dp, vertical = 4.dp),
-            ) {
-                Column(Modifier.padding(vertical = 14.dp)) {
-                    Text(
-                        text = "抖仙人",
-                        fontFamily = FontFamily.SansSerif,
-                        fontSize = 14.5.sp,
-                        fontWeight = FontWeight.W500,
-                        color = c.ink,
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = "可选的增强模块。装上之后可以直接在抖音里下载作品，" +
-                            "下载记录会同步到历史页。不装也能正常用这个 App。",
-                        fontFamily = FontFamily.SansSerif,
-                        fontSize = 11.5.sp,
-                        lineHeight = 17.sp,
-                        color = c.ink3,
-                    )
-                }
-                RowDivider()
-
-                // 点一下重新探测：用户可能刚在 LSPosed 里启用、或者刚重启完抖音
-                SettingsNavRow(
-                    title = "状态",
-                    value = if (probing) "检测中…" else ModulePreferences.describe(moduleState),
-                    onClick = {
-                        if (probing) return@SettingsNavRow
-                        probing = true
-                        scope.launch {
-                            moduleState = withContext(Dispatchers.IO) {
-                                ModulePreferences.state(context)
-                            }
-                            probing = false
-                        }
-                    },
-                )
-                RowDivider()
-                SettingsSwitchRow(
-                    title = "启用联动",
-                    description = if (moduleEnabled) {
-                        "历史页会合并模块下载的记录"
-                    } else {
-                        "关闭时完全不读取模块数据"
-                    },
-                    checked = moduleEnabled,
-                    onChange = { enabled ->
-                        moduleEnabled = enabled
-                        ModulePreferences.setEnabled(context, enabled)
-                        // 打开时顺手重新探测 —— 状态不准会让用户以为没生效。
-                        // 同样不能在回调里同步 query：这个 lambda 跑在主线程。
-                        if (enabled) {
-                            scope.launch {
-                                moduleState = withContext(Dispatchers.IO) {
-                                    ModulePreferences.state(context)
-                                }
-                            }
-                        }
-                    },
-                )
-                RowDivider()
-                SettingsNavRow(
-                    title = "获取模块",
-                    value = "GitHub",
-                    onClick = {
-                        runCatching { uriHandler.openUri(ModulePreferences.MODULE_URL) }
-                    },
-                )
-            }
+             /*
+              * Xposed 功能已经内置在本应用里，不再需要单独装一个模块。
+              * 开关写的是 FilterPreferences（content_filter 这个 prefs），
+              * hook 侧通过 getRemotePreferences 读同一个文件 —— 名字必须严格一致，
+              * 换成别的 prefs 名开关就形同虚设。
+              *
+              * 改动需要重启抖音才生效：hook 是在目标进程启动时安装的。
+              */
+             SettingsCard(
+                 contentPadding = PaddingValues(horizontal = 18.dp, vertical = 4.dp),
+             ) {
+                 Column(Modifier.padding(vertical = 14.dp)) {
+                     Text(
+                         text = "Xposed 增强（已内置）",
+                         fontFamily = FontFamily.SansSerif,
+                         fontSize = 14.5.sp,
+                         fontWeight = FontWeight.W500,
+                         color = c.ink,
+                     )
+                     Spacer(Modifier.height(4.dp))
+                     Text(
+                         text = "在 LSPosed 里启用本应用、作用域勾选抖音，重启抖音后生效。" +
+                             "不启用也完全不影响本应用的下载功能。",
+                         fontFamily = FontFamily.SansSerif,
+                         fontSize = 11.5.sp,
+                         lineHeight = 17.sp,
+                         color = c.ink3,
+                     )
+                 }
+                 RowDivider()
+                 SettingsSwitchRow(
+                     title = "启用模块功能",
+                     description = if (moduleEnabled) {
+                         "关闭后不再拦截抖音，改动需重启抖音"
+                     } else {
+                         "已停用，抖音保持原样"
+                     },
+                     checked = moduleEnabled,
+                     onChange = { enabled ->
+                         moduleEnabled = enabled
+                         filterPrefs.edit()
+                             .putBoolean(FilterPreferences.KEY_MODULE_ENABLED, enabled)
+                             .apply()
+                     },
+                 )
+                 RowDivider()
+                 SettingsSwitchRow(
+                     title = "沉浸式播放",
+                     description = "全屏沉浸、隐藏原生控件",
+                     checked = immersiveEnabled,
+                     onChange = { enabled ->
+                         immersiveEnabled = enabled
+                         filterPrefs.edit()
+                             .putBoolean(FilterPreferences.KEY_IMMERSIVE_ENABLED, enabled)
+                             .apply()
+                     },
+                 )
+                 RowDivider()
+                 SettingsSwitchRow(
+                     title = "跳过广告",
+                     description = "自动划走信息流广告",
+                     checked = skipAds,
+                     onChange = { enabled ->
+                         skipAds = enabled
+                         filterPrefs.edit()
+                             .putBoolean(FilterPreferences.KEY_SKIP_ADS, enabled)
+                             .apply()
+                     },
+                 )
+             }
 
             Spacer(Modifier.height(22.dp))
             BgSectionLabel("诊断", accent = null)
