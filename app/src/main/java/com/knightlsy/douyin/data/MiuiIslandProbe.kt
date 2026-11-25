@@ -35,6 +35,18 @@ object MiuiIslandProbe {
     /** 对照用：不带 focus 参数的普通通知 */
     private const val NOTIFICATION_ID_PLAIN = 0x1502
 
+    /**
+     * 写一条诊断记录。
+     *
+     * 同时进两处：logcat（开发时看）和 [LogStore]（用户能在
+     * 设置 → 诊断 → 日志 里直接复制导出）。只写 logcat 的话，
+     * 用户在应用里看不到，排查只能靠插线。
+     */
+    private fun record(context: Context?, message: String) {
+        Log.i(TAG, message)
+        LogStore.log("island", message)
+    }
+
     data class Result(
         /** 系统属性 persist.sys.feature.island */
         val supportsIsland: Boolean,
@@ -99,11 +111,14 @@ object MiuiIslandProbe {
             error = throwable.javaClass.simpleName
         }
         val result = Result(supportsIsland, protocol, hasPermission, error)
-        Log.i(
-            TAG,
-            "probe: island=${result.supportsIsland} protocol=${result.protocolVersion}"
-                    + "(${result.protocolLabel}) canShowFocus=${result.hasFocusPermission}"
-                    + " → ${result.describe()}",
+        record(
+            context,
+            "探测 设备=${Build.MANUFACTURER}/${Build.MODEL} SDK=${Build.VERSION.SDK_INT}"
+                    + " | 支持岛=$supportsIsland"
+                    + " | 协议版本=$protocol(${result.protocolLabel})"
+                    + " | canShowFocus=$hasPermission"
+                    + " | 包名=${context.packageName}"
+                    + " | 结论=${result.describe()}",
         )
         return result
     }
@@ -137,8 +152,14 @@ object MiuiIslandProbe {
      */
     fun sendProbeNotification(context: Context, title: String, text: String): Boolean {
         val manager = NotificationManagerCompat.from(context)
-        if (!manager.areNotificationsEnabled()) {
-            Log.w(TAG, "通知权限未授予，测试通知发不出去")
+        val notificationsEnabled = manager.areNotificationsEnabled()
+        record(
+            context,
+            "开始发送测试通知 通知开关=$notificationsEnabled"
+                    + " | channel=$CHANNEL_ID",
+        )
+        if (!notificationsEnabled) {
+            record(context, "中止：通知权限未授予，连普通通知都发不出去")
             return false
         }
 
@@ -204,17 +225,22 @@ object MiuiIslandProbe {
                 .setPriority(NotificationCompat.PRIORITY_DEFAULT)
                 .build()
             manager.notify(NOTIFICATION_ID_PLAIN, plain)
-        }.onFailure { Log.w(TAG, "普通对照通知发送失败", it) }
+            record(context, "已发对照通知 id=$NOTIFICATION_ID_PLAIN（不带 miui.focus.param）")
+        }.onFailure { record(context, "对照通知发送失败：${it.javaClass.simpleName} ${it.message}") }
 
         return try {
             manager.notify(NOTIFICATION_ID, notification)
-            val active = manager.activeNotifications
-            Log.i(
-                TAG,
-                "已发送焦点通知测试 id=$NOTIFICATION_ID"
-                        + " param=${params.replace("\n", "")}"
-                        + " 当前活跃通知数=${active.size}"
-                        + " channel锁=${manager.areNotificationsEnabled()}",
+            // 发送后立刻回读活跃通知：能看到 id 说明通知真的进了系统，
+            // 看不到说明被系统层直接丢弃（协议体非法时就是这样）
+            val active = runCatching { manager.activeNotifications?.map { it.id } }
+                .getOrNull()
+            record(context, "已发焦点通知 id=$NOTIFICATION_ID")
+            record(context, "param_v2=${params.replace(Regex("\\s+"), "")}")
+            record(
+                context,
+                "发送后活跃通知=${active?.joinToString(",") ?: "读取失败"}"
+                        + " | 包含焦点通知=${active?.contains(NOTIFICATION_ID) == true}"
+                        + " | 包含对照通知=${active?.contains(NOTIFICATION_ID_PLAIN) == true}",
             )
             true
         } catch (throwable: Throwable) {
