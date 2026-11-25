@@ -171,6 +171,7 @@ fun SettingsScreen(
             var skipAds by remember { mutableStateOf(FilterPreferences.DEFAULT_SKIP_ADS) }
             var skipImages by remember { mutableStateOf(FilterPreferences.DEFAULT_SKIP_IMAGES) }
             var skipLives by remember { mutableStateOf(FilterPreferences.DEFAULT_SKIP_LIVES) }
+            var focusUnlock by remember { mutableStateOf(false) }
 
             // 从远程偏好重读全部开关。service 绑定是异步的，
             // 首次进入设置页时可能还没连上，所以连接状态变化也要触发重读。
@@ -184,6 +185,7 @@ fun SettingsScreen(
                 skipAds = values.skipAds
                 skipImages = values.skipImages
                 skipLives = values.skipLives
+                focusUnlock = FilterPreferences.readFocusUnlock(prefs)
             }
 
             LaunchedEffect(Unit) { reloadModulePrefs() }
@@ -400,6 +402,24 @@ fun SettingsScreen(
                          writeModulePref(FilterPreferences.KEY_SKIP_LIVES, enabled)
                      },
                  )
+
+                RowDivider()
+                // 超级岛解锁单独一组：它动的是系统进程（SystemUI + XMSF），
+                // 不是抖音，风险和上面那些开关不是一个量级，所以措辞要说清楚。
+                SettingsSwitchRow(
+                    title = "解超级岛白名单",
+                    description = if (focusUnlock) {
+                        "已开启 · 改完要重启设备（SystemUI 和 XMSF 都要重启）"
+                    } else {
+                        "让下载进度显示到灵动岛。需改系统进程，重启后生效"
+                    },
+                    checked = focusUnlock,
+                    enabled = bridgeConnected,
+                    onChange = { enabled ->
+                        focusUnlock = enabled
+                        writeModulePref(FilterPreferences.KEY_FOCUS_UNLOCK, enabled)
+                    },
+                )
              }
 
             Spacer(Modifier.height(22.dp))
