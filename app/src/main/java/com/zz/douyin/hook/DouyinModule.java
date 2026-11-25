@@ -38,6 +38,17 @@ public final class DouyinModule extends XposedModule {
             }
         }
 
+        /*
+         * 用户开关。关着就一个 hook 都不装 —— 比「装上了但内部各自判断不干活」干净：
+         * 后者会在抖音进程里挂一堆空壳监听，白白吃回调。
+         * 注意改这个开关要重启抖音才生效（hook 是进程启动时装的）。
+         */
+        SharedPreferences modulePrefs = getRemotePreferences(FilterPreferences.NAME);
+        if (!FilterPreferences.readModuleEnabled(modulePrefs)) {
+            log(Log.INFO, TAG, "模块开关关闭，跳过全部 hook");
+            return;
+        }
+
         installSubsystem("activity lifecycle", this::hookActivityLifecycle);
         installSubsystem("activity touch", this::hookActivityTouch);
         installSubsystem("feed double tap guard",
