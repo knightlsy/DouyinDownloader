@@ -91,12 +91,22 @@ android {
     }
     packaging {
         resources {
+            // Xposed 声明文件必须在，不能被 shrinkResources 清掉
+            merges += "META-INF/xposed/*"
+        }
+        resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
 }
 
 dependencies {
+    // Xposed 模块能力。api 用 compileOnly：运行时的 XposedModule 由框架注入，
+    // 打进 APK 会和宿主里的那份冲突。
+    compileOnly("io.github.libxposed:api:102.0.0")
+    implementation("io.github.libxposed:service:102.0.0")
+    // 抖仙人的音频转码（MP3 下载）依赖
+    implementation("de.sciss:jump3r:1.0.5")
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.6.2")
     implementation("androidx.activity:activity-compose:1.8.1")

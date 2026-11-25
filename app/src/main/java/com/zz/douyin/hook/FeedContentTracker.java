@@ -1,0 +1,1434 @@
+package com.zz.douyin.hook;
+
+import android.content.SharedPreferences;
+import android.graphics.Rect;
+import android.os.SystemClock;
+import android.util.Log;
+import android.view.View;
+
+import com.zz.douyin.FilterPreferences;
+
+import java.lang.annotation.Annotation;
+import java.lang.ref.WeakReference;
+import java.lang.reflect.Array;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+import java.util.WeakHashMap;
+
+final class FeedContentTracker {
+    private static final Map<Object, Long> PANELS =
+            Collections.synchronizedMap(new WeakHashMap<>());
+    private static final Map<Class<?>, Map<String, Field>> SERIALIZED_FIELDS =
+            Collections.synchronizedMap(new WeakHashMap<>());
+    /** 图文字段候选：优先大图/原图，最后才是缩略图。 */
+    private static final String[] IMAGE_LABEL_FIELDS = {
+            "labelLarge",
+            "labelOrigin",
+            "origin",
+            "large",
+            "labelThumb",
+            "thumb"
+    };
+
+    /** 下载候选编码。ByteVC1 是抖音私有编码，系统播放器通常只能解出声音。 */
+    private static final String CODEC_H264 = "h264";
+    private static final String CODEC_HEVC = "hevc";
+    private static final String CODEC_BYTEVC1 = "bytevc1";
+    private static final String CODEC_UNKNOWN = "unknown";
+
+    private static Class<?> panelClass;
+    private static Method getCurrentAweme;
+    private static Field viewPagerField;
+    private static WeakReference<Object> selectedPanel = new WeakReference<>(null);
+    private static WeakReference<Object> lastPanel = new WeakReference<>(null);
+    private static volatile FilterPreferences.Values filterSettings =
+            FilterPreferences.defaults();
+    private static SharedPreferences filterPreferences;
+    private static final SharedPreferences.OnSharedPreferenceChangeListener
+            FILTER_PREFERENCE_LISTENER =
+            (preferences, key) -> filterSettings = FilterPreferences.read(preferences);
+
+    private FeedContentTracker() {
+    }
+
+    static void install(
+            DouyinModule module,
+            ClassLoader loader,
+            SharedPreferences preferences
+    )
+            throws ReflectiveOperationException {
+        configurePreferences(preferences);
+        panelClass = Class.forName(
+                "com.ss.android.ugc.aweme.feed.panel.BaseListFragmentPanel",
+                false,
+                loader
+        );
+        getCurrentAweme = panelClass.getDeclaredMethod("getCurrentAweme");
+        viewPagerField = panelClass.getField("f");
+
+        for (Constructor<?> constructor : panelClass.getDeclaredConstructors()) {
+            module.hook(constructor)
+                    .setId("douyin-immersive-feed-panel-" + constructor.toGenericString())
+                    .setExceptionMode(DouyinModule.ExceptionMode.PROTECTIVE)
+                    .intercept(chain -> {
+                        Object result = chain.proceed();
+                        remember(chain.getThisObject());
+                        return result;
+                    });
+        }
+
+        try {
+            Method onPageSelected = panelClass.getDeclaredMethod("y0", int.class);
+            module.hook(onPageSelected)
+                    .setId("douyin-immersive-feed-page-selected")
+                    .setExceptionMode(DouyinModule.ExceptionMode.PROTECTIVE)
+                    .intercept(chain -> {
+                        Object result = chain.proceed();
+                        Object panel = chain.getThisObject();
+                        remember(panel);
+                        selectedPanel = new WeakReference<>(panel);
+                        ImmersiveUi.onFeedPageSelected();
+                        return result;
+                    });
+        } catch (NoSuchMethodException error) {
+            module.log(Log.WARN, DouyinModule.TAG,
+                    "feed page-selection hook unavailable; using visible-panel fallback");
+        }
+        module.log(Log.INFO, DouyinModule.TAG, "current feed model hook installed");
+    }
+
+    private static synchronized void configurePreferences(
+            SharedPreferences preferences
+    ) {
+        if (filterPreferences != null && filterPreferences != preferences) {
+            try {
+                filterPreferences.unregisterOnSharedPreferenceChangeListener(
+                        FILTER_PREFERENCE_LISTENER
+                );
+            } catch (RuntimeException ignored) {
+                // A dead framework binder will be replaced by the new preference proxy.
+            }
+        }
+        filterPreferences = preferences;
+        filterSettings = FilterPreferences.read(preferences);
+        if (preferences != null) {
+            preferences.registerOnSharedPreferenceChangeListener(
+                    FILTER_PREFERENCE_LISTENER
+            );
+        }
+    }
+
+    static Snapshot current(View decor) {
+        Class<?> expectedPanelClass = panelClass;
+        Method currentMethod = getCurrentAweme;
+        Field pagerField = viewPagerField;
+        if (decor == null
+                || expectedPanelClass == null
+                || currentMethod == null
+                || pagerField == null) {
+            return null;
+        }
+
+        List<Object> panels;
+        synchronized (PANELS) {
+            panels = new ArrayList<>(PANELS.keySet());
+        }
+
+        Object bestAweme = null;
+        Object bestPanel = null;
+        long bestScore = Long.MIN_VALUE;
+        Object selected = selectedPanel.get();
+        Rect decorVisible = new Rect();
+        if (!decor.getGlobalVisibleRect(decorVisible)) {
+            return null;
+        }
+        int centerX = decorVisible.centerX();
+        int centerY = decorVisible.centerY();
+        Rect visible = new Rect();
+        long now = SystemClock.uptimeMillis();
+        for (Object panel : panels) {
+            if (panel == null || !expectedPanelClass.isInstance(panel)) {
+                continue;
+            }
+            try {
+                Object pagerObject = pagerField.get(panel);
+                if (!(pagerObject instanceof View pager)
+                        || !pager.isAttachedToWindow()
+                        || pager.getRootView() != decor
+                        || !isEffectivelyVisible(pager, decor)
+                        || !pager.getGlobalVisibleRect(visible)
+                        || !visible.contains(centerX, centerY)) {
+                    continue;
+                }
+                long area = (long) visible.width() * visible.height();
+                if (area < (long) decor.getWidth() * decor.getHeight() / 5L) {
+                    continue;
+                }
+
+                long recent;
+                synchronized (PANELS) {
+                    recent = PANELS.getOrDefault(panel, 0L);
+                }
+                Object aweme = currentMethod.invoke(panel);
+                if (aweme == null) {
+                    continue;
+                }
+                long agePenalty = Math.min(999_999L, Math.max(0L, now - recent));
+                long score = panel == selected
+                        ? Long.MAX_VALUE - agePenalty
+                        : area * 1_000_000L - agePenalty;
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestAweme = aweme;
+                    bestPanel = panel;
+                }
+            } catch (ReflectiveOperationException | RuntimeException error) {
+                Log.d(DouyinModule.TAG, "current feed model lookup failed", error);
+            }
+        }
+        if (bestPanel != null) {
+            lastPanel = new WeakReference<>(bestPanel);
+        }
+        return bestAweme == null ? null : snapshot(bestAweme, filterSettings);
+    }
+
+    /** ViewPager of the feed panel that currently owns the screen, used for programmatic paging. */
+    static View currentPager(View decor) {
+        Object panel = lastPanel.get();
+        Field pagerField = viewPagerField;
+        if (panel == null || pagerField == null) {
+            return null;
+        }
+        try {
+            Object pager = pagerField.get(panel);
+            if (pager instanceof View view
+                    && view.isAttachedToWindow()
+                    && (decor == null || view.getRootView() == decor)) {
+                return view;
+            }
+        } catch (ReflectiveOperationException | RuntimeException ignored) {
+            // Panels are recycled aggressively; the caller falls back to the decor view.
+        }
+        return null;
+    }
+
+    private static boolean isEffectivelyVisible(View view, View decor) {
+        View current = view;
+        while (current != null) {
+            if (current.getVisibility() != View.VISIBLE || current.getAlpha() <= 0.05f) {
+                return false;
+            }
+            if (current == decor) {
+                return true;
+            }
+            if (!(current.getParent() instanceof View parent)) {
+                return false;
+            }
+            current = parent;
+        }
+        return false;
+    }
+
+    private static void remember(Object panel) {
+        if (panel != null) {
+            PANELS.put(panel, SystemClock.uptimeMillis());
+        }
+    }
+
+    private static Snapshot snapshot(Object aweme) {
+        return snapshot(aweme, filterSettings);
+    }
+
+    static Snapshot snapshot(
+            Object aweme,
+            FilterPreferences.Values settings
+    ) {
+        Class<?> type = aweme.getClass();
+        String aid = stringValue(readField(type, aweme, "aid"));
+        int awemeType = intValue(readField(type, aweme, "awemeType"), -1);
+        boolean ad = booleanValue(readField(type, aweme, "isAd"));
+        Object rawAd = readField(type, aweme, "awemeRawAd");
+        if (rawAd == null) {
+            rawAd = invokeNoArg(type, aweme, "getAwemeRawAd");
+        }
+        // 40.8 marks several ad formats only through these side channels; isAd/awemeRawAd
+        // stay empty for 电商、团购、直播预约 and 小程序 ads, which therefore played on.
+        int adSource = intValue(readField(type, aweme, "adAwemeSource"), 0);
+        Object gdAd = readField(type, aweme, "gdAd");
+        Object asyncAdInfo = readField(type, aweme, "asyncAdInfo");
+        Object linkAdData = readField(type, aweme, "linkAdData");
+        boolean live = booleanValue(invokeNoArg(type, aweme, "isLive"))
+                || awemeType == 101;
+        boolean hostImage = booleanValue(invokeNoArg(type, aweme, "isImage"));
+        boolean hostMultiImage =
+                booleanValue(invokeNoArg(type, aweme, "isMultiImage"));
+        boolean slides = booleanValue(readField(type, aweme, "isSlides"));
+        Object video = readField(type, aweme, "video");
+        if (video == null) {
+            video = readSerializedField(aweme, "video");
+        }
+        Object article = readField(type, aweme, "articleInfo");
+        if (article == null) {
+            article = readSerializedField(aweme, "article_info");
+        }
+        Object images = readField(type, aweme, "images");
+        if (images == null) {
+            images = readSerializedField(aweme, "images");
+        }
+        Object imageInfos = readField(type, aweme, "imageInfos");
+        if (imageInfos == null) {
+            imageInfos = readSerializedField(aweme, "image_infos");
+        }
+        int imageCount = collectionSize(images);
+        int imageInfoCount = collectionSize(imageInfos);
+        List<PlayUrl> playUrls = resolvePlayUrls(video);
+        String title = firstNonBlank(
+                textValue(readField(type, aweme, "itemTitle")),
+                textValue(readSerializedField(aweme, "item_title")),
+                textValue(readField(type, aweme, "title")),
+                textValue(readSerializedField(aweme, "title"))
+        );
+        String description = firstNonBlank(
+                textValue(readField(type, aweme, "desc")),
+                textValue(readSerializedField(aweme, "desc")),
+                textValue(invokeNoArg(type, aweme, "getProcessedDesc")),
+                textValue(invokeNoArg(type, aweme, "getEllipsizeDesc"))
+        );
+        // 作者昵称与封面：分享给 App 的历史列表需要。
+        // 两步读取（Java 字段名 → 序列化名），与其它字段一致；取不到就留空，
+        // 不要用占位值冒充 —— 界面上空着比显示错误的作者诚实。
+        Object authorObject = readField(type, aweme, "author");
+        if (authorObject == null) {
+            authorObject = readSerializedField(aweme, "author");
+        }
+        String author = "";
+        if (authorObject != null) {
+            author = textValue(readField(authorObject.getClass(), authorObject, "nickname"));
+            if (author.isEmpty()) {
+                author = textValue(readSerializedField(authorObject, "nickname"));
+            }
+        }
+        String coverUrl = coverUrlOf(video);
+
+        boolean photo =
+                hostImage
+                        || hostMultiImage
+                        || slides
+                        || awemeType == 2
+                        || awemeType == 0x44
+                        || imageCount > 0
+                        || imageInfoCount > 0;
+        // Only ad-exclusive markers may decide the skip. adAwemeSource / asyncAdInfo /
+        // linkAdData exist on ordinary videos too (40.8 fills asyncAdInfo for every feed
+        // item), so using them skipped the whole feed; they are logged for diagnosis only.
+        boolean advertisement = ad || rawAd != null || gdAd != null;
+        boolean photoContent = photo || awemeType == 0xA3;
+        String adMarkers = adMarkerText(ad, rawAd, adSource, gdAd, asyncAdInfo, linkAdData);
+        FilterPreferences.Values activeSettings =
+                settings == null ? FilterPreferences.defaults() : settings;
+
+        String reason = null;
+        if (advertisement) {
+            if (activeSettings.skipAds) {
+                reason = "advertisement model";
+            }
+        } else if (live) {
+            if (activeSettings.skipLives) {
+                reason = "live model";
+            }
+        } else if (photo || awemeType == 0xA3 || video == null) {
+            if (activeSettings.skipImages) {
+                if (awemeType == 0xA3) {
+                    reason = "long article model";
+                } else if (photo) {
+                    reason = "photo article model";
+                } else if (article != null) {
+                    reason = "article model";
+                } else {
+                    reason = "non-video model";
+                }
+            }
+        } else {
+            String keyword = activeSettings.matchingVideoKeyword(
+                    title,
+                    description
+            );
+            if (activeSettings.skipVideos) {
+                reason = "video type setting";
+            } else if (keyword != null) {
+                reason = "video keyword: " + keyword;
+            }
+        }
+        return new Snapshot(
+                aid,
+                awemeType,
+                video != null,
+                ad,
+                rawAd != null,
+                article != null,
+                images,
+                imageInfos,
+                imageCount,
+                imageInfoCount,
+                live,
+                hostImage,
+                hostMultiImage,
+                slides,
+                photoContent,
+                title,
+                description,
+                author,
+                coverUrl,
+                reason,
+                playUrls,
+                adMarkers
+        );
+    }
+
+
+    /**
+     * 从 video 对象里取封面地址。
+     *
+     * 依次试 cover / origin_cover / dynamic_cover —— 不同版本这三个字段的可用性不一样，
+     * 有的版本只填 origin_cover。每个字段都按「Java 字段名 → 序列化名」两步读。
+     */
+
+    /**
+     * 取实况图的动态部分地址。
+     *
+     * 抖音结构：`images[i].video.play_addr.url_list[]`（序列化名 `play_addr`）。
+     * 普通图片没有 video 字段，返回 null。
+     *
+     * 注意这里找的是 `images[i].video`，跟作品级的 `aweme.video` 不是一回事 ——
+     * 后者是视频作品本身的地址，后者在实况图里指的是封面动画。
+     */
+    private static String liveVideoUrlOf(Object imageItem) {
+        if (imageItem == null) {
+            return null;
+        }
+        Class<?> type = imageItem.getClass();
+        Object video = readField(type, imageItem, "video");
+        if (video == null) {
+            video = readSerializedField(imageItem, "video");
+        }
+        if (video == null) {
+            return null;
+        }
+        Class<?> videoType = video.getClass();
+        Object playAddr = readField(videoType, video, "playAddr");
+        if (playAddr == null) {
+            playAddr = readSerializedField(video, "play_addr");
+        }
+        if (playAddr == null) {
+            return null;
+        }
+        Object list = readField(playAddr.getClass(), playAddr, "urlList");
+        if (list == null) {
+            list = readSerializedField(playAddr, "url_list");
+        }
+        String url = firstStringOf(list);
+        return url.isEmpty() ? null : url;
+    }
+
+    private static String coverUrlOf(Object video) {
+        if (video == null) {
+            return "";
+        }
+        Class<?> videoType = video.getClass();
+        for (String name : new String[]{"cover", "origin_cover", "dynamic_cover"}) {
+            Object cover = readField(videoType, video, name);
+            if (cover == null) {
+                cover = readSerializedField(video, name);
+            }
+            if (cover == null) {
+                continue;
+            }
+            Object list = readField(cover.getClass(), cover, "urlList");
+            if (list == null) {
+                list = readSerializedField(cover, "url_list");
+            }
+            String url = firstStringOf(list);
+            if (!url.isEmpty()) {
+                return url;
+            }
+        }
+        return "";
+    }
+
+    /** 从 List/数组里取第一个非空字符串。 */
+    private static String firstStringOf(Object list) {
+        if (list instanceof java.util.List) {
+            for (Object item : (java.util.List<?>) list) {
+                String value = textValue(item);
+                if (!value.isEmpty()) {
+                    return value;
+                }
+            }
+            return "";
+        }
+        if (list instanceof Object[]) {
+            for (Object item : (Object[]) list) {
+                String value = textValue(item);
+                if (!value.isEmpty()) {
+                    return value;
+                }
+            }
+        }
+        return "";
+    }
+
+    private static String adMarkerText(
+            boolean isAd,
+            Object rawAd,
+            int source,
+            Object gdAd,
+            Object asyncAdInfo,
+            Object linkAdData
+    ) {
+        StringBuilder markers = new StringBuilder();
+        if (isAd) markers.append("isAd,");
+        if (rawAd != null) markers.append("rawAd,");
+        if (source > 0) markers.append("source=").append(source).append(',');
+        if (gdAd != null) markers.append("gdAd,");
+        if (asyncAdInfo != null) markers.append("async,");
+        if (linkAdData != null) markers.append("link,");
+        return markers.length() == 0 ? "none" : markers.toString();
+    }
+
+    private static Object readField(Class<?> type, Object instance, String name) {
+        try {
+            Field field = type.getField(name);
+            return field.get(instance);
+        } catch (ReflectiveOperationException | RuntimeException ignored) {
+            return null;
+        }
+    }
+
+    private static Object readSerializedField(Object instance, String serializedName) {
+        if (instance == null) {
+            return null;
+        }
+        Field field = findSerializedField(instance.getClass(), serializedName);
+        if (field == null) {
+            return null;
+        }
+        try {
+            return field.get(instance);
+        } catch (IllegalAccessException | RuntimeException ignored) {
+            return null;
+        }
+    }
+
+    private static Field findSerializedField(Class<?> type, String serializedName) {
+        synchronized (SERIALIZED_FIELDS) {
+            Map<String, Field> cached = SERIALIZED_FIELDS.computeIfAbsent(
+                    type,
+                    ignored -> new HashMap<>()
+            );
+            if (cached.containsKey(serializedName)) {
+                return cached.get(serializedName);
+            }
+            Field resolved = locateSerializedField(type, serializedName);
+            cached.put(serializedName, resolved);
+            return resolved;
+        }
+    }
+
+    private static Field locateSerializedField(Class<?> type, String serializedName) {
+        for (Class<?> current = type; current != null; current = current.getSuperclass()) {
+            for (Field field : current.getDeclaredFields()) {
+                for (Annotation annotation : field.getDeclaredAnnotations()) {
+                    if (!"com.google.gson.annotations.SerializedName"
+                            .equals(annotation.annotationType().getName())) {
+                        continue;
+                    }
+                    try {
+                        Method valueMethod = annotation.annotationType().getMethod("value");
+                        Object value = valueMethod.invoke(annotation);
+                        if (serializedName.equals(value)) {
+                            field.setAccessible(true);
+                            return field;
+                        }
+                    } catch (ReflectiveOperationException | RuntimeException ignored) {
+                        // Keep looking: model variants can use a different Gson runtime.
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    private static List<PlayUrl> resolvePlayUrls(Object video) {
+        if (video == null) {
+            return Collections.emptyList();
+        }
+        List<PlayUrl> primary = new ArrayList<>();
+        Set<String> seen = new LinkedHashSet<>();
+        String primaryCodec = codecOf(
+                flag(readSerializedField(video, "is_h265")),
+                flag(readSerializedField(video, "is_bytevc1"))
+        );
+        appendPlayUrls(primary, seen, video, "play_addr", "play_addr", primaryCodec, 0);
+        appendPlayUrls(primary, seen, video, "play_addr_h264", "play_addr_h264",
+                CODEC_H264, 0);
+        appendPlayUrls(primary, seen, video, "play_addr_265", "play_addr_265",
+                CODEC_HEVC, 0);
+        appendPlayUrls(primary, seen, video, "play_addr_bytevc1", "play_addr_bytevc1",
+                CODEC_BYTEVC1, 0);
+        // 清晰度为“自动”时保持原有顺序；钉死档位时把目标码率地址排到最前。
+        String quality = FilterPreferences.readVideoQuality(filterPreferences);
+        if (FilterPreferences.QUALITY_AUTO.equals(quality)) {
+            return primary.isEmpty()
+                    ? Collections.emptyList()
+                    : Collections.unmodifiableList(primary);
+        }
+        List<PlayUrl> ordered = orderPlayUrlsByQuality(
+                primary,
+                collectGears(video),
+                quality
+        );
+        return ordered.isEmpty()
+                ? Collections.emptyList()
+                : Collections.unmodifiableList(ordered);
+    }
+
+    private static void appendPlayUrls(
+            List<PlayUrl> output,
+            Set<String> seen,
+            Object holder,
+            String field,
+            String label,
+            String codec,
+            int height
+    ) {
+        Object address = readSerializedField(holder, field);
+        if (address == null) {
+            return;
+        }
+        Class<?> addressType = address.getClass();
+        Object rawUrls = invokeNoArg(addressType, address, "getUrlList");
+        if (!(rawUrls instanceof List<?>)) {
+            rawUrls = readField(addressType, address, "urlList");
+        }
+        if (!(rawUrls instanceof List<?> candidates)) {
+            return;
+        }
+
+        appendUrlsWithScheme(output, seen, candidates, label, codec, height, "https://");
+        appendUrlsWithScheme(output, seen, candidates, label, codec, height, "http://");
+    }
+
+    /**
+     * 下载地址按配置清晰度排序：目标档位（精确 > 不超过目标的最大档 > 高于目标的最小档，
+     * 与播放钉死规则一致）排最前，原有顶层地址兜底，其余档位按与目标的差距排后。
+     * <p>
+     * 只能在有画面、且不是 ByteVC1 的档位里选：ByteVC1 是抖音私有编码，系统相册和
+     * 第三方播放器只能解出声音，画面是黑的；DASH 音轨条目高度为 0，但 gear_name 仍
+     * 带“1080”之类的字样，必须按高度排除，不能拿来当视频档位。
+     */
+    private static List<PlayUrl> orderPlayUrlsByQuality(
+            List<PlayUrl> primary,
+            List<Gear> gears,
+            String quality
+    ) {
+        if (gears.isEmpty()) {
+            return primary;
+        }
+        int chosen = chooseGearHeight(gears, downloadTargetHeight(quality));
+        if (chosen <= 0) {
+            return primary;
+        }
+        List<PlayUrl> ordered = new ArrayList<>();
+        Set<String> emitted = new LinkedHashSet<>();
+        for (Gear gear : gears) {
+            if (gear.height == chosen) {
+                addPlayUrls(ordered, emitted, gear.urls);
+            }
+        }
+        addPlayUrls(ordered, emitted, sortByCompatibility(primary));
+        List<Gear> rest = new ArrayList<>();
+        for (Gear gear : gears) {
+            if (gear.height != chosen) {
+                rest.add(gear);
+            }
+        }
+        rest.sort((left, right) -> {
+            int leftDistance = Math.abs(left.height - chosen);
+            int rightDistance = Math.abs(right.height - chosen);
+            if (leftDistance != rightDistance) {
+                return Integer.compare(leftDistance, rightDistance);
+            }
+            return Long.compare(right.bitrate, left.bitrate);
+        });
+        for (Gear gear : rest) {
+            addPlayUrls(ordered, emitted, gear.urls);
+        }
+        Log.d(DouyinModule.TAG, "download urls ordered by quality: setting="
+                + quality + " chosen=" + chosen + "p gears=" + describeGears(gears));
+        return ordered;
+    }
+
+    private static void addPlayUrls(
+            List<PlayUrl> output,
+            Set<String> seen,
+            List<PlayUrl> candidates
+    ) {
+        for (PlayUrl candidate : candidates) {
+            if (seen.add(candidate.url)) {
+                output.add(candidate);
+            }
+        }
+    }
+
+    /**
+     * 下载候选的编码顺序：H.264 所有播放器都能解，HEVC 次之，ByteVC1 放最后兜底。
+     * 同一档位的 play_addr 本身可能是 ByteVC1，但该档位的 play_addr_265 是 HEVC，
+     * 排在它前面就能避免“只有声音没有画面”。
+     */
+    private static List<PlayUrl> sortByCompatibility(List<PlayUrl> urls) {
+        List<PlayUrl> sorted = new ArrayList<>(urls);
+        sorted.sort((left, right) -> Integer.compare(
+                codecRank(left.codec),
+                codecRank(right.codec)
+        ));
+        return sorted;
+    }
+
+    private static int codecRank(String codec) {
+        if (CODEC_H264.equals(codec)) {
+            return 0;
+        }
+        if (CODEC_UNKNOWN.equals(codec)) {
+            return 1;
+        }
+        if (CODEC_HEVC.equals(codec)) {
+            return 2;
+        }
+        return 3;
+    }
+
+    private static String codecOf(boolean h265, boolean bytevc1) {
+        if (bytevc1) {
+            return CODEC_BYTEVC1;
+        }
+        if (h265) {
+            return CODEC_HEVC;
+        }
+        return CODEC_H264;
+    }
+
+    private static boolean flag(Object value) {
+        if (value instanceof Boolean bool) {
+            return bool;
+        }
+        return value instanceof Number number && number.intValue() != 0;
+    }
+
+    /** video.bit_rate[] 里的码率档位，每项带 gear_name 与各自的 play_addr。 */
+    private static List<Gear> collectGears(Object video) {
+        Object bitRates = readSerializedField(video, "bit_rate");
+        if (bitRates == null) {
+            bitRates = readField(video.getClass(), video, "bitRate");
+        }
+        List<Gear> gears = new ArrayList<>();
+        Set<String> seen = new LinkedHashSet<>();
+        int index = 0;
+        for (Object item : asIterable(bitRates)) {
+            index++;
+            if (item == null) {
+                continue;
+            }
+            int height = gearHeight(item);
+            if (height <= 0) {
+                Log.d(DouyinModule.TAG, "download gear skipped: #" + index
+                        + " has no video height (DASH audio track)");
+                continue;
+            }
+            String codec = codecOf(
+                    flag(readSerializedField(item, "is_h265")),
+                    flag(readSerializedField(item, "is_bytevc1"))
+            );
+            String label = "bit_rate:" + height + "p";
+            List<PlayUrl> urls = new ArrayList<>();
+            appendPlayUrls(urls, seen, item, "play_addr", label, codec, height);
+            appendPlayUrls(urls, seen, item, "play_addr_265", label,
+                    CODEC_HEVC, height);
+            appendPlayUrls(urls, seen, item, "play_addr_bytevc1", label,
+                    CODEC_BYTEVC1, height);
+            if (urls.isEmpty()) {
+                continue;
+            }
+            gears.add(new Gear(height, gearBitrate(item), codec,
+                    sortByCompatibility(urls)));
+        }
+        gears.sort((left, right) -> {
+            if (left.height != right.height) {
+                return Integer.compare(right.height, left.height);
+            }
+            return Long.compare(right.bitrate, left.bitrate);
+        });
+        return gears;
+    }
+
+    private static int downloadTargetHeight(String quality) {
+        if (FilterPreferences.QUALITY_MAX.equals(quality)) {
+            return Integer.MAX_VALUE;
+        }
+        try {
+            return Integer.parseInt(quality);
+        } catch (NumberFormatException ignored) {
+            return 0;
+        }
+    }
+
+    /** 选档规则与播放钉死一致：精确匹配 > 不超过目标的最大档 > 高于目标的最小档。 */
+    private static int chooseGearHeight(List<Gear> gears, int target) {
+        if (target <= 0) {
+            return -1;
+        }
+        List<Gear> compatible = new ArrayList<>();
+        for (Gear gear : gears) {
+            if (gear.hasCompatibleUrl()) {
+                compatible.add(gear);
+            }
+        }
+        int chosen = chooseHeight(compatible, target);
+        if (chosen > 0) {
+            return chosen;
+        }
+        // 只有 ByteVC1 档位时才退回绝对最高档：至少文件本身是完整的，
+        // 抖音内可以播放，系统播放器可能只能解出声音。
+        return chooseHeight(gears, target);
+    }
+
+    private static int chooseHeight(List<Gear> gears, int target) {
+        int below = -1;
+        int above = -1;
+        for (Gear gear : gears) {
+            int height = gear.height;
+            if (height == target) {
+                return target;
+            }
+            if (height < target && height > below) {
+                below = height;
+            }
+            if (height > target && (above < 0 || height < above)) {
+                above = height;
+            }
+        }
+        return below > 0 ? below : above;
+    }
+
+    /**
+     * 档位高度以模型自己的 getVideoHeight()/playAddr.height 为准。
+     * 返回 0 表示这一条是 DASH 音轨（没有画面），绝不能因为 gear_name 里有
+     * “1080”就当作视频档位——抖音 41.0 的音轨条目正是这样误导的。
+     */
+    private static int gearHeight(Object gear) {
+        int declaredHeight = -1;
+        Object declared = invokeNoArg(gear.getClass(), gear, "getVideoHeight");
+        if (declared instanceof Number number) {
+            declaredHeight = number.intValue();
+        }
+        int addressWidth = 0;
+        Object address = readSerializedField(gear, "play_addr");
+        if (address != null) {
+            Object widthValue = readSerializedField(address, "width");
+            if (widthValue == null) {
+                widthValue = readField(address.getClass(), address, "width");
+            }
+            if (widthValue instanceof Number number) {
+                addressWidth = number.intValue();
+            }
+            if (declaredHeight < 0) {
+                Object addressHeight = readSerializedField(address, "height");
+                if (addressHeight == null) {
+                    addressHeight = readField(address.getClass(), address, "height");
+                }
+                if (addressHeight instanceof Number number) {
+                    declaredHeight = number.intValue();
+                }
+            }
+        }
+        if (declaredHeight > 0) {
+            return declaredHeight;
+        }
+        // 高度为 0 且宽度也为 0：这是 DASH 音轨（抖音 41.0 里它仍带 gear_name=normal_1080_0）。
+        // 高度为 0 但宽度有值：视频档位只是没回填高度，继续用 gear_name 解析。
+        if (declaredHeight == 0 && addressWidth <= 0) {
+            return 0;
+        }
+        Object name = readSerializedField(gear, "gear_name");
+        if (name == null) {
+            name = readField(gear.getClass(), gear, "gearName");
+        }
+        if (name instanceof CharSequence text) {
+            int height = heightFromGearName(text.toString());
+            if (height > 0) {
+                return height;
+            }
+        }
+        Object height = readSerializedField(gear, "height");
+        if (height == null) {
+            height = readField(gear.getClass(), gear, "height");
+        }
+        return height instanceof Number number ? number.intValue() : 0;
+    }
+
+    /** gear_name 形如 normal_1080_0 / adapt_lower_540_1，取第一个落在常见高度区间的数字段。 */
+    private static int heightFromGearName(String gearName) {
+        for (String part : gearName.split("[^0-9]+")) {
+            if (part.isEmpty()) {
+                continue;
+            }
+            int value;
+            try {
+                value = Integer.parseInt(part);
+            } catch (NumberFormatException ignored) {
+                continue;
+            }
+            if (value >= 144 && value <= 4320) {
+                return value;
+            }
+        }
+        return 0;
+    }
+
+    private static long gearBitrate(Object gear) {
+        Object bitrate = readSerializedField(gear, "bit_rate");
+        if (bitrate == null) {
+            bitrate = readField(gear.getClass(), gear, "bitrate");
+        }
+        return bitrate instanceof Number number ? number.longValue() : 0L;
+    }
+
+    private static String describeGears(List<Gear> gears) {
+        StringBuilder builder = new StringBuilder("[");
+        for (int index = 0; index < gears.size(); index++) {
+            Gear gear = gears.get(index);
+            builder.append(gear.height).append('p').append('/').append(gear.codec);
+            if (index < gears.size() - 1) {
+                builder.append(',');
+            }
+        }
+        return builder.append(']').toString();
+    }
+
+    private static void appendUrlsWithScheme(
+            List<PlayUrl> output,
+            Set<String> seen,
+            List<?> candidates,
+            String source,
+            String codec,
+            int height,
+            String scheme
+    ) {
+        for (Object candidate : candidates) {
+            if (candidate == null) {
+                continue;
+            }
+            String url = candidate.toString().trim();
+            if (looksLikeAudioUrl(url)) {
+                continue;
+            }
+            if (url.regionMatches(true, 0, scheme, 0, scheme.length())
+                    && seen.add(url)) {
+                output.add(new PlayUrl(url, source, codec, height));
+            }
+        }
+    }
+
+    /**
+     * 图文作品的图片地址：{@code images[].watermark_free_download_url_list} 是原图下载链，
+     * {@code images[].url_list} 是展示图（可能被 CDN 转成 AVIF/WebP/HEIC），
+     * {@code image_infos[].label_large/label_origin} 是 40.x 起的大图与原始图。
+     * {@code download_url_list} 是客户端「保存」用的水印图，只在没有其它候选时才兜底。
+     */
+    private static List<ImageUrl> resolveImageUrls(Object images, Object imageInfos) {
+        List<ImageUrl> output = new ArrayList<>();
+        Set<String> seen = new LinkedHashSet<>();
+        appendImageUrls(output, seen, images, "images");
+        appendImageUrls(output, seen, imageInfos, "imageInfos");
+        return output.isEmpty()
+                ? Collections.emptyList()
+                : Collections.unmodifiableList(output);
+    }
+
+    private static void appendImageUrls(
+            List<ImageUrl> output,
+            Set<String> seen,
+            Object container,
+            String source
+    ) {
+        for (Object item : asIterable(container)) {
+            if (item == null) {
+                continue;
+            }
+            List<String> urls = pickImageUrls(item);
+            if (urls.isEmpty() || !seen.add(urls.get(0))) {
+                continue;
+            }
+            output.add(new ImageUrl(urls, source, liveVideoUrlOf(item)));
+        }
+    }
+
+    private static Iterable<?> asIterable(Object value) {
+        if (value instanceof Iterable<?> iterable) {
+            return iterable;
+        }
+        if (value != null && value.getClass().isArray()) {
+            int length = Array.getLength(value);
+            List<Object> copy = new ArrayList<>(length);
+            for (int index = 0; index < length; index++) {
+                copy.add(Array.get(value, index));
+            }
+            return copy;
+        }
+        return Collections.emptyList();
+    }
+
+    /**
+     * 一张图通常带多个镜像域名，按顺序全部保留，下载时逐个尝试。
+     * 原图下载链排最前，展示图/大图随后，这样原图地址失效时还能退回展示图，
+     * 不会因为一个域名 403 就整张失败。
+     */
+    private static List<String> pickImageUrls(Object image) {
+        // ImageUrlStruct 自带“无水印下载”链，是原图而不是展示用的压缩图；
+        // 旧版直接用 url_list，CDN 可能返回 AVIF/HEIC/WebP，落到相册里就像“格式乱码”。
+        List<String> output = new ArrayList<>();
+        addDistinctUrls(output, httpUrlsFrom(
+                readNested(image, "watermarkFreeDownloadUrlList")
+        ));
+        for (String name : IMAGE_LABEL_FIELDS) {
+            addDistinctUrls(output, httpUrlsFrom(readNested(image, name)));
+        }
+        addDistinctUrls(output, httpUrlsFrom(image));
+        if (!output.isEmpty()) {
+            return output;
+        }
+        // 带水印的客户端“保存”链只做最后兜底，避免把水印图当成无水印图。
+        addDistinctUrls(output, httpUrlsFrom(readNested(image, "downloadUrlList")));
+        if (!output.isEmpty()) {
+            return output;
+        }
+        return scanForHttpUrls(image, 0);
+    }
+
+    private static void addDistinctUrls(List<String> output, List<String> urls) {
+        for (String url : urls) {
+            if (!output.contains(url)) {
+                output.add(url);
+            }
+        }
+    }
+
+    private static Object readNested(Object instance, String name) {
+        Class<?> type = instance.getClass();
+        Object value = readField(type, instance, name);
+        if (value != null) {
+            return value;
+        }
+        String snake = camelToSnake(name);
+        if (!snake.equals(name)) {
+            value = readSerializedField(instance, snake);
+            if (value != null) {
+                return value;
+            }
+        }
+        String suffix = name.substring(0, 1).toUpperCase() + name.substring(1);
+        return invokeNoArg(type, instance, "get" + suffix);
+    }
+
+    private static String camelToSnake(String name) {
+        StringBuilder builder = new StringBuilder(name.length() + 4);
+        for (int index = 0; index < name.length(); index++) {
+            char current = name.charAt(index);
+            if (Character.isUpperCase(current)) {
+                builder.append('_').append(Character.toLowerCase(current));
+            } else {
+                builder.append(current);
+            }
+        }
+        return builder.toString();
+    }
+
+    /** 从 UrlModel 结构（getUrlList/urlList/url_list）或裸字符串中取出所有 http 地址。 */
+    private static List<String> httpUrlsFrom(Object candidate) {
+        if (candidate == null) {
+            return Collections.emptyList();
+        }
+        if (candidate instanceof CharSequence text) {
+            String value = text.toString().trim();
+            return isHttpUrl(value) ? List.of(value) : Collections.emptyList();
+        }
+        if (candidate instanceof Iterable<?> iterable) {
+            List<String> output = new ArrayList<>();
+            for (Object item : iterable) {
+                if (item instanceof CharSequence text) {
+                    String value = text.toString().trim();
+                    if (isHttpUrl(value)) {
+                        output.add(value);
+                    }
+                }
+            }
+            return output;
+        }
+        Class<?> type = candidate.getClass();
+        Object urls = invokeNoArg(type, candidate, "getUrlList");
+        if (!(urls instanceof List<?>)) {
+            urls = readField(type, candidate, "urlList");
+        }
+        if (!(urls instanceof List<?>)) {
+            urls = readSerializedField(candidate, "url_list");
+        }
+        if (!(urls instanceof List<?> values)) {
+            return Collections.emptyList();
+        }
+        List<String> output = new ArrayList<>(values.size());
+        for (Object value : values) {
+            if (value instanceof CharSequence text) {
+                String url = text.toString().trim();
+                if (isHttpUrl(url)) {
+                    output.add(url);
+                }
+            }
+        }
+        return output;
+    }
+
+    private static boolean isHttpUrl(String value) {
+        return value.regionMatches(true, 0, "https://", 0, 8)
+                || value.regionMatches(true, 0, "http://", 0, 7);
+    }
+
+    /**
+     * 抖音 CDN 的音轨地址带 /audio/ 或 media-audio。视频下载候选里出现这类地址时
+     * 直接排除，避免把纯音轨保存成 mp4（相册里就是“只有声音没有图像”）。
+     */
+    private static boolean looksLikeAudioUrl(String url) {
+        String lower = url.toLowerCase(Locale.ROOT);
+        return lower.contains("/audio/")
+                || lower.contains("media-audio")
+                || lower.contains("mime_type=audio")
+                || lower.contains("mime_type=audio%2f")
+                || lower.endsWith(".mp3")
+                || lower.endsWith(".m4a")
+                || lower.endsWith(".aac");
+    }
+
+    private static List<String> scanForHttpUrls(Object value, int depth) {
+        if (value == null || depth > 2) {
+            return Collections.emptyList();
+        }
+        Class<?> type = value.getClass();
+        if (type.isPrimitive() || type.getName().startsWith("java.")) {
+            return Collections.emptyList();
+        }
+        List<String> fallback = Collections.emptyList();
+        for (Class<?> current = type; current != null; current = current.getSuperclass()) {
+            for (Field field : current.getDeclaredFields()) {
+                if (Modifier.isStatic(field.getModifiers())
+                        || field.getType().isPrimitive()) {
+                    continue;
+                }
+                Object child;
+                try {
+                    field.setAccessible(true);
+                    child = field.get(value);
+                } catch (ReflectiveOperationException | RuntimeException ignored) {
+                    continue;
+                }
+                if (child == null) {
+                    continue;
+                }
+                List<String> urls = httpUrlsFrom(child);
+                if (urls.isEmpty()) {
+                    urls = scanForHttpUrls(child, depth + 1);
+                }
+                if (urls.isEmpty()) {
+                    continue;
+                }
+                String fieldName = field.getName().toLowerCase();
+                if (fieldName.contains("download") || fieldName.contains("watermark")) {
+                    if (fallback.isEmpty()) {
+                        fallback = urls;
+                    }
+                    continue;
+                }
+                return urls;
+            }
+        }
+        return fallback;
+    }
+
+    private static Object invokeNoArg(
+            Class<?> type,
+            Object instance,
+            String name
+    ) {
+        try {
+            Method method = type.getMethod(name);
+            return method.invoke(instance);
+        } catch (ReflectiveOperationException | RuntimeException ignored) {
+            return null;
+        }
+    }
+
+    private static int intValue(Object value, int fallback) {
+        return value instanceof Number number ? number.intValue() : fallback;
+    }
+
+    private static boolean booleanValue(Object value) {
+        if (value instanceof Boolean bool) {
+            return bool;
+        }
+        return value instanceof Number number && number.intValue() != 0;
+    }
+
+    private static int collectionSize(Object value) {
+        if (value instanceof Collection<?> collection) {
+            return collection.size();
+        }
+        return value != null && value.getClass().isArray()
+                ? Array.getLength(value)
+                : 0;
+    }
+
+    private static String stringValue(Object value) {
+        return value == null ? "unknown" : value.toString();
+    }
+
+    private static String textValue(Object value) {
+        return value instanceof CharSequence text ? text.toString().trim() : "";
+    }
+
+    private static String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isEmpty()) {
+                return value;
+            }
+        }
+        return "";
+    }
+
+    static final class Snapshot {
+        final String aid;
+        final int awemeType;
+        final boolean hasVideo;
+        final boolean isAd;
+        final boolean hasRawAd;
+        final boolean hasArticle;
+        final int imageCount;
+        final int imageInfoCount;
+        final boolean live;
+        final boolean hostImage;
+        final boolean hostMultiImage;
+        final boolean slides;
+        final boolean photoContent;
+        final String title;
+        final String description;
+        /** 作者昵称。分享给 DouyinDownloader 的历史列表要用，取不到就是空串。 */
+        final String author;
+        /** 封面地址。同上，取不到留空，不要用占位图冒充。 */
+        final String coverUrl;
+        final String filterReason;
+        final List<PlayUrl> playUrls;
+        final String adMarkers;
+        private final Object images;
+        private final Object imageInfos;
+        private List<ImageUrl> imageUrls;
+
+        Snapshot(
+                String aid,
+                int awemeType,
+                boolean hasVideo,
+                boolean isAd,
+                boolean hasRawAd,
+                boolean hasArticle,
+                Object images,
+                Object imageInfos,
+                int imageCount,
+                int imageInfoCount,
+                boolean live,
+                boolean hostImage,
+                boolean hostMultiImage,
+                boolean slides,
+                boolean photoContent,
+                String title,
+                String description,
+                String author,
+                String coverUrl,
+                String filterReason,
+                List<PlayUrl> playUrls,
+                String adMarkers
+        ) {
+            this.aid = aid;
+            this.awemeType = awemeType;
+            this.hasVideo = hasVideo;
+            this.isAd = isAd;
+            this.hasRawAd = hasRawAd;
+            this.hasArticle = hasArticle;
+            this.images = images;
+            this.imageInfos = imageInfos;
+            this.imageCount = imageCount;
+            this.imageInfoCount = imageInfoCount;
+            this.live = live;
+            this.hostImage = hostImage;
+            this.hostMultiImage = hostMultiImage;
+            this.slides = slides;
+            this.photoContent = photoContent;
+            this.title = title;
+            this.description = description;
+            this.author = author;
+            this.coverUrl = coverUrl;
+            this.filterReason = filterReason;
+            this.playUrls = playUrls;
+            this.adMarkers = adMarkers;
+        }
+
+        boolean shouldFilter() {
+            return filterReason != null;
+        }
+
+        boolean hasDownloadUrl() {
+            return !playUrls.isEmpty();
+        }
+
+        /**
+         * 图文图片地址按需解析：内容检查每秒会构造多个快照，反射遍历留到真正点击下载时再做。
+         */
+        synchronized List<ImageUrl> imageUrls() {
+            if (imageUrls == null) {
+                imageUrls = resolveImageUrls(images, imageInfos);
+            }
+            return imageUrls;
+        }
+
+        boolean hasImages() {
+            return !imageUrls().isEmpty();
+        }
+
+        boolean isAdvertisement() {
+            return isAd || hasRawAd;
+        }
+
+        /** 下载将优先使用的清晰度（来自码率档位标签），没有时为空串。 */
+        String downloadQualityLabel() {
+            if (playUrls.isEmpty()) {
+                return "";
+            }
+            String source = playUrls.get(0).source;
+            String prefix = "bit_rate:";
+            return source.startsWith(prefix)
+                    ? source.substring(prefix.length())
+                    : "";
+        }
+
+        String classificationDetails() {
+            return "aid=" + aid
+                    + " type=" + awemeType
+                    + " video=" + hasVideo
+                    + " isAd=" + isAd
+                    + " rawAd=" + hasRawAd
+                    + " adMarkers=" + adMarkers
+                    + " article=" + hasArticle
+                    + " images=" + imageCount
+                    + " imageInfos=" + imageInfoCount
+                    + " live=" + live
+                    + " hostImage=" + hostImage
+                    + " hostMultiImage=" + hostMultiImage
+                    + " slides=" + slides
+                    + " photo=" + photoContent
+                    + " titleChars=" + title.length()
+                    + " descChars=" + description.length()
+                    + " playUrls=" + playUrls.size();
+        }
+    }
+
+    static final class ImageUrl {
+        /** 同一张图的多个镜像地址，按优先顺序排列。 */
+        final List<String> urls;
+        final String source;
+        /**
+         * 实况图（Live Photo）的动态部分地址，普通图片为 null。
+         *
+         * 抖音把实况图存在 `images[i].video.play_addr.url_list`，
+         * 只下载 urls 会得到一张静态帧 —— 动态效果就丢了。
+         * 拿到这个地址才能合成真正的动态照片。
+         */
+        final String liveVideoUrl;
+
+        ImageUrl(List<String> urls, String source, String liveVideoUrl) {
+            this.urls = Collections.unmodifiableList(new ArrayList<>(urls));
+            this.source = source;
+            this.liveVideoUrl = liveVideoUrl;
+        }
+
+        ImageUrl(List<String> urls, String source) {
+            this(urls, source, null);
+        }
+
+        /** 是否是实况图。 */
+        boolean isLive() {
+            return liveVideoUrl != null && !liveVideoUrl.isEmpty();
+        }
+
+        String primary() {
+            return urls.get(0);
+        }
+    }
+
+    static final class PlayUrl {
+        final String url;
+        final String source;
+        final String codec;
+        final int height;
+
+        PlayUrl(String url, String source, String codec, int height) {
+            this.url = url;
+            this.source = source;
+            this.codec = codec;
+            this.height = height;
+        }
+
+        boolean isByteVc1() {
+            return CODEC_BYTEVC1.equals(codec);
+        }
+    }
+
+    /** video.bit_rate[] 里的一个码率档位：高度、码率与该档位的下载地址。 */
+    private static final class Gear {
+        final int height;
+        final long bitrate;
+        final String codec;
+        final List<PlayUrl> urls;
+
+        Gear(int height, long bitrate, String codec, List<PlayUrl> urls) {
+            this.height = height;
+            this.bitrate = bitrate;
+            this.codec = codec;
+            this.urls = Collections.unmodifiableList(new ArrayList<>(urls));
+        }
+
+        /** ByteVC1 是私有编码，系统播放器只能出声；有 H.264/HEVC 地址就算可用。 */
+        boolean hasCompatibleUrl() {
+            for (PlayUrl url : urls) {
+                if (!CODEC_BYTEVC1.equals(url.codec)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+    }
+}

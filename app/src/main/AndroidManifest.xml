@@ -69,6 +69,17 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+        <!--
+          hook 跑在抖音进程里，写不了本应用私有目录，用显式广播投递下载记录。
+        -->
+        <receiver
+            android:name="com.zz.douyin.HistoryReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.knightlsy.douyin.SHARED_HISTORY" />
+            </intent-filter>
+        </receiver>
+
     </application>
 
 </manifest>

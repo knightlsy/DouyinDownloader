@@ -61,3 +61,14 @@
 # General
 -keepattributes SourceFile,LineNumberTable
 -renamesourcefileattribute SourceFile
+
+# ── Xposed 模块（从抖仙人合并进来）──
+# 入口类由框架按 java_init.list 里的全限定名加载，名字绝不能变
+-keep,allowoptimization,allowobfuscation public class * extends io.github.libxposed.api.XposedModule {
+    public <init>();
+}
+# hook 代码全靠反射读抖音内部类，成员名和结构不能动
+-keepclassmembers class com.zz.douyin.hook.** { *; }
+-keep class com.zz.douyin.FilterPreferences { *; }
+-keep class com.zz.douyin.HistoryReceiver { *; }
+-keep class com.zz.douyin.SharedHistoryStore { *; }

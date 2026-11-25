@@ -1,0 +1,2031 @@
+package com.zz.douyin.hook;
+
+import android.app.Activity;
+import android.content.SharedPreferences;
+import android.graphics.Color;
+import android.graphics.Rect;
+import android.graphics.drawable.GradientDrawable;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.SystemClock;
+import android.util.Log;
+import android.util.TypedValue;
+import android.view.Gravity;
+import android.view.MotionEvent;
+import android.view.SurfaceView;
+import android.view.TextureView;
+import android.view.View;
+import android.view.ViewGroup;
+import android.view.ViewTreeObserver;
+import android.widget.FrameLayout;
+import android.widget.ImageView;
+import android.widget.RelativeLayout;
+import android.widget.TextView;
+
+import java.lang.ref.WeakReference;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.WeakHashMap;
+
+final class ImmersiveUi {
+    private static final Handler MAIN = new Handler(Looper.getMainLooper());
+    private static final long SCAN_INTERVAL_MS = 100L;
+    private static final long FALLBACK_CONTENT_CHECK_INTERVAL_MS = 900L;
+    private static final long UI_TRANSITION_HOLD_MS = 3_000L;
+    private static final Map<View, SavedView> HIDDEN =
+            Collections.synchronizedMap(new WeakHashMap<>());
+    private static final Set<View> GESTURE_PATHS =
+            Collections.newSetFromMap(new WeakHashMap<>());
+    private static final Map<View, Integer> ROOT_SYSTEM_UI =
+            Collections.synchronizedMap(new WeakHashMap<>());
+    private static final Map<View, ViewGroup.LayoutParams> EXPANDED_VIEWPORTS =
+            Collections.synchronizedMap(new WeakHashMap<>());
+    private static final ViewTreeObserver.OnPreDrawListener HIDDEN_VIEW_GUARD =
+            () -> {
+                reassertHiddenViews();
+                return true;
+            };
+    private static WeakReference<View> hiddenGuardRoot = new WeakReference<>(null);
+    private static volatile boolean showDanmaku;
+    private static volatile boolean openCommentsOnDoubleTap;
+    private static volatile boolean moduleEnabled = true;
+    private static volatile boolean blockDoubleTap;
+    private static volatile boolean immersiveEnabled = true;
+    private static SharedPreferences immersivePreferences;
+    private static final SharedPreferences.OnSharedPreferenceChangeListener
+            PREFERENCE_LISTENER = (preferences, key) -> {
+                refreshPreferences(preferences);
+            };
+
+    private static WeakReference<Activity> active = new WeakReference<>(null);
+    private static WeakReference<View> activeRoot = new WeakReference<>(null);
+    private static boolean scanScheduled;
+    private static boolean swipeRunning;
+    private static long swipeToken;
+    private static boolean videoMissingLogged;
+    private static boolean activityResolveErrorLogged;
+    private static long lastScanFailureAt;
+    private static long transitionBoostUntil;
+    private static float touchDownX;
+    private static float touchDownY;
+    private static long touchDownAt;
+    private static long touchGestureToken;
+    private static boolean touchInProgress;
+    private static boolean touchDownImmersive;
+    private static String touchDownAid;
+    private static String touchDownObservedAid;
+    private static Object touchDownEngine;
+    private static int touchDownEngineState;
+    private static WeakReference<TextView> downloadButton =
+            new WeakReference<>(null);
+    private static long lastHandledTouchDownTime;
+    private static long contentCheckNotBefore;
+    private static long contentCheckUntil;
+    private static long lastContentCheckAt;
+    private static long lastFilteredSwipeAt;
+    private static long lastSwipeAt;
+    private static String filterCandidateAid;
+    private static String filterCandidateReason;
+    private static int filterCandidateCount;
+    private static long filterCandidateAt;
+    private static String lastAcceptedAid;
+    private static int lastDanmakuCount = -1;
+    private static long lastCommentOpenAt;
+    private static long commentsOpenedAt;
+    private static volatile long syntheticTapUntil;
+    private static long filterBurstStart;
+    private static int filterBurstCount;
+    private static long filterSuspendedUntil;
+
+    private ImmersiveUi() {
+    }
+
+    static synchronized void configurePreferences(SharedPreferences preferences) {
+        if (immersivePreferences != null && immersivePreferences != preferences) {
+            try {
+                immersivePreferences.unregisterOnSharedPreferenceChangeListener(
+                        PREFERENCE_LISTENER
+                );
+            } catch (RuntimeException ignored) {
+                // A dead remote preference bridge will be replaced below.
+            }
+        }
+        immersivePreferences = preferences;
+        refreshPreferences(preferences);
+        if (preferences != null) {
+            preferences.registerOnSharedPreferenceChangeListener(PREFERENCE_LISTENER);
+        }
+    }
+
+    static boolean isModuleEnabled() {
+        return moduleEnabled;
+    }
+
+    /**
+     * The landscape long-video page (LandscapeFeedActivity) has its own controls, a
+     * double-tap pause toggle and no right-hand action bar. The portrait feed logic (hiding
+     * every control, swallowing double taps, auto swiping) breaks it, so the module stays out.
+     */
+    static boolean isLandscapeFeed(Activity activity) {
+        return activity != null
+                && activity.getClass().getName().contains(".longervideo.landscape.");
+    }
+
+    static boolean isLandscapeFeedActive() {
+        return isLandscapeFeed(active.get());
+    }
+
+    static boolean shouldBlockDoubleTap() {
+        return moduleEnabled && blockDoubleTap && !isLandscapeFeedActive();
+    }
+
+    static boolean shouldOpenCommentsOnDoubleTap() {
+        return moduleEnabled && openCommentsOnDoubleTap && !isLandscapeFeedActive();
+    }
+
+    /**
+     * Double tap opens the native comment panel. The panel itself is host UI, so the tap is
+     * forwarded to the real comment button instead of synthesizing a second single tap; the
+     * gesture is still consumed so the like/heart animation never runs.
+     */
+    static void onDoubleTapForComments() {
+        if (!moduleEnabled || !openCommentsOnDoubleTap) {
+            return;
+        }
+        long now = SystemClock.uptimeMillis();
+        if (now - lastCommentOpenAt < 800L) {
+            // Three hooked callbacks (interceptDoubleClick + onDoubleTap + onDoubleTapEvent)
+            // report the same gesture; clicking three times toggled the panel back shut.
+            return;
+        }
+        lastCommentOpenAt = now;
+        attemptOpenComments(0);
+    }
+
+    private static void attemptOpenComments(int attempt) {
+        MAIN.postDelayed(() -> {
+            Activity activity = activeActivity();
+            View decor = activeDecor(activity);
+            if (decor == null) {
+                return;
+            }
+            if (attempt > 0 && isCommentPanelVisible(decor)) {
+                scheduleScan(0L);
+                return;
+            }
+            List<View> candidates = new ArrayList<>();
+            collectCommentCandidates(decor, decor, candidates);
+            if (candidates.isEmpty()) {
+                // The first video after a cold start has no right action bar yet; searching
+                // again a moment later is what makes the very first double tap work.
+                if (attempt < 2) {
+                    attemptOpenComments(attempt + 1);
+                } else {
+                    Log.w(DouyinModule.TAG, "double tap: comment entry not found");
+                }
+                return;
+            }
+            clickCommentCandidate(decor, candidates, 0);
+        }, attempt == 0 ? 0L : 350L);
+    }
+
+    /**
+     * Click the container that owns the click listener. Digging into the smallest clickable
+     * child landed on the comment counter (TextSwitcher), which only animates the number.
+     */
+    private static View clickableTarget(View node) {
+        View current = node;
+        for (int level = 0; level < 4 && current != null; level++) {
+            if (current.isClickable() && current.hasOnClickListeners()) {
+                return current;
+            }
+            current = current.getParent() instanceof View parent ? parent : null;
+        }
+        return node;
+    }
+
+    private static void clickCommentCandidate(
+            View decor,
+            List<View> candidates,
+            int index
+    ) {
+        if (index >= candidates.size() || index >= 3) {
+            Log.w(DouyinModule.TAG, "double tap: no candidate opened the comment panel");
+            return;
+        }
+        View target = clickableTarget(candidates.get(index));
+        Log.i(DouyinModule.TAG, "double tap opens comments: "
+                + target.getClass().getName()
+                + " id=" + target.getId()
+                + " desc=" + target.getContentDescription()
+                + " listeners=" + target.hasOnClickListeners()
+                + " candidate=" + index);
+        if (!tapView(decor, target)) {
+            target.performClick();
+        }
+        commentsOpenedAt = SystemClock.uptimeMillis();
+        scheduleScan(0L);
+        MAIN.postDelayed(() -> {
+            if (isCommentPanelVisible(decor)) {
+                scheduleScan(0L);
+                return;
+            }
+            Log.i(DouyinModule.TAG, "candidate " + index + " did not open comments, trying next");
+            clickCommentCandidate(decor, candidates, index + 1);
+        }, 500L);
+    }
+
+
+    private static void collectCommentCandidates(
+            View node,
+            View decor,
+            List<View> out
+    ) {
+        if (node == null || !node.isAttachedToWindow() || !node.isShown()) {
+            return;
+        }
+        CharSequence description = node.getContentDescription();
+        String label = description == null ? "" : description.toString();
+        boolean mentionsComment = label.contains("评论")
+                || label.toLowerCase(java.util.Locale.ROOT).contains("comment");
+        String className = node.getClass().getName().toLowerCase(java.util.Locale.ROOT);
+        if (className.startsWith("com.ss.android.ugc.aweme.comment.")
+                || className.contains("commenttopaction")
+                || className.contains("commentlist")
+                || className.contains("commentinput")) {
+            // Inside the opened comment panel: never click panel internals.
+            return;
+        }
+        boolean looksLikeCommentView = className.contains("comment");
+        Rect visible = new Rect();
+        boolean rightSide = node.getGlobalVisibleRect(visible)
+                && visible.centerX() > decor.getWidth() * 0.6f
+                && visible.width() > 0
+                && visible.width() <= decor.getWidth() * 0.35f
+                && visible.height() > 0
+                && visible.height() <= decor.getHeight() * 0.25f;
+        if ((mentionsComment || (looksLikeCommentView && rightSide))
+                && node.isClickable()
+                && rightSide) {
+            out.add(node);
+        }
+        if (node instanceof ViewGroup group) {
+            for (int index = 0; index < group.getChildCount(); index++) {
+                collectCommentCandidates(group.getChildAt(index), decor, out);
+            }
+        }
+    }
+
+    private static void refreshPreferences(SharedPreferences preferences) {
+        boolean enabled = com.zz.douyin.FilterPreferences.readModuleEnabled(preferences);
+        boolean changed = moduleEnabled != enabled;
+        moduleEnabled = enabled;
+        blockDoubleTap = com.zz.douyin.FilterPreferences.readBlockDoubleTap(preferences);
+        immersiveEnabled = com.zz.douyin.FilterPreferences.readImmersiveEnabled(preferences);
+        showDanmaku = com.zz.douyin.FilterPreferences.readShowDanmaku(preferences);
+        openCommentsOnDoubleTap =
+                com.zz.douyin.FilterPreferences.readDoubleTapComments(preferences);
+        MAIN.post(() -> {
+            if (changed) {
+                touchGestureToken++;
+                touchInProgress = false;
+                transitionBoostUntil = 0L;
+                resetFilterCandidate();
+                PlaybackState.clearModuleIntents();
+                Log.i(DouyinModule.TAG, "module enabled=" + moduleEnabled);
+            }
+            if (!moduleEnabled) {
+                removeDownloadButton();
+                VideoDownloader.dismissChooser();
+                Activity activity = activeActivity();
+                restoreAll(activity, activeDecor(activity));
+            } else {
+                if (!immersiveEnabled) {
+                    Activity activity = activeActivity();
+                    restoreAll(activity, activeDecor(activity));
+                }
+                armContentFilter(1_000L);
+            }
+            scheduleScan(0L);
+        });
+    }
+
+    static void onActivityResumed(Activity activity) {
+        if (activity == null) {
+            return;
+        }
+        MAIN.post(() -> {
+            active = new WeakReference<>(activity);
+            View decor = activity.getWindow().getDecorView();
+            activeRoot = new WeakReference<>(decor);
+            attachHiddenViewGuard(decor);
+            Log.i(DouyinModule.TAG, "activity resumed: " + activity.getClass().getName());
+            armContentFilter(1_000L);
+            scheduleScan(120L);
+        });
+    }
+
+    static void onActivityPaused(Activity activity) {
+        MAIN.post(() -> {
+            Activity current = active.get();
+            if (current == activity) {
+                removeDownloadButton();
+                VideoDownloader.dismissChooser();
+                restoreAll(current);
+                active.clear();
+                activeRoot.clear();
+                touchInProgress = false;
+            }
+        });
+    }
+
+    static void onFeedPageSelected() {
+        if (!moduleEnabled) return;
+        PlaybackState.beginAutoSwitch();
+        MAIN.post(() -> {
+            boostTransitionWindow();
+            armContentFilter(120L);
+            scheduleScan(0L);
+        });
+    }
+
+    static void beforeActivityTouch(Activity activity, MotionEvent event) {
+        if (!moduleEnabled || isLandscapeFeed(activity)) return;
+        if (swipeRunning
+                || !touchInProgress
+                || event.getActionMasked() != MotionEvent.ACTION_UP
+                || !PlaybackState.isUserPaused()) {
+            return;
+        }
+        View decor = activeDecor(activity);
+        float density = decor == null
+                ? 1f
+                : decor.getResources().getDisplayMetrics().density;
+        float dx = event.getRawX() - touchDownX;
+        float dy = event.getRawY() - touchDownY;
+        if (decor != null
+                && Math.abs(dy) > 72f * density
+                && Math.abs(dy) > Math.abs(dx)) {
+            PlaybackState.beginAutoSwitch();
+            boostTransitionWindow();
+        }
+    }
+
+    static void onActivityTouch(Activity activity, MotionEvent event) {
+        if (!moduleEnabled || isLandscapeFeed(activity)) return;
+        int action = event.getActionMasked();
+        if (swipeRunning) {
+            if (touchInProgress
+                    && (action == MotionEvent.ACTION_UP
+                    || action == MotionEvent.ACTION_CANCEL)) {
+                touchInProgress = false;
+            }
+            return;
+        }
+        if (action == MotionEvent.ACTION_DOWN) {
+            touchInProgress = true;
+            touchDownImmersive = hasHiddenViews() && !PlaybackState.isUserPaused();
+            touchGestureToken++;
+            touchDownX = event.getRawX();
+            touchDownY = event.getRawY();
+            touchDownAt = event.getEventTime();
+            View decor = activeDecor(activity);
+            FeedContentTracker.Snapshot model = FeedContentTracker.current(decor);
+            touchDownObservedAid = model == null ? null : model.aid;
+            touchDownAid = touchDownObservedAid == null
+                    ? lastAcceptedAid
+                    : touchDownObservedAid;
+            touchDownEngine = PlaybackState.engine();
+            touchDownEngineState = PlaybackState.engineState(touchDownEngine);
+            return;
+        }
+        if (action == MotionEvent.ACTION_CANCEL) {
+            touchInProgress = false;
+            return;
+        }
+        if (action != MotionEvent.ACTION_UP) {
+            return;
+        }
+        touchInProgress = false;
+        long gestureId = event.getDownTime();
+        if (gestureId == lastHandledTouchDownTime) {
+            return;
+        }
+        lastHandledTouchDownTime = gestureId;
+
+        float dx = event.getRawX() - touchDownX;
+        float dy = event.getRawY() - touchDownY;
+        long elapsed = event.getEventTime() - touchDownAt;
+        View decor = activeDecor(activity);
+        float density = decor == null
+                ? 1f
+                : decor.getResources().getDisplayMetrics().density;
+        if (decor != null
+                && Math.abs(dy) > 72f * density
+                && Math.abs(dy) > Math.abs(dx)) {
+            boostTransitionWindow();
+            armContentFilter(700L);
+            confirmUserFeedSwitch(
+                    touchGestureToken,
+                    touchDownAid,
+                    decor,
+                    8
+            );
+            return;
+        }
+        if (decor == null
+                || dx * dx + dy * dy > 1_600f
+                || elapsed > 500L
+                || (!touchDownImmersive && (event.getRawX() < decor.getWidth() * 0.18f
+                || event.getRawX() > decor.getWidth() * 0.82f
+                || event.getRawY() < decor.getHeight() * 0.12f
+                || event.getRawY() > decor.getHeight() * 0.86f))) {
+            return;
+        }
+
+        boolean resumeRequested = PlaybackState.isUserPaused();
+        long gestureToken = touchGestureToken;
+        long pauseIntentAt = touchDownAt;
+        Object pauseIntentEngine = touchDownEngine;
+        int pauseIntentInitialState = touchDownEngineState;
+        String pauseIntentAid = touchDownObservedAid;
+        touchDownEngine = null;
+        if (resumeRequested) {
+            confirmUserResume(
+                    gestureToken,
+                    pauseIntentEngine,
+                    4
+            );
+        } else {
+            confirmUserPause(
+                    gestureToken,
+                    pauseIntentAt,
+                    pauseIntentEngine,
+                    pauseIntentInitialState,
+                    pauseIntentAid,
+                    activity,
+                    decor,
+                    4
+            );
+        }
+    }
+
+    private static void confirmUserResume(
+            long gestureToken,
+            Object resumeIntentEngine,
+            int attemptsLeft
+    ) {
+        MAIN.postDelayed(() -> {
+            if (gestureToken != touchGestureToken
+                    || !PlaybackState.isUserPaused()) {
+                return;
+            }
+            if (PlaybackState.confirmUserPlaying(resumeIntentEngine)) {
+                removeDownloadButton();
+                scheduleScan(0L);
+                return;
+            }
+            if (attemptsLeft > 1) {
+                confirmUserResume(
+                        gestureToken,
+                        resumeIntentEngine,
+                        attemptsLeft - 1
+                );
+            } else {
+                Log.d(DouyinModule.TAG,
+                        "ignored center tap because playback stayed paused");
+                scheduleScan(0L);
+            }
+        }, 120L);
+    }
+
+    private static void confirmUserPause(
+            long gestureToken,
+            long pauseIntentAt,
+            Object pauseIntentEngine,
+            int pauseIntentInitialState,
+            String pauseIntentAid,
+            Activity activity,
+            View decor,
+            int attemptsLeft
+    ) {
+        MAIN.postDelayed(() -> {
+            if (gestureToken != touchGestureToken
+                    || PlaybackState.isUserPaused()) {
+                return;
+            }
+            FeedContentTracker.Snapshot currentModel =
+                    FeedContentTracker.current(decor);
+            String confirmedPauseAid = currentModel == null
+                    ? pauseIntentAid
+                    : currentModel.aid;
+            boolean confirmedPause =
+                    PlaybackState.confirmUserPaused(
+                            pauseIntentEngine,
+                            pauseIntentAt,
+                            pauseIntentInitialState,
+                            confirmedPauseAid
+                    );
+            if (confirmedPause) {
+                restoreAll(activity, decor);
+                showDownloadButton(activity, decor);
+                return;
+            }
+            if (attemptsLeft > 1) {
+                confirmUserPause(
+                        gestureToken,
+                        pauseIntentAt,
+                        pauseIntentEngine,
+                        pauseIntentInitialState,
+                        pauseIntentAid,
+                        activity,
+                        decor,
+                        attemptsLeft - 1
+                );
+            } else {
+                Log.d(DouyinModule.TAG,
+                        "ignored center tap because playback stayed active");
+                scheduleScan(0L);
+            }
+        }, 180L);
+    }
+
+    private static void confirmUserFeedSwitch(long token,
+                                              String previousAid,
+                                              View decor,
+                                              int attemptsLeft) {
+        MAIN.postDelayed(() -> {
+            if (token != touchGestureToken || previousAid == null) {
+                return;
+            }
+            FeedContentTracker.Snapshot model = FeedContentTracker.current(decor);
+            if (model != null && !previousAid.equals(model.aid)) {
+                if (PlaybackState.isUserPaused()) {
+                    PlaybackState.userPlaying();
+                } else {
+                    PlaybackState.confirmVideoSwitch();
+                }
+                scheduleScan(0L);
+                return;
+            }
+            if (attemptsLeft > 1) {
+                confirmUserFeedSwitch(token, previousAid, decor, attemptsLeft - 1);
+            }
+        }, 160L);
+    }
+
+    static void onPlaybackChanged(boolean playing) {
+        MAIN.post(() -> {
+            if (!moduleEnabled) return;
+            if (playing) {
+                boostTransitionWindow();
+            }
+            Activity activity = activeActivity();
+            View decor = activeDecor(activity);
+            if (decor == null) {
+                scheduleScan(250L);
+                return;
+            }
+            if (playing) {
+                removeDownloadButton();
+                scheduleScan(0L);
+            } else {
+                long token = PlaybackState.generation();
+                MAIN.postDelayed(() -> {
+                    if (moduleEnabled && token == PlaybackState.generation()
+                            && !PlaybackState.shouldKeepUiHidden()) {
+                        Activity currentActivity = activeActivity();
+                        View currentDecor = activeDecor(currentActivity);
+                        restoreAll(currentActivity, currentDecor);
+                        showDownloadButton(currentActivity, currentDecor);
+                    }
+                }, 720L);
+            }
+        });
+    }
+
+    static void onPlaybackCompleted(String reason) {
+        MAIN.post(() -> {
+            if (!moduleEnabled) return;
+            Activity activity = activeActivity();
+            if (isLandscapeFeed(activity)) return;
+            View decor = activeDecor(activity);
+            if (decor == null) {
+                return;
+            }
+            swipeToNext(decor, reason);
+        });
+    }
+
+    private static void scheduleScan(long delayMs) {
+        if (scanScheduled) {
+            return;
+        }
+        scanScheduled = true;
+        MAIN.postDelayed(ImmersiveUi::scan, delayMs);
+    }
+
+    private static void scan() {
+        scanScheduled = false;
+        try {
+            scanOnce();
+        } catch (Throwable error) {
+            long now = SystemClock.uptimeMillis();
+            if (now - lastScanFailureAt >= 2_000L) {
+                lastScanFailureAt = now;
+                Log.e(DouyinModule.TAG,
+                        "immersive UI scan failed; watchdog will retry", error);
+            }
+        } finally {
+            if (!scanScheduled) {
+                scheduleScan(SCAN_INTERVAL_MS);
+            }
+        }
+    }
+
+    private static void scanOnce() {
+        Activity activity = activeActivity();
+        View decor = activeDecor(activity);
+        if (!moduleEnabled) {
+            removeDownloadButton();
+            restoreAll(activity, decor);
+            scheduleScan(500L);
+            return;
+        }
+        if (decor == null) {
+            scheduleScan(250L);
+            return;
+        }
+        if (activity != null && (activity.isFinishing() || activity.isDestroyed())) {
+            return;
+        }
+        if (isLandscapeFeed(activity)) {
+            // Leave the landscape long-video page completely native.
+            removeDownloadButton();
+            restoreAll(activity, decor);
+            scheduleScan(300L);
+            return;
+        }
+
+        if (PlaybackState.consumePlaybackError()) {
+            onPlaybackCompleted("playback error");
+            scheduleNextScan();
+            return;
+        }
+
+        if (PlaybackState.consumeLoopBoundary()) {
+            onPlaybackCompleted("completed loop boundary");
+            scheduleNextScan();
+            return;
+        }
+
+        if (checkCurrentFeedContent(decor)) {
+            scheduleNextScan();
+            return;
+        }
+
+        boolean keepUiHidden = immersiveEnabled && PlaybackState.shouldKeepUiHidden();
+        RenderViews realVideos =
+                keepUiHidden
+                        ? findVisibleRealVideoViews(decor)
+                        : RenderViews.EMPTY;
+
+        if (!keepUiHidden) {
+            restoreAll(activity, decor);
+            showDownloadButton(activity, decor);
+            scheduleScan(SCAN_INTERVAL_MS);
+            return;
+        }
+
+        removeDownloadButton();
+        if (commentsOpenedAt > 0L) {
+            long openedFor = SystemClock.uptimeMillis() - commentsOpenedAt;
+            boolean opening = openedFor < 1_200L;
+            // Never trust the player-size heuristic here: 图文 keeps a tiny audio surface,
+            // which made the hold permanent and killed immersive playback after closing.
+            if (opening || (openedFor < 30_000L && isCommentPanelVisible(decor))) {
+                // The sheet is host UI: hiding it left a black half screen, so keep the real
+                // UI until it is closed.
+                restoreAll(activity, decor);
+                scheduleNextScan();
+                return;
+            }
+            commentsOpenedAt = 0L;
+            Log.i(DouyinModule.TAG, "comment panel closed, immersive resumes");
+        }
+        List<View> videos = findVisibleVideoViews(
+                decor,
+                realVideos.visibleVideos
+        );
+        if (!videos.isEmpty()) {
+            videoMissingLogged = false;
+            expandVideoViewport(decor, videos);
+            List<View> preservedViews = new ArrayList<>(videos);
+            if (showDanmaku) {
+                int before = preservedViews.size();
+                collectVisibleDanmakuViews(decor, videos, preservedViews);
+                int found = preservedViews.size() - before;
+                if (found != lastDanmakuCount) {
+                    lastDanmakuCount = found;
+                    Log.i(DouyinModule.TAG, "preserved danmaku layers=" + found
+                            + (found > 0
+                            ? " " + preservedViews.get(preservedViews.size() - 1)
+                            .getClass().getSimpleName()
+                            : ""));
+                }
+            }
+            restorePreservedPaths(preservedViews);
+            hideOutsidePreservedPaths(decor, preservedViews);
+            updateGesturePaths(decor, videos);
+            hideSystemBars(activity, decor);
+        } else {
+            long now = SystemClock.uptimeMillis();
+            if (ImmersiveTransitionPolicy.shouldHoldHiddenUi(
+                    hasHiddenViews(),
+                    now,
+                    transitionBoostUntil
+            )) {
+                reassertHiddenViews();
+                // The Surface may be momentarily invalid during a fullscreen transition.
+                // Rebuild gesture paths from the LongPressLayout even when no video surface
+                // is confirmed, so single-tap / double-tap / swipe remain functional as
+                // soon as the surface re-attaches. Without this, GESTURE_PATHS keeps stale
+                // references and shouldBlockHiddenTouch blocks every touch event.
+                List<View> gestureCandidates = new ArrayList<>();
+                collectFallbackGestureViews(decor, gestureCandidates);
+                if (!gestureCandidates.isEmpty()) {
+                    updateGesturePaths(decor, gestureCandidates);
+                }
+                hideSystemBars(activity, decor);
+            } else {
+                restoreAll(activity, decor);
+            }
+            if (!videoMissingLogged) {
+                videoMissingLogged = true;
+                Log.w(DouyinModule.TAG,
+                        "no centered visible video SurfaceView/TextureView found");
+            }
+        }
+        scheduleNextScan();
+    }
+
+    private static void scheduleNextScan() {
+        long delay = SystemClock.uptimeMillis() < transitionBoostUntil
+                ? 16L
+                : SCAN_INTERVAL_MS;
+        scheduleScan(delay);
+    }
+
+    private static void boostTransitionWindow() {
+        transitionBoostUntil = Math.max(
+                transitionBoostUntil,
+                SystemClock.uptimeMillis() + UI_TRANSITION_HOLD_MS
+        );
+    }
+
+    private static Activity activeActivity() {
+        Activity current = active.get();
+        if (current != null && !current.isFinishing() && !current.isDestroyed()) {
+            return current;
+        }
+        Activity resolved = resolveTopActivity();
+        if (resolved != null) {
+            active = new WeakReference<>(resolved);
+            Log.i(DouyinModule.TAG, "resolved activity: " + resolved.getClass().getName());
+        }
+        return resolved;
+    }
+
+    private static View activeDecor(Activity activity) {
+        if (activity != null) {
+            View decor = activity.getWindow().getDecorView();
+            activeRoot = new WeakReference<>(decor);
+            return decor;
+        }
+        View current = activeRoot.get();
+        if (current != null && current.isAttachedToWindow()) {
+            return current;
+        }
+        View resolved = resolveLargestWindowRoot();
+        if (resolved != null) {
+            activeRoot = new WeakReference<>(resolved);
+            Log.i(DouyinModule.TAG, "resolved window root: "
+                    + resolved.getClass().getName() + " "
+                    + resolved.getWidth() + "x" + resolved.getHeight());
+        }
+        return resolved;
+    }
+
+    /**
+     * 普通视频要「暂停」后才出现下载按钮；图文没有暂停状态（只有背景音乐），
+     * 识别为图文并恢复完整界面时就允许保存图片。
+     */
+    private static boolean canDownload() {
+        return PlaybackState.isContentAvailable()
+                && (PlaybackState.isUserPaused() || PlaybackState.isPhotoContent());
+    }
+
+    private static void showDownloadButton(Activity activity, View decor) {
+        if (!moduleEnabled || activity == null
+                || isLandscapeFeed(activity)
+                || decor == null
+                || !canDownload()
+                || !(decor instanceof FrameLayout container)) {
+            removeDownloadButton();
+            return;
+        }
+
+        TextView current = downloadButton.get();
+        if (current != null && current.getParent() == container) {
+            current.setVisibility(View.VISIBLE);
+            current.bringToFront();
+            return;
+        }
+        removeDownloadButton();
+
+        int size = dp(decor, 52);
+        int verticalGap = dp(decor, 10);
+        int rightMargin = dp(decor, 4);
+        TextView button = new TextView(activity);
+        button.setText("↓\n下载");
+        button.setTextColor(Color.WHITE);
+        button.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f);
+        button.setGravity(Gravity.CENTER);
+        button.setIncludeFontPadding(false);
+        button.setContentDescription("下载当前视频、音频或图片");
+        button.setClickable(true);
+        button.setFocusable(true);
+        button.setElevation(dp(decor, 6));
+
+        GradientDrawable background = new GradientDrawable();
+        background.setShape(GradientDrawable.OVAL);
+        background.setColor(0x73000000);
+        background.setStroke(dp(decor, 1), 0x66FFFFFF);
+        button.setBackground(background);
+        button.setOnClickListener(ignored -> {
+            if (!moduleEnabled || !canDownload()) {
+                removeDownloadButton();
+                return;
+            }
+            Activity currentActivity = activeActivity();
+            View currentDecor = activeDecor(currentActivity);
+            FeedContentTracker.Snapshot snapshot =
+                    FeedContentTracker.current(currentDecor);
+            VideoDownloader.chooseDownload(
+                    currentActivity,
+                    snapshot,
+                    () -> FeedContentTracker.current(currentDecor)
+            );
+        });
+
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+                size,
+                size,
+                Gravity.TOP | Gravity.END
+        );
+        params.topMargin = resolveDownloadButtonTop(decor, size, verticalGap);
+        params.rightMargin = rightMargin;
+        container.addView(button, params);
+        button.bringToFront();
+        downloadButton = new WeakReference<>(button);
+        MAIN.postDelayed(() -> repositionDownloadButton(button, decor), 120L);
+        Log.i(DouyinModule.TAG,
+                "pause download button shown: top=" + params.topMargin);
+    }
+
+    private static void repositionDownloadButton(TextView button, View decor) {
+        if (downloadButton.get() != button
+                || !canDownload()
+                || !(button.getLayoutParams() instanceof FrameLayout.LayoutParams params)) {
+            return;
+        }
+        params.topMargin = resolveDownloadButtonTop(
+                decor,
+                params.width,
+                dp(decor, 10)
+        );
+        button.setLayoutParams(params);
+        button.bringToFront();
+    }
+
+    private static void removeDownloadButton() {
+        TextView button = downloadButton.get();
+        if (button != null) {
+            HIDDEN.remove(button);
+            button.setOnClickListener(null);
+            if (button.getParent() instanceof ViewGroup parent) {
+                parent.removeView(button);
+            }
+        }
+        downloadButton.clear();
+    }
+
+    private static int resolveDownloadButtonTop(View decor, int size, int gap) {
+        int[] rootLocation = new int[2];
+        decor.getLocationOnScreen(rootLocation);
+        int nativeTop = findActiveRightMenuTop(
+                decor,
+                rootLocation[0],
+                rootLocation[1],
+                decor.getWidth(),
+                decor.getHeight()
+        );
+        if (nativeTop == Integer.MAX_VALUE) {
+            nativeTop = findRightActionTop(
+                    decor,
+                    rootLocation[0],
+                    rootLocation[1],
+                    decor.getWidth(),
+                    decor.getHeight()
+            );
+        }
+        int desired = nativeTop == Integer.MAX_VALUE
+                ? Math.round(decor.getHeight() * 0.38f)
+                : nativeTop - rootLocation[1] - size - gap;
+        int minimum = Math.round(decor.getHeight() * 0.20f);
+        int maximum = Math.max(minimum, Math.round(decor.getHeight() * 0.60f));
+        return Math.max(minimum, Math.min(maximum, desired));
+    }
+
+    private static int findActiveRightMenuTop(
+            View view,
+            int rootLeft,
+            int rootTop,
+            int rootWidth,
+            int rootHeight
+    ) {
+        int best = Integer.MAX_VALUE;
+        if ("com.ss.android.ugc.aweme.feed.ui.FeedRightScaleView"
+                .equals(view.getClass().getName())
+                && view.isAttachedToWindow()
+                && view.isShown()
+                && view.getAlpha() > 0.1f) {
+            Rect visible = new Rect();
+            if (view.getGlobalVisibleRect(visible)
+                    && visible.centerX() >= rootLeft + Math.round(rootWidth * 0.72f)
+                    && visible.top >= rootTop + Math.round(rootHeight * 0.25f)
+                    && visible.height() >= Math.round(rootHeight * 0.30f)) {
+                best = visible.top;
+            }
+        }
+        if (view instanceof ViewGroup group) {
+            for (int i = 0; i < group.getChildCount(); i++) {
+                best = Math.min(
+                        best,
+                        findActiveRightMenuTop(
+                                group.getChildAt(i),
+                                rootLeft,
+                                rootTop,
+                                rootWidth,
+                                rootHeight
+                        )
+                );
+            }
+        }
+        return best;
+    }
+
+    private static int findRightActionTop(
+            View view,
+            int rootLeft,
+            int rootTop,
+            int rootWidth,
+            int rootHeight
+    ) {
+        int best = Integer.MAX_VALUE;
+        if (view != downloadButton.get()
+                && view.getVisibility() == View.VISIBLE
+                && view.isShown()
+                && view.getAlpha() > 0.1f
+                && (view.isClickable() || view.getContentDescription() != null)) {
+            Rect visible = new Rect();
+            if (view.getGlobalVisibleRect(visible)) {
+                int centerX = visible.centerX();
+                int maxWidth = Math.min(rootWidth / 4, dp(view, 104));
+                int maxHeight = dp(view, 128);
+                if (centerX >= rootLeft + Math.round(rootWidth * 0.78f)
+                        && visible.top >= rootTop + Math.round(rootHeight * 0.30f)
+                        && visible.bottom <= rootTop + Math.round(rootHeight * 0.95f)
+                        && visible.width() > 0
+                        && visible.width() <= maxWidth
+                        && visible.height() > 0
+                        && visible.height() <= maxHeight) {
+                    best = visible.top;
+                }
+            }
+        }
+        if (view instanceof ViewGroup group) {
+            for (int i = 0; i < group.getChildCount(); i++) {
+                best = Math.min(
+                        best,
+                        findRightActionTop(
+                                group.getChildAt(i),
+                                rootLeft,
+                                rootTop,
+                                rootWidth,
+                                rootHeight
+                        )
+                );
+            }
+        }
+        return best;
+    }
+
+    private static int dp(View view, int value) {
+        return Math.round(
+                value * view.getResources().getDisplayMetrics().density
+        );
+    }
+
+    private static View resolveLargestWindowRoot() {
+        try {
+            Class<?> globalClass = Class.forName("android.view.WindowManagerGlobal");
+            Method getInstance = globalClass.getDeclaredMethod("getInstance");
+            getInstance.setAccessible(true);
+            Object global = getInstance.invoke(null);
+            Field viewsField = globalClass.getDeclaredField("mViews");
+            viewsField.setAccessible(true);
+            Object value = viewsField.get(global);
+            if (!(value instanceof List<?> roots)) {
+                return null;
+            }
+
+            View best = null;
+            long bestArea = 0L;
+            for (Object item : roots) {
+                if (!(item instanceof View root) || !root.isAttachedToWindow()) {
+                    continue;
+                }
+                long area = (long) root.getWidth() * root.getHeight();
+                if (area > bestArea) {
+                    best = root;
+                    bestArea = area;
+                }
+            }
+            return best;
+        } catch (ReflectiveOperationException | RuntimeException error) {
+            if (!activityResolveErrorLogged) {
+                activityResolveErrorLogged = true;
+                Log.e(DouyinModule.TAG, "failed to resolve current window root", error);
+            }
+            return null;
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Activity resolveTopActivity() {
+        try {
+            Class<?> activityThreadClass = Class.forName("android.app.ActivityThread");
+            Method currentThreadMethod =
+                    activityThreadClass.getDeclaredMethod("currentActivityThread");
+            currentThreadMethod.setAccessible(true);
+            Object activityThread = currentThreadMethod.invoke(null);
+            if (activityThread == null) {
+                return null;
+            }
+
+            Field activitiesField = activityThreadClass.getDeclaredField("mActivities");
+            activitiesField.setAccessible(true);
+            Object records = activitiesField.get(activityThread);
+            if (!(records instanceof Map<?, ?> activities)) {
+                return null;
+            }
+
+            Activity fallback = null;
+            for (Object record : activities.values()) {
+                if (record == null) {
+                    continue;
+                }
+                Field activityField = record.getClass().getDeclaredField("activity");
+                activityField.setAccessible(true);
+                Object value = activityField.get(record);
+                if (!(value instanceof Activity candidate)
+                        || candidate.isFinishing()
+                        || candidate.isDestroyed()) {
+                    continue;
+                }
+                fallback = candidate;
+                try {
+                    Field pausedField = record.getClass().getDeclaredField("paused");
+                    pausedField.setAccessible(true);
+                    if (!pausedField.getBoolean(record)) {
+                        return candidate;
+                    }
+                } catch (NoSuchFieldException ignored) {
+                    return candidate;
+                }
+            }
+            return fallback;
+        } catch (ReflectiveOperationException | RuntimeException error) {
+            if (!activityResolveErrorLogged) {
+                activityResolveErrorLogged = true;
+                Log.e(DouyinModule.TAG, "failed to resolve current Activity", error);
+            }
+            return null;
+        }
+    }
+
+    private static RenderViews findVisibleRealVideoViews(View root) {
+        List<View> candidates = new ArrayList<>();
+        List<View> photoCandidates = new ArrayList<>();
+        collectRenderViews(root, candidates, photoCandidates);
+        List<View> visible = centeredVisibleVideoViews(root, candidates);
+        visible.removeIf(ImmersiveUi::isRenderSurfaceUnavailable);
+        List<View> preserved = new ArrayList<>(visible);
+        // 图文/图集 posts draw the photo in a large image or Skity view while the "video"
+        // surface stays black. Merging those layers unconditionally (instead of waiting for
+        // the content model) removes the black frame when a video turns into a 图文 post.
+        for (View photo : centeredVisibleVideoViews(root, photoCandidates)) {
+            if (!preserved.contains(photo)) {
+                preserved.add(photo);
+            }
+        }
+        return preserved.isEmpty()
+                ? RenderViews.EMPTY
+                : new RenderViews(preserved);
+    }
+
+
+    /** True while a comment sheet covers the lower part of the feed. */
+    private static boolean isCommentPanelVisible(View decor) {
+        int minHeight = Math.max(1, decor.getHeight() / 4);
+        return containsVisibleCommentPanel(decor, decor, minHeight);
+    }
+
+    private static boolean containsVisibleCommentPanel(
+            View node,
+            View decor,
+            int minHeight
+    ) {
+        String name = node.getClass().getName().toLowerCase(java.util.Locale.ROOT);
+        boolean commentType = name.contains(".comment.")
+                || name.contains("commentlist")
+                || name.contains("commentpanel")
+                || name.contains("commentinput");
+        if (commentType && node.isShown()) {
+            Rect rect = new Rect();
+            if (node.getGlobalVisibleRect(rect) && rect.height() >= minHeight) {
+                return true;
+            }
+        }
+        if (node instanceof ViewGroup group) {
+            for (int index = 0; index < group.getChildCount(); index++) {
+                if (containsVisibleCommentPanel(group.getChildAt(index), decor, minHeight)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private static boolean isRenderSurfaceUnavailable(View view) {
+        return (view instanceof SurfaceView || view instanceof TextureView)
+                && !hasValidRenderSurface(view);
+    }
+
+
+    private static List<View> findVisibleVideoViews(
+            View root,
+            List<View> visibleRealVideos
+    ) {
+        if (!visibleRealVideos.isEmpty()) {
+            return visibleRealVideos;
+        }
+        List<View> candidates = new ArrayList<>();
+        collectFallbackVideoViews(root, candidates);
+        List<View> visible = centeredVisibleVideoViews(root, candidates);
+        // A preserved renderer without a valid Surface would show a black picture with all
+        // host UI hidden; restoring the UI is always better than a black screen.
+        visible.removeIf(ImmersiveUi::isRenderSurfaceUnavailable);
+        return visible;
+    }
+
+    private static boolean hasValidRenderSurface(View view) {
+        try {
+            if (view instanceof SurfaceView surfaceView) {
+                return surfaceView.getHolder().getSurface() != null
+                        && surfaceView.getHolder().getSurface().isValid();
+            }
+            return view instanceof TextureView textureView
+                    && textureView.isAvailable();
+        } catch (RuntimeException ignored) {
+            return false;
+        }
+    }
+
+    private static boolean isStrictlyVisibleToRoot(View candidate, View root) {
+        View current = candidate;
+        while (current != null) {
+            if (current.getVisibility() != View.VISIBLE
+                    || current.getAlpha() <= 0.05f) {
+                return false;
+            }
+            if (current == root) {
+                return true;
+            }
+            if (!(current.getParent() instanceof View parent)) {
+                return false;
+            }
+            current = parent;
+        }
+        return false;
+    }
+
+    private static List<View> centeredVisibleVideoViews(
+            View root,
+            List<View> candidates
+    ) {
+        Rect rootVisible = new Rect();
+        if (!root.getGlobalVisibleRect(rootVisible)) {
+            return Collections.emptyList();
+        }
+        int centerX = rootVisible.centerX();
+        int centerY = rootVisible.centerY();
+        long screenArea =
+                (long) Math.max(1, rootVisible.width())
+                        * Math.max(1, rootVisible.height());
+        List<View> videoPaths = new ArrayList<>();
+        Rect visible = new Rect();
+        for (View candidate : candidates) {
+            boolean alphaVisible =
+                    candidate.getAlpha() > 0.05f || HIDDEN.containsKey(candidate);
+            if (!candidate.isAttachedToWindow()
+                    || candidate.getVisibility() != View.VISIBLE
+                    || !candidate.isShown()
+                    || !alphaVisible
+                    || !candidate.getGlobalVisibleRect(visible)
+                    || !visible.contains(centerX, centerY)) {
+                continue;
+            }
+            long area = (long) visible.width() * visible.height();
+            if (area >= screenArea / 5L
+                    && !videoPaths.contains(candidate)) {
+                videoPaths.add(candidate);
+            }
+        }
+        return videoPaths.isEmpty()
+                ? Collections.emptyList()
+                : videoPaths;
+    }
+
+    private static void collectRealVideoViews(View view, List<View> out) {
+        if (view instanceof SurfaceView || view instanceof TextureView) {
+            out.add(view);
+        }
+        if (view instanceof ViewGroup group) {
+            for (int i = 0; i < group.getChildCount(); i++) {
+                collectRealVideoViews(group.getChildAt(i), out);
+            }
+        }
+    }
+
+    /** Single tree walk filling both the surface and the 图文 content candidates. */
+    private static void collectRenderViews(
+            View view,
+            List<View> surfaces,
+            List<View> photos
+    ) {
+        if (view instanceof SurfaceView || view instanceof TextureView) {
+            surfaces.add(view);
+        } else {
+            String className = view.getClass().getName().toLowerCase(java.util.Locale.ROOT);
+            if (view instanceof ImageView) {
+                if (className.endsWith("imageview")
+                        || className.contains("drawee")
+                        || className.contains("photoview")
+                        || className.contains("slides")) {
+                    photos.add(view);
+                }
+            } else if (className.contains("functorview")
+                    || className.contains("horizon")
+                    || className.contains("slidesview")
+                    || className.contains("slideview")
+                    || className.contains("slidepager")) {
+                photos.add(view);
+            }
+        }
+        if (view instanceof ViewGroup group) {
+            for (int i = 0; i < group.getChildCount(); i++) {
+                collectRenderViews(group.getChildAt(i), surfaces, photos);
+            }
+        }
+    }
+
+    private static void expandVideoViewport(View decor, List<View> videos) {
+        for (View video : videos) {
+            if (expandVideoViewportFrom(decor, video)) {
+                return;
+            }
+        }
+    }
+
+    private static boolean expandVideoViewportFrom(View decor, View video) {
+        View viewport = video;
+        while (viewport.getParent() instanceof View parent && parent != decor) {
+            boolean targetViewport = "com.ss.android.ugc.aweme.common.widget.RTViewPager"
+                    .equals(viewport.getClass().getName());
+            int missingHeight = parent.getHeight() - viewport.getHeight();
+            boolean parentFillsWindow =
+                    parent.getWidth() >= decor.getWidth() * 0.9f
+                            && parent.getHeight() >= decor.getHeight() * 0.95f;
+            boolean viewportLeavesBottomSlot =
+                    viewport.getWidth() >= decor.getWidth() * 0.9f
+                            && missingHeight > 32
+                            && missingHeight < decor.getHeight() / 3;
+            if (targetViewport && parentFillsWindow && viewportLeavesBottomSlot) {
+                applyExpandedViewport(viewport);
+                return true;
+            }
+            viewport = parent;
+        }
+        return false;
+    }
+
+    private static void applyExpandedViewport(View viewport) {
+        if (EXPANDED_VIEWPORTS.containsKey(viewport)) {
+            return;
+        }
+        ViewGroup.LayoutParams original = viewport.getLayoutParams();
+        if (original == null) {
+            return;
+        }
+
+        if (!(original instanceof RelativeLayout.LayoutParams relative)) {
+            Log.w(DouyinModule.TAG,
+                    "RTViewPager layout not RelativeLayout.LayoutParams: "
+                            + original.getClass().getName());
+            return;
+        }
+        RelativeLayout.LayoutParams expanded = new RelativeLayout.LayoutParams(relative);
+        expanded.height = ViewGroup.LayoutParams.MATCH_PARENT;
+        expanded.topMargin = 0;
+        expanded.bottomMargin = 0;
+        expanded.removeRule(RelativeLayout.ABOVE);
+        expanded.addRule(RelativeLayout.ALIGN_PARENT_TOP);
+        expanded.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM);
+        EXPANDED_VIEWPORTS.put(viewport, original);
+        viewport.setLayoutParams(expanded);
+        viewport.requestLayout();
+        Log.d(DouyinModule.TAG,
+                "expanded video viewport: " + viewport.getClass().getName());
+    }
+
+    private static void collectFallbackVideoViews(View view, List<View> out) {
+        if (!(view instanceof SurfaceView)
+                && !(view instanceof TextureView)
+                && looksLikeVideoSurface(view)) {
+            out.add(view);
+        }
+        if (view instanceof ViewGroup group) {
+            for (int i = 0; i < group.getChildCount(); i++) {
+                collectFallbackVideoViews(group.getChildAt(i), out);
+            }
+        }
+    }
+
+    private static boolean looksLikeVideoSurface(View view) {
+        String name = view.getClass().getName().toLowerCase();
+        return name.contains("videosurface")
+                || name.contains("playerview")
+                || name.endsWith("surfaceview")
+                || name.endsWith("textureview");
+    }
+
+    private static void collectVisibleDanmakuViews(
+            View node,
+            List<View> videos,
+            List<View> out
+    ) {
+        String className = node.getClass().getName();
+        if (DanmakuViewClassifier.isContainer(className)
+                && node.isAttachedToWindow()
+                && node.getVisibility() == View.VISIBLE) {
+            // 40.8 swaps renderer children (compose/functor/canvas) inside this layer while
+            // playing, so the whole subtree has to stay preserved; whitelisting single
+            // renderers hid every comment drawn by the others.
+            if (!out.contains(node)) {
+                out.add(node);
+            }
+            return;
+        }
+        if (DanmakuViewClassifier.isRenderView(className)
+                && node.isAttachedToWindow()
+                && node.getVisibility() == View.VISIBLE
+                && overlapsAnyVideo(node, videos)
+                && !out.contains(node)) {
+            out.add(node);
+        }
+        if (node instanceof ViewGroup group) {
+            for (int i = 0; i < group.getChildCount(); i++) {
+                collectVisibleDanmakuViews(group.getChildAt(i), videos, out);
+            }
+        }
+    }
+
+    private static boolean overlapsAnyVideo(View candidate, List<View> videos) {
+        Rect candidateRect = new Rect();
+        if (!candidate.getGlobalVisibleRect(candidateRect) || candidateRect.isEmpty()) {
+            return false;
+        }
+        Rect videoRect = new Rect();
+        for (View video : videos) {
+            if (video.getGlobalVisibleRect(videoRect)
+                    && Rect.intersects(candidateRect, videoRect)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static void hideOutsidePreservedPaths(View node, List<View> preservedViews) {
+        if (preservedViews.contains(node)) {
+            return;
+        }
+        if (!(node instanceof ViewGroup group)
+                || !containsAny(group, preservedViews)) {
+            hide(node);
+            return;
+        }
+        for (int i = 0; i < group.getChildCount(); i++) {
+            View child = group.getChildAt(i);
+            if (preservedViews.contains(child)
+                    || containsAny(child, preservedViews)) {
+                hideOutsidePreservedPaths(child, preservedViews);
+            } else {
+                hide(child);
+            }
+        }
+    }
+
+    private static boolean containsAny(View node, List<View> targets) {
+        for (View target : targets) {
+            if (contains(node, target)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean contains(View node, View target) {
+        if (node == target) {
+            return true;
+        }
+        if (node instanceof ViewGroup group) {
+            for (int i = 0; i < group.getChildCount(); i++) {
+                if (contains(group.getChildAt(i), target)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private static void restorePreservedPaths(List<View> preservedViews) {
+        synchronized (HIDDEN) {
+            for (Map.Entry<View, SavedView> entry :
+                    new ArrayList<>(HIDDEN.entrySet())) {
+                View view = entry.getKey();
+                SavedView saved = entry.getValue();
+                if (view == null || saved == null
+                        || (!preservedViews.contains(view)
+                        && !containsAny(view, preservedViews))) {
+                    continue;
+                }
+                view.setAlpha(saved.alpha);
+                view.setVisibility(saved.visibility);
+                view.setImportantForAccessibility(saved.accessibility);
+                HIDDEN.remove(view);
+            }
+        }
+    }
+
+    private static void hide(View view) {
+        if (!HIDDEN.containsKey(view)) {
+            HIDDEN.put(view, new SavedView(
+                    view.getAlpha(),
+                    view.getImportantForAccessibility(),
+                    view.getVisibility()
+            ));
+        }
+        view.setAlpha(0f);
+        view.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
+    }
+
+    private static boolean hasHiddenViews() {
+        synchronized (HIDDEN) {
+            return !HIDDEN.isEmpty();
+        }
+    }
+
+    private static void updateGesturePaths(View root, List<View> videos) {
+        GESTURE_PATHS.clear();
+        collectGesturePaths(root, root, videos);
+    }
+
+    private static void collectGesturePaths(View node, View root, List<View> videos) {
+        if (ImmersiveTouchPolicy.isGestureView(node.getClass().getName())
+                && node.isAttachedToWindow()
+                && node.getVisibility() == View.VISIBLE
+                && node.getWidth() >= root.getWidth() * 0.8f
+                && node.getHeight() >= root.getHeight() * 0.5f
+                && overlapsAnyVideo(node, videos)) {
+            // Keep only the gesture receiver and its ancestors touchable. A sibling button
+            // inside the same transparent container must still fail the hidden-ancestor check.
+            View path = node;
+            while (path != null) {
+                GESTURE_PATHS.add(path);
+                path = path.getParent() instanceof View parent ? parent : null;
+            }
+        }
+        if (node instanceof ViewGroup group) {
+            for (int i = 0; i < group.getChildCount(); i++) {
+                collectGesturePaths(group.getChildAt(i), root, videos);
+            }
+        }
+    }
+
+    /**
+     * Collect LongPressLayout views by name and size alone, without requiring a live video
+     * surface. Used during fullscreen transitions when the Surface is momentarily detached,
+     * so GESTURE_PATHS stays current and touch events are not blocked.
+     */
+    private static void collectFallbackGestureViews(View node, List<View> out) {
+        if (ImmersiveTouchPolicy.isGestureView(node.getClass().getName())
+                && node.isAttachedToWindow()
+                && node.getVisibility() == View.VISIBLE
+                && node.getWidth() > 0
+                && node.getHeight() > 0) {
+            out.add(node);
+        }
+        if (node instanceof ViewGroup group) {
+            for (int i = 0; i < group.getChildCount(); i++) {
+                collectFallbackGestureViews(group.getChildAt(i), out);
+            }
+        }
+    }
+
+    static boolean isImmersiveGestureView(View view) {
+        return moduleEnabled && immersiveEnabled && hasHiddenViews() && GESTURE_PATHS.contains(view)
+                && ImmersiveTouchPolicy.isGestureView(view.getClass().getName());
+    }
+
+    static boolean shouldBlockHiddenTouch(View view, boolean cancel) {
+        if (isLandscapeFeedActive()) {
+            return false;
+        }
+        if (isSyntheticTapActive()) {
+            // Our own comment tap has to reach the hidden right bar.
+            return false;
+        }
+        if (!moduleEnabled || !immersiveEnabled || cancel || !hasHiddenViews()) {
+            return false;
+        }
+        boolean hidden = false;
+        View path = view;
+        while (path != null) {
+            if (HIDDEN.containsKey(path)) {
+                hidden = true;
+                break;
+            }
+            path = path.getParent() instanceof View parent ? parent : null;
+        }
+        return ImmersiveTouchPolicy.shouldBlock(hidden, GESTURE_PATHS.contains(view), cancel);
+    }
+
+    private static void reassertHiddenViews() {
+        if (!moduleEnabled || !immersiveEnabled) return;
+        synchronized (HIDDEN) {
+            for (Map.Entry<View, SavedView> entry :
+                    new ArrayList<>(HIDDEN.entrySet())) {
+                View view = entry.getKey();
+                if (view != null && view.isAttachedToWindow()
+                        && view.getAlpha() != 0f) {
+                    view.setAlpha(0f);
+                }
+            }
+        }
+    }
+
+    private static void attachHiddenViewGuard(View root) {
+        View previous = hiddenGuardRoot.get();
+        if (previous == root) {
+            return;
+        }
+        detachHiddenViewGuard();
+        if (root == null) {
+            return;
+        }
+        ViewTreeObserver observer = root.getViewTreeObserver();
+        if (observer.isAlive()) {
+            observer.addOnPreDrawListener(HIDDEN_VIEW_GUARD);
+            hiddenGuardRoot = new WeakReference<>(root);
+        }
+    }
+
+    private static void detachHiddenViewGuard() {
+        View root = hiddenGuardRoot.get();
+        hiddenGuardRoot.clear();
+        if (root == null) {
+            return;
+        }
+        ViewTreeObserver observer = root.getViewTreeObserver();
+        if (observer.isAlive()) {
+            observer.removeOnPreDrawListener(HIDDEN_VIEW_GUARD);
+        }
+    }
+
+    private static void restoreAll(Activity activity) {
+        restoreAll(activity, activeDecor(activity), true);
+    }
+
+    private static void restoreAll(Activity activity, View decor) {
+        restoreAll(activity, decor, false);
+    }
+
+    private static void restoreAll(
+            Activity activity,
+            View decor,
+            boolean leavingActivity
+    ) {
+        if (leavingActivity) {
+            detachHiddenViewGuard();
+        }
+        // The feed description is bottom-aligned inside the expanded pager.
+        // Restore its original bounds before showing the bottom navigation,
+        // including when playback pauses without leaving the activity.
+        restoreExpandedViewports();
+        int restored = 0;
+        StringBuilder samples = new StringBuilder();
+        synchronized (HIDDEN) {
+            for (Map.Entry<View, SavedView> entry : new ArrayList<>(HIDDEN.entrySet())) {
+                View view = entry.getKey();
+                SavedView saved = entry.getValue();
+                if (view != null && saved != null) {
+                    view.setAlpha(saved.alpha);
+                    view.setVisibility(saved.visibility);
+                    view.setImportantForAccessibility(saved.accessibility);
+                    if (restored < 5) {
+                        if (samples.length() > 0) {
+                            samples.append(',');
+                        }
+                        samples.append(view.getClass().getSimpleName())
+                                .append('@')
+                                .append(saved.alpha);
+                    }
+                    restored++;
+                }
+            }
+            HIDDEN.clear();
+            GESTURE_PATHS.clear();
+        }
+        if (restored > 0) {
+            Log.d(DouyinModule.TAG,
+                    "restored hidden views=" + restored + " samples=" + samples);
+        }
+        if (decor != null) {
+            Integer systemUi = ROOT_SYSTEM_UI.remove(decor);
+            if (systemUi != null) {
+                decor.setSystemUiVisibility(systemUi);
+            }
+        }
+        restoreSystemBars(activity);
+    }
+
+    private static void restoreExpandedViewports() {
+        synchronized (EXPANDED_VIEWPORTS) {
+            for (Map.Entry<View, ViewGroup.LayoutParams> entry :
+                    new ArrayList<>(EXPANDED_VIEWPORTS.entrySet())) {
+                View view = entry.getKey();
+                ViewGroup.LayoutParams original = entry.getValue();
+                if (view != null && original != null) {
+                    view.setLayoutParams(original);
+                    view.requestLayout();
+                }
+            }
+            EXPANDED_VIEWPORTS.clear();
+        }
+    }
+
+    private static void hideSystemBars(Activity activity, View decor) {
+        if (!ROOT_SYSTEM_UI.containsKey(decor)) {
+            ROOT_SYSTEM_UI.put(decor, decor.getSystemUiVisibility());
+        }
+        decor.setSystemUiVisibility(
+                decor.getSystemUiVisibility()
+                        | View.SYSTEM_UI_FLAG_FULLSCREEN
+                        | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                        | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                        | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                        | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                        | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+        );
+    }
+
+    private static void restoreSystemBars(Activity activity) {
+        // Window flags are deliberately left untouched; see hideSystemBars.
+    }
+
+    private static boolean swipeToNext(View decor, String reason) {
+        if (!moduleEnabled) return false;
+        long now = SystemClock.uptimeMillis();
+        if (swipeRunning
+                || !decor.isAttachedToWindow()
+                || now - lastSwipeAt < 1_500L) {
+            return false;
+        }
+        // Ad pages (WebView, 小程序, 互动广告) swallow a gesture aimed at the decor view.
+        // Dispatching straight into the feed's own pager bypasses those overlays.
+        View gestureTarget = FeedContentTracker.currentPager(decor);
+        if (gestureTarget == null || !gestureTarget.isAttachedToWindow()) {
+            gestureTarget = decor;
+        }
+        final View target = gestureTarget;
+        int width = target.getWidth();
+        int height = target.getHeight();
+        if (width <= 0 || height <= 0) {
+            return false;
+        }
+        swipeRunning = true;
+        long currentSwipeToken = ++swipeToken;
+        lastSwipeAt = now;
+        PlaybackState.beginAutoSwitch();
+        PlaybackState.resetProgressAfterSwipe();
+        armContentFilter(700L);
+        Log.i(DouyinModule.TAG, "swipe to next feed item: " + reason
+                + " target=" + target.getClass().getSimpleName()
+                + " " + width + "x" + height);
+
+        final float x = width * 0.5f;
+        final float startY = height * 0.72f;
+        final float endY = height * 0.24f;
+        final long downTime = SystemClock.uptimeMillis();
+        try {
+            dispatch(target, downTime, downTime, MotionEvent.ACTION_DOWN, x, startY);
+        } catch (Throwable error) {
+            finishSwipe(currentSwipeToken, "initial dispatch failed", error);
+            return false;
+        }
+        MAIN.postDelayed(
+                () -> finishSwipe(currentSwipeToken, "watchdog timeout", null),
+                1_200L
+        );
+
+        int steps = 8;
+        for (int i = 1; i <= steps; i++) {
+            final int step = i;
+            MAIN.postDelayed(() -> {
+                if (!swipeRunning || currentSwipeToken != swipeToken) {
+                    return;
+                }
+                if (!moduleEnabled) {
+                    dispatch(target, downTime, SystemClock.uptimeMillis(),
+                            MotionEvent.ACTION_CANCEL, x, startY);
+                    finishSwipe(currentSwipeToken, "module disabled", null);
+                    return;
+                }
+                float fraction = step / (float) steps;
+                float y = startY + (endY - startY) * fraction;
+                int action = step == steps ? MotionEvent.ACTION_UP : MotionEvent.ACTION_MOVE;
+                try {
+                    dispatch(
+                            target,
+                            downTime,
+                            SystemClock.uptimeMillis(),
+                            action,
+                            x,
+                            y
+                    );
+                } catch (Throwable error) {
+                    finishSwipe(currentSwipeToken, "gesture dispatch failed", error);
+                    return;
+                }
+                if (step == steps) {
+                    MAIN.postDelayed(
+                            () -> finishSwipe(currentSwipeToken, null, null),
+                            500L
+                    );
+                }
+            }, i * 22L);
+        }
+        return true;
+    }
+
+    private static void finishSwipe(long token, String reason, Throwable error) {
+        if (token != swipeToken || !swipeRunning) {
+            return;
+        }
+        swipeRunning = false;
+        if (reason != null) {
+            if (error == null) {
+                Log.w(DouyinModule.TAG,
+                        "synthetic swipe recovered: " + reason);
+            } else {
+                Log.w(DouyinModule.TAG,
+                        "synthetic swipe recovered: " + reason, error);
+            }
+        }
+        scheduleScan(0L);
+    }
+
+    /** Real touch injection; some feed buttons only react to touch, not performClick(). */
+    private static boolean tapView(View decor, View target) {
+        Rect rect = new Rect();
+        if (!target.getGlobalVisibleRect(rect) || rect.isEmpty()) {
+            return false;
+        }
+        long now = SystemClock.uptimeMillis();
+        syntheticTapUntil = now + 400L;
+        float x = rect.centerX();
+        float y = rect.centerY();
+        try {
+            dispatch(decor, now, now, MotionEvent.ACTION_DOWN, x, y);
+            dispatch(decor, now, now + 45L, MotionEvent.ACTION_UP, x, y);
+            return true;
+        } catch (Throwable error) {
+            Log.w(DouyinModule.TAG, "comment tap dispatch failed", error);
+            return false;
+        }
+    }
+
+    private static boolean isSyntheticTapActive() {
+        return SystemClock.uptimeMillis() < syntheticTapUntil;
+    }
+
+    private static void dispatch(View view, long downTime, long eventTime,
+                                 int action, float x, float y) {
+        MotionEvent event = MotionEvent.obtain(downTime, eventTime, action, x, y, 0);
+        try {
+            event.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);
+            view.dispatchTouchEvent(event);
+        } finally {
+            event.recycle();
+        }
+    }
+
+    private static void armContentFilter(long delayMs) {
+        long now = SystemClock.uptimeMillis();
+        contentCheckNotBefore = now + delayMs;
+        contentCheckUntil = now + Math.max(delayMs + 2_500L, 3_000L);
+        lastContentCheckAt = 0L;
+        resetFilterCandidate();
+    }
+
+    private static boolean checkCurrentFeedContent(View decor) {
+        long now = SystemClock.uptimeMillis();
+        boolean candidatePending =
+                filterCandidateCount > 0 && now - filterCandidateAt <= 900L;
+        if (now < contentCheckNotBefore) {
+            return candidatePending;
+        }
+        boolean activelyArmed = now <= contentCheckUntil || candidatePending;
+        long minimumInterval = activelyArmed
+                ? 220L
+                : FALLBACK_CONTENT_CHECK_INTERVAL_MS;
+        if (now - lastContentCheckAt < minimumInterval
+                || now - lastFilteredSwipeAt < 1_500L) {
+            return candidatePending;
+        }
+        lastContentCheckAt = now;
+
+        FeedContentTracker.Snapshot model = FeedContentTracker.current(decor);
+        PlaybackState.setContentAvailable(model != null);
+        if (model == null) {
+            // 离开信息流（搜索页、个人页等）后不要留下上次的图文标记。
+            PlaybackState.setPhotoContent(false);
+        }
+        if (model != null) {
+            PlaybackState.setPhotoContent(model.photoContent);
+            if (PlaybackState.clearUserPauseForContentChange(model.aid)) {
+                transitionBoostUntil = Math.max(
+                        transitionBoostUntil,
+                        now + 1_200L
+                );
+            }
+            String reason = model.shouldFilter()
+                    ? model.filterReason
+                    : null;
+            if (reason != null) {
+                if (!activelyArmed) {
+                    contentCheckNotBefore = 0L;
+                    contentCheckUntil = now + 2_500L;
+                }
+                if (!confirmFilterCandidate(model.aid, reason, now)) {
+                    return true;
+                }
+                filterCurrentItem(
+                        decor,
+                        reason + " " + model.classificationDetails()
+                );
+                return true;
+            }
+            resetFilterCandidate();
+            if (!model.aid.equals(lastAcceptedAid)) {
+                lastAcceptedAid = model.aid;
+                Log.d(DouyinModule.TAG,
+                        "feed item accepted as video: "
+                                + model.classificationDetails());
+            }
+            return false;
+        }
+
+        if (!candidatePending) {
+            resetFilterCandidate();
+        }
+        return candidatePending;
+    }
+
+    private static boolean confirmFilterCandidate(
+            String aid,
+            String reason,
+            long now
+    ) {
+        boolean sameCandidate =
+                aid != null
+                        && aid.equals(filterCandidateAid)
+                        && reason.equals(filterCandidateReason)
+                        && now - filterCandidateAt <= 750L;
+        if (sameCandidate) {
+            filterCandidateCount++;
+        } else {
+            filterCandidateAid = aid;
+            filterCandidateReason = reason;
+            filterCandidateCount = 1;
+        }
+        filterCandidateAt = now;
+        Log.d(DouyinModule.TAG,
+                "filter candidate " + filterCandidateCount + "/3: "
+                        + reason + " aid=" + aid);
+        return filterCandidateCount >= 3;
+    }
+
+    private static void resetFilterCandidate() {
+        filterCandidateAid = null;
+        filterCandidateReason = null;
+        filterCandidateCount = 0;
+        filterCandidateAt = 0L;
+    }
+
+    private static boolean filterCurrentItem(View decor, String reason) {
+        long now = SystemClock.uptimeMillis();
+        if (now < filterSuspendedUntil) {
+            return false;
+        }
+        if (swipeRunning || now - lastFilteredSwipeAt < 1_500L) {
+            return false;
+        }
+        // Safety valve: a mis-classified batch must never turn the whole feed into a
+        // slideshow. Six skips inside 20s suspends filtering for a minute.
+        if (now - filterBurstStart > 20_000L) {
+            filterBurstStart = now;
+            filterBurstCount = 0;
+        }
+        // Only count a burst entry when the swipe actually executes; a throttled or
+        // rejected swipeToNext (e.g. 1 500 ms cooldown after the previous ad skip) must
+        // not advance the counter, otherwise the safety valve fires prematurely and
+        // leaves a white/black ad screen on screen for 60 s without scrolling away.
+        if (filterBurstCount >= 6) {
+            filterSuspendedUntil = now + 60_000L;
+            Log.w(DouyinModule.TAG,
+                    "filter suspended for 60s after " + filterBurstCount
+                            + " consecutive skips");
+            filterBurstCount = 0;
+            return false;
+        }
+        if (!swipeToNext(decor, reason)) {
+            return false;
+        }
+        filterBurstCount++;
+        lastFilteredSwipeAt = now;
+        Log.i(DouyinModule.TAG, "filtering feed item: " + reason);
+        return true;
+    }
+
+    private static final class SavedView {
+        final float alpha;
+        final int accessibility;
+        final int visibility;
+
+        SavedView(float alpha, int accessibility, int visibility) {
+            this.alpha = alpha;
+            this.accessibility = accessibility;
+            this.visibility = visibility;
+        }
+    }
+
+    private static final class RenderViews {
+        static final RenderViews EMPTY =
+                new RenderViews(Collections.emptyList());
+
+        final List<View> visibleVideos;
+
+        RenderViews(List<View> visibleVideos) {
+            this.visibleVideos = visibleVideos;
+        }
+    }
+
+}
