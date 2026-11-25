@@ -75,7 +75,6 @@ import com.knightlsy.douyin.data.ModuleHistoryReader
 @Composable
 fun HistoryScreen(
     viewModel: HistoryViewModel = viewModel(),
-    onBack: () -> Unit,
     onReparse: (String) -> Unit,
 ) {
     val c = LocalBgColors.current
@@ -356,10 +355,9 @@ fun HistoryItemCard(
                     checked = isSelected,
                     onToggle = onClick,
                 )
-            } else if (item.source == ModuleHistoryReader.SOURCE_XPOSED) {
-                // 模块记录没有 originalUrl（模块下载时不记原链接），
-                // 「重新解析」点了只会拿空串去解析然后弹错。
-                // 留一个等宽的占位，保持右侧对齐。
+            } else if (item.originalUrl.isBlank()) {
+                // 没有原链接就没法重新解析（老版本模块写下的记录是空串）。
+                // 留等宽占位保持右侧对齐。
                 Spacer(Modifier.size(44.dp))
             } else {
                 Box(

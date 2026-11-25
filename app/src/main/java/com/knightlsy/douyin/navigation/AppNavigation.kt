@@ -190,18 +190,16 @@ fun AppNavigation(mainViewModel: MainViewModel) {
                     hasCustomBackdrop = hasCustomBackdrop,
                     onPickBackdrop = { uri -> mainViewModel.applyCustomBackdrop(uri) },
                     onClearBackdrop = { mainViewModel.clearCustomBackdrop() },
-                    onBack = { currentScreen = "main" }
                 )
-                "logs" -> LogScreen(onBack = { currentScreen = "settings" })
+                "logs" -> LogScreen()
                 "history" -> HistoryScreen(
                     viewModel = historyViewModel,
-                    onBack = { currentScreen = "main" },
                     onReparse = { url ->
                         pendingReparseUrl = url
                         currentScreen = "main"
                     }
                 )
-                "about" -> AboutScreen(onBack = { currentScreen = "settings" })
+                "about" -> AboutScreen()
             }
         }
       }

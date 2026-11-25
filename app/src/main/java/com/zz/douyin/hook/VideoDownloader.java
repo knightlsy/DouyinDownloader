@@ -177,7 +177,7 @@ final class VideoDownloader {
 
             DownloadResult finalResult = result;
             if (finalResult.completed || finalResult.queued) {
-                publishHistory(context, snapshot, kind, finalResult.fileName);
+                publishHistory(context, snapshot, kind, finalResult);
             }
             MAIN.post(() -> {
                 if (finalResult.message != null) {
@@ -208,21 +208,36 @@ final class VideoDownloader {
             Context context,
             FeedContentTracker.Snapshot snapshot,
             Kind kind,
-            String fileName
+            DownloadResult result
     ) {
         try {
             org.json.JSONObject record = new org.json.JSONObject();
-            record.put("id", "xposed-" + snapshot.aid + "-" + System.currentTimeMillis());
+            // id 不带时间戳：同一作品重复下载不该在历史里堆成好几条。
+            // 加上 kind 区分「视频」和「图集」两次不同形态的下载。
+            record.put("id", "xposed-" + snapshot.aid + "-" + (kind == Kind.IMAGE ? "img" : "vid"));
             record.put("contentId", snapshot.aid);
             record.put("title", firstNonBlankText(snapshot.title, snapshot.description));
             record.put("author", snapshot.author);
             record.put("coverUrl", snapshot.coverUrl);
             record.put("contentType", kind == Kind.IMAGE ? "IMAGE_COLLECTION" : "VIDEO");
-            record.put("originalUrl", "");
+            // 模块侧拿不到用户当时复制的分享串，但作品 id 是稳定的，
+            // 用它拼标准链接 —— App 里「重新解析」能直接吃这个格式。
+            record.put("originalUrl", "https://www.douyin.com/video/" + snapshot.aid);
             record.put("downloadTime", System.currentTimeMillis());
             org.json.JSONArray files = new org.json.JSONArray();
-            if (fileName != null && !fileName.isEmpty()) {
-                files.put(fileName);
+            if (result != null) {
+                if (result.files != null) {
+                    for (String name : result.files) {
+                        if (name != null && !name.isEmpty()) {
+                            files.put(name);
+                        }
+                    }
+                }
+                // 兜底：单文件下载（视频）时 files 没填，用 fileName 顶上
+                if (files.length() == 0 && result.fileName != null
+                        && !result.fileName.isEmpty()) {
+                    files.put(result.fileName);
+                }
             }
             record.put("downloadedFiles", files);
             record.put("source", "xposed");
@@ -254,6 +269,9 @@ final class VideoDownloader {
         List<FeedContentTracker.ImageUrl> candidates = snapshot.imageUrls();
         int total = candidates.size();
         int saved = 0;
+        // 收集实际落盘的文件名，一起交给 publishHistory —— 否则历史里的
+        // 图集记录看不到任何文件名
+        List<String> savedFiles = new ArrayList<>();
         List<String> failures = new ArrayList<>();
         for (int index = 0; index < total; index++) {
             ensureEnabled();
@@ -322,6 +340,7 @@ final class VideoDownloader {
                                     "live photo saved: index=" + position + "/" + total
                                             + " bytes=" + liveSize
                                             + " file=" + liveName);
+                            savedFiles.add(liveName);
                             saved++;
                             savedThis = true;
                             break;
@@ -342,6 +361,7 @@ final class VideoDownloader {
                                     + " sourceMime=" + mime
                                     + " mime=" + normalized.mime
                                     + " file=" + fileName);
+                    savedFiles.add(fileName);
                     saved++;
                     savedThis = true;
                     break;
@@ -374,9 +394,11 @@ final class VideoDownloader {
                     : failures.get(0));
         }
         if (saved < total) {
-            return DownloadResult.message("已保存 " + saved + "/" + total + " 张图片到 Download");
+            return DownloadResult.message("已保存 " + saved + "/" + total + " 张图片到 Download")
+                    .withFiles(savedFiles);
         }
-        return DownloadResult.message("已保存 " + total + " 张无水印图片到 Download");
+        return DownloadResult.message("已保存 " + total + " 张无水印图片到 Download")
+                    .withFiles(savedFiles);
     }
 
     /** 图片先解码校验，AVIF/HEIC 转成 JPEG，避免相册把合法图片显示成乱码。 */
@@ -1134,6 +1156,13 @@ final class VideoDownloader {
         final String fileName;
         String error;
         String message;
+        /**
+         * 本次落盘的全部文件名。视频一个，图集 N 个。
+         *
+         * 原来只记 fileName，而图集走的是 DownloadResult.message()（fileName=null），
+         * 于是历史里一条图集记录的 downloadedFiles 永远是空数组。
+         */
+        final List<String> files = new ArrayList<>();
 
         private DownloadResult(boolean completed, boolean queued, String fileName) {
             this.completed = completed;
@@ -1157,6 +1186,14 @@ final class VideoDownloader {
             DownloadResult result = failed();
             result.error = error;
             return result;
+        }
+
+        /** 挂上本次落盘的文件名列表。 */
+        DownloadResult withFiles(List<String> names) {
+            if (names != null && !names.isEmpty()) {
+                files.addAll(names);
+            }
+            return this;
         }
 
         /** 图片是批量保存，用自定义文案代替单文件路径提示。 */

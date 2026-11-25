@@ -96,7 +96,6 @@ fun SettingsScreen(
     onPickBackdrop: (android.net.Uri) -> Unit = {},
     onClearBackdrop: () -> Unit = {},
     onAccentFromWallpaperChange: (Boolean) -> Unit = {},
-    onBack: () -> Unit,
     /**
      * 分段控件直选目标主题模式。
      *

@@ -113,7 +113,7 @@ private suspend fun checkUpdate(): UpdateInfo = withContext(Dispatchers.IO) {
  * 扫一眼就能读完 —— 这是「关于」页，信息密度比装饰重要。
  */
 @Composable
-fun AboutScreen(onBack: () -> Unit) {
+fun AboutScreen() {
     val c = LocalBgColors.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()

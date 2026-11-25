@@ -52,7 +52,7 @@ import com.knightlsy.douyin.ui.theme.LocalBgColors
  * 日志页（三级）：日志开关 + 复制日志 + 清空日志 + 完整流水预览。
  */
 @Composable
-fun LogScreen(onBack: () -> Unit) {
+fun LogScreen() {
     val c = LocalBgColors.current
     val context = LocalContext.current
 
