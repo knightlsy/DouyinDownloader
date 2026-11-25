@@ -114,9 +114,23 @@ final class ImagePickerDialog {
                 visibleRows * cellSize + Math.max(0, visibleRows - 1) * dp * 3
         ));
 
+        /*
+         * 点击格子时要刷新「已选 N / M 张」和「下载 N 张」这两个文案，
+         * 但 refresh 依赖 adapter、adapter 又依赖 refresh —— 前向引用。
+         * 用一个单元素数组打破：adapter 拿到的是「延迟解引用」的回调。
+         *
+         * 上一版这里偷懒传了 grid.invalidateViews()，只重绘网格不改文字，
+         * 于是勾掉两张之后按钮还写着「下载 3 张」，看起来像没生效。
+         */
+        final Runnable[] refreshRef = new Runnable[1];
         final ImageAdapter adapter = new ImageAdapter(
-                activity, images, selected, cellSize, dp, summary,
-                () -> grid.invalidateViews()
+                activity, images, selected, cellSize, dp,
+                () -> {
+                    Runnable target = refreshRef[0];
+                    if (target != null) {
+                        target.run();
+                    }
+                }
         );
         grid.setAdapter(adapter);
         root.addView(grid);
@@ -168,7 +182,7 @@ final class ImagePickerDialog {
         }
 
         // 选中数变化时刷新文案与按钮态
-        Runnable refresh = () -> {
+        refreshRef[0] = () -> {
             int count = selected.size();
             summary.setText(String.format(Locale.US, "已选 %d / %d 张", count, images.size()));
             summary.setTextColor(count == 0 ? 0xFF999999 : 0xFFFF6B35);
@@ -177,7 +191,7 @@ final class ImagePickerDialog {
             confirm.setAlpha(count == 0 ? 0.4f : 1f);
             adapter.notifyDataSetChanged();
         };
-        refresh.run();
+        refreshRef[0].run();
 
         toggleAll.setOnClickListener(v -> {
             if (selected.size() == images.size()) {
@@ -187,7 +201,7 @@ final class ImagePickerDialog {
                     selected.add(index);
                 }
             }
-            refresh.run();
+            refreshRef[0].run();
         });
 
         cancel.setOnClickListener(v -> dialog.dismiss());
@@ -222,7 +236,6 @@ final class ImagePickerDialog {
         private final Set<Integer> selected;
         private final int cellSize;
         private final int dp;
-        private final TextView summary;
         private final Runnable onSelectionChanged;
 
         ImageAdapter(
@@ -231,7 +244,6 @@ final class ImagePickerDialog {
                 Set<Integer> selected,
                 int cellSize,
                 int dp,
-                TextView summary,
                 Runnable onSelectionChanged
         ) {
             this.activity = activity;
@@ -239,7 +251,6 @@ final class ImagePickerDialog {
             this.selected = selected;
             this.cellSize = cellSize;
             this.dp = dp;
-            this.summary = summary;
             this.onSelectionChanged = onSelectionChanged;
         }
 
@@ -329,11 +340,12 @@ final class ImagePickerDialog {
             holder.thumb.setTag(url);
             Bitmap cached = CACHE.get(url);
             if (cached != null) {
+                holder.thumb.setImageDrawable(null);
                 holder.thumb.setImageBitmap(cached);
             } else {
                 holder.thumb.setImageDrawable(null);
                 holder.thumb.setBackgroundColor(0xFFEEEEEE);
-                loadThumb(url, holder.thumb);
+                loadThumb(image, holder.thumb);
             }
 
             cell.setOnClickListener(v -> {
@@ -348,22 +360,37 @@ final class ImagePickerDialog {
         /**
          * 异步取缩略图。
          *
-         * 用 SDK 自带的下采样解码，不把原图整个读进内存 ——
-         * 图集里一张 2160×2880 的图解码后是 20MB 级别，
-         * 9 张同时加载足够把抖音进程的堆打爆。
+         * ## 为什么要把 url_list 全试一遍
+         * 下载那边早就这么做了，缩略图之前偷懒只取 urls.get(0)。
+         * 抖音 url_list 里同一个图有多个镜像/编码，第一条挂掉或者返回 webp
+         * 解不出来的时候，整格就是一块灰底 —— 这就是「悬浮窗没有图片预览」。
+         *
+         * ## 为什么固定 inSampleSize
+         * 一张 2160×2880 解码后是 20MB 级别，9 张同时读就够把抖音进程的堆打爆。
+         * 格子最大也就 300 多 px，按 4 倍降采样（→ 540px）绰绰有余，
+         * 而且单遍解码，不像上一版先 probe 一次再真解一次、白跑一趟网络。
          */
-        private void loadThumb(String url, ImageView target) {
+        private void loadThumb(FeedContentTracker.ImageUrl image, ImageView target) {
             POOL.execute(() -> {
-                Bitmap bitmap = decode(url);
+                Bitmap bitmap = null;
+                for (String candidate : image.urls) {
+                    bitmap = decode(candidate);
+                    if (bitmap != null) {
+                        break;
+                    }
+                }
                 if (bitmap == null) {
+                    Log.w(TAG, "缩略图全部镜像都失败，格子留灰底 urls=" + image.urls.size());
                     return;
                 }
-                CACHE.put(url, bitmap);
+                final Bitmap loaded = bitmap;
+                CACHE.put(image.primary(), loaded);
                 activity.runOnUiThread(() -> {
-                    // 只在这个 ImageView 还挂着同一个 url 时才贴图，
-                    // 否则复用时会把 A 图的缩略图贴到 B 格上
-                    if (url.equals(target.getTag())) {
-                        target.setImageBitmap(bitmap);
+                    // 只在这个 ImageView 还挂着同一张图时才贴，否则复用时会把
+                    // A 图的缩略图贴到 B 格上
+                    if (image.primary().equals(target.getTag())) {
+                        target.setBackgroundColor(0);
+                        target.setImageBitmap(loaded);
                     }
                 });
             });
@@ -374,33 +401,26 @@ final class ImagePickerDialog {
             try {
                 connection = (HttpURLConnection) new URL(url).openConnection();
                 connection.setConnectTimeout(8000);
-                connection.setReadTimeout(12000);
+                connection.setReadTimeout(15000);
+                connection.setInstanceFollowRedirects(true);
                 connection.setRequestProperty("User-Agent", PLAYER_LIKE_UA);
                 connection.setRequestProperty("Referer", "https://www.douyin.com/");
+                connection.setRequestProperty("Accept", "image/avif,image/webp,image/*,*/*;q=0.8");
 
-                // 第一遍只读边界，算降采样倍数
-                BitmapFactory.Options bounds = new BitmapFactory.Options();
-                bounds.inJustDecodeBounds = true;
-                try (InputStream probe = connection.getInputStream()) {
-                    BitmapFactory.decodeStream(probe, null, bounds);
-                }
-                if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
-                    return null;
-                }
-                int sample = Math.max(1, Math.min(bounds.outWidth, bounds.outHeight) / (cellSize * 2));
-
-                connection = (HttpURLConnection) new URL(url).openConnection();
-                connection.setConnectTimeout(8000);
-                connection.setReadTimeout(12000);
-                connection.setRequestProperty("User-Agent", PLAYER_LIKE_UA);
-                connection.setRequestProperty("Referer", "https://www.douyin.com/");
                 BitmapFactory.Options options = new BitmapFactory.Options();
-                options.inSampleSize = Math.max(1, sample);
+                options.inSampleSize = 4;
+                options.inPreferredConfig = Bitmap.Config.RGB_565;
                 try (InputStream input = connection.getInputStream()) {
-                    return BitmapFactory.decodeStream(input, null, options);
+                    Bitmap bitmap = BitmapFactory.decodeStream(input, null, options);
+                    if (bitmap == null) {
+                        Log.d(TAG, "缩略图解码为空 " + connection.getContentType()
+                                + " " + connection.getResponseCode());
+                    }
+                    return bitmap;
                 }
             } catch (Throwable error) {
-                Log.d(TAG, "缩略图加载失败 " + error.getClass().getSimpleName());
+                Log.d(TAG, "缩略图加载失败 " + error.getClass().getSimpleName()
+                        + ": " + error.getMessage());
                 return null;
             } finally {
                 if (connection != null) {
