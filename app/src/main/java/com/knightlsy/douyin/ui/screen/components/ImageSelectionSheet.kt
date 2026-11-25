@@ -185,7 +185,9 @@ fun ImageSelectionSheet(
                     horizontalArrangement = Arrangement.spacedBy(3.dp),
                     verticalArrangement = Arrangement.spacedBy(3.dp),
                 ) {
-                    items(total) { index ->
+                    // 用下标做 key：图集是静态列表，滚动时能稳定复用格子，
+                    // 不加 key 的话每次数量变化都会重建整片网格
+                    items(total, key = { it }) { index ->
                         SelectionCell(
                             url = collection.imageUrls[index],
                             index = index,

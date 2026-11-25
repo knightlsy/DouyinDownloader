@@ -69,7 +69,6 @@ fun CollectionPreviewCard(
     }
 
     val liveCount = collection.animatedUrls.count { it != null }
-    val selectedUrls = selected.sorted().map { collection.imageUrls[it] }
 
     // 下载前弹选图浮层：图集动辄十几二十张，在长页面里翻着勾容易漏选，
     // 勾到后半段也记不住前面选了什么。浮层一屏看完、网格独立滚动。
@@ -138,9 +137,12 @@ fun CollectionPreviewCard(
                 .clip(RoundedCornerShape(BgRadius.r2))
                 .background(c.glass)
         ) {
+                    // 分组结果按图集 id 缓存：原来 chunked(3) 在一次重组里算两遍（遍历 + lastIndex），
+                    // 图集有二十张时就是白白构造两个 List<List<String>>。
+                    val rows = remember(collection.id) { collection.imageUrls.chunked(3) }
             Box {
                 Column(Modifier.fillMaxWidth().padding(2.dp)) {
-                    collection.imageUrls.chunked(3).forEachIndexed { rowIdx, row ->
+                    rows.forEachIndexed { rowIdx, row ->
                         Row(
                             Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(2.dp)
@@ -164,7 +166,7 @@ fun CollectionPreviewCard(
                                 Box(Modifier.weight(1f).aspectRatio(1f))
                             }
                         }
-                        if (rowIdx != collection.imageUrls.chunked(3).lastIndex) {
+                        if (rowIdx != rows.lastIndex) {
                             Spacer(Modifier.height(2.dp))
                         }
                     }
