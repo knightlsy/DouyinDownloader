@@ -160,11 +160,11 @@ final class VideoDownloader {
         String key = snapshot.aid + ':' + kind
                 + ':' + (snapshot.playUrls.isEmpty() ? "" : snapshot.playUrls.get(0).url.hashCode());
         if (!ACTIVE.add(key)) {
-            showToast(activity, "当前" + kind.label + "正在下载");
+            showProgress(context, "当前" + kind.label + "正在下载");
             return;
         }
 
-        showToast(activity, kind.startMessage);
+        showProgress(context, kind.startMessage);
         Log.i(DouyinModule.TAG,
                 "download requested: aid=" + snapshot.aid
                         + " kind=" + kind
@@ -198,13 +198,13 @@ final class VideoDownloader {
             }
             MAIN.post(() -> {
                 if (finalResult.message != null) {
-                    showToast(context, finalResult.message);
+                    finishProgress(context, finalResult.message);
                 } else if (finalResult.completed) {
-                    showToast(context, "下载完成：Download/" + finalResult.fileName);
+                    finishProgress(context, "已保存：" + finalResult.fileName);
                 } else if (finalResult.queued) {
-                    showToast(context, "已加入下载队列：Download/" + finalResult.fileName);
+                    finishProgress(context, "已加入队列：" + finalResult.fileName);
                 } else {
-                    showToast(context, !ImmersiveUi.isModuleEnabled()
+                    finishProgress(context, !ImmersiveUi.isModuleEnabled()
                             ? "功能总开关已关闭，下载已取消"
                             : "下载失败" + (finalResult.error == null
                             ? "，请稍后重试" : "：" + finalResult.error));
@@ -321,7 +321,7 @@ final class VideoDownloader {
         for (int index = 0; index < total; index++) {
             ensureEnabled();
             int position = index + 1;
-            MAIN.post(() -> showToast(context, "正在保存图片 " + position + "/" + total + "…"));
+            showProgress(context, "正在保存图片 " + position + "/" + total + "…");
             FeedContentTracker.ImageUrl image = candidates.get(index);
             String lastError = null;
             boolean savedThis = false;
@@ -1179,6 +1179,51 @@ final class VideoDownloader {
         if (context != null) {
             Toast.makeText(context, message, Toast.LENGTH_LONG).show();
         }
+    }
+
+    /**
+     * 复用的进度 Toast。
+     *
+     * Android 的 Toast 是**排队**显示的：每张图新 makeText().show() 一次，
+     * 就会排成一串。3 张图原来是「开始 + 1/3 + 2/3 + 3/3 + 完成」五个，
+     * 每个 3.5 秒，用户要连着看十几秒的弹窗 —— 这就是「太突兀、时间太长」。
+     *
+     * 复用同一个实例、只 setText，就是原地更新，不排队。
+     */
+    private static Toast progressToast;
+
+    /** 更新进度。同一个 Toast 原地换文案。 */
+    private static void showProgress(Context context, String message) {
+        MAIN.post(() -> {
+            if (context == null) {
+                return;
+            }
+            // 用 Application Context：静态字段持有 Toast，接 Activity 会泄漏
+            Context app = context.getApplicationContext();
+            if (progressToast == null) {
+                progressToast = Toast.makeText(app, message, Toast.LENGTH_SHORT);
+            } else {
+                progressToast.setText(message);
+            }
+            progressToast.show();
+        });
+    }
+
+    /** 结束时把同一个 Toast 换成结果文案，并释放实例。 */
+    private static void finishProgress(Context context, String message) {
+        MAIN.post(() -> {
+            if (context == null) {
+                return;
+            }
+            Context app = context.getApplicationContext();
+            if (progressToast == null) {
+                progressToast = Toast.makeText(app, message, Toast.LENGTH_SHORT);
+            } else {
+                progressToast.setText(message);
+            }
+            progressToast.show();
+            progressToast = null;
+        });
     }
 
     private enum Kind {
