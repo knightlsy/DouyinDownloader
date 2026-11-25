@@ -81,9 +81,14 @@ android {
             )
         }
     }
+    /*
+     * Java 17：合并进来的 Xposed hook 代码用了 instanceof 模式匹配
+     * （`if (value instanceof Integer integer)`，Java 16+），
+     * 1.8 下直接编译失败。抖仙人那边本来就是 17。
+     */
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
     buildFeatures {
         compose = true
@@ -167,11 +172,11 @@ dependencies {
 /**
  * Kotlin 编译选项。
  *
- * 旧的 `android { kotlinOptions { jvmTarget = "1.8" } }` 在 Kotlin 2.x 已废弃，
+ * 旧的 `android { kotlinOptions { jvmTarget = "17" } }` 在 Kotlin 2.x 已废弃，
  * 每次编译都会打一条 deprecation。新写法是顶层的 kotlin { compilerOptions { } }。
  */
 kotlin {
     compilerOptions {
-        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_1_8)
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
     }
 }
