@@ -392,8 +392,12 @@ class MainViewModel @JvmOverloads constructor(
                             is ContentInfo.ImageCollection -> ContentType.IMAGE_COLLECTION
                         }
                         try {
+                            // 稳定历史键（②）：同一作品重复下载只留一条 —— HistoryEntity 的
+                            // 主键就是 id 且 insert 是 REPLACE，id 稳定后 REPLACE 才真正去重。
+                            // 语义对齐 hook 侧 "xposed-<aid>-<kind>"（id 不带时间戳）。
+                            val kind = if (contentType == ContentType.IMAGE_COLLECTION) "image" else "video"
                             historyRepository.add(DownloadHistoryItem(
-                                id = taskId, contentId = contentInfo.id, title = contentInfo.title,
+                                id = "app-${contentInfo.id}-$kind", contentId = contentInfo.id, title = contentInfo.title,
                                 author = contentInfo.author, coverUrl = contentInfo.coverUrl,
                                 contentType = contentType, originalUrl = originalUrl.ifEmpty { contentInfo.id },
                                 downloadTime = System.currentTimeMillis(), downloadedFiles = result.filePaths

@@ -15,8 +15,8 @@ android {
         applicationId = "com.knightlsy.douyin"
         minSdk = 26
         targetSdk = 34
-        versionCode = 100
-        versionName = "1.14.2"
+        versionCode = 101
+        versionName = "1.14.3"
 
         // 云端同步记录接口。密钥不写进源码（仓库是公开的）：
         // 优先环境变量（CI secrets），其次 local.properties（本地构建，已 gitignore）。
@@ -69,16 +69,31 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            signingConfig = if (signingConfigs.findByName("release") != null) {
-                signingConfigs.getByName("release")
+            // 绝不允许 release 回退 debug 签名：debug 签名产物无法覆盖安装
+            // （INSTALL_FAILED_UPDATE_INCOMPATIBLE），用户只能卸载重装，会丢掉
+            // LSPosed 模块状态和远程偏好。缺密钥时直接失败，让问题在构建期
+            // 暴露而不是发出去再被用户踩到。本地无密钥开发请用 assembleDebug。
+            val releaseSigning = signingConfigs.findByName("release")
+            if (releaseSigning != null) {
+                signingConfig = releaseSigning
             } else {
-                signingConfigs.getByName("debug")
+                val taskRequested = gradle.startParameter.taskNames.any { task ->
+                    task.contains("release", ignoreCase = true)
+                            || task.equals("build", ignoreCase = true)
+                            || task.equals("assemble", ignoreCase = true)
+                }
+                if (taskRequested) {
+                    throw GradleException(
+                        "release 构建缺少签名密钥（release-key.jks 或 " +
+                            "DOUYIN_STORE_PASSWORD/DOUYIN_KEY_PASSWORD 未配置），" +
+                            "拒绝回退 debug 签名：debug 签名产物无法覆盖升级安装。" +
+                            "本地无密钥开发请用 assembleDebug。"
+                    )
+                }
+                // 其余情况（如 assembleDebug / help）不需要 release 签名，
+                // 不设置 signingConfig，保持本地开发可用。
             }
             applicationIdSuffix = ".release"
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
-            )
         }
     }
     /*

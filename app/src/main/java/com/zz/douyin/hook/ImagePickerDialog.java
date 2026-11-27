@@ -53,7 +53,24 @@ final class ImagePickerDialog {
 
     private static final String TAG = "DouyinImmersive";
     /** 缩略图下载线程。3 个够用，再多抢宿主自己的网络。 */
-    private static final ExecutorService POOL = Executors.newFixedThreadPool(3);
+    /**
+     * 缩略图下载池。必须是守护线程：非守护线程会让进程无法退出，
+     * 且这些任务捕获了 Activity（ImageAdapter 持有），Activity 销毁后
+     * 线程还活着就把宿主的内存一起吊住。
+     */
+    private static final ExecutorService POOL = Executors.newFixedThreadPool(3, runnable -> {
+        Thread thread = new Thread(runnable, "douyin-image-picker");
+        thread.setDaemon(true);
+        return thread;
+    });
+
+    /**
+     * 当前打开的选图 Dialog。原来是纯局部变量，谁都不持有 ——
+     * 用户在选图时按返回键或切后台，Dialog 窗口没人收（logcat 里 leaked window），
+     * Activity 还被 Dialog + 线程池任务引用着，延迟回收。跑在抖音进程里，
+     * 这份多余的内存直接吃掉宿主预算。由 ImmersiveUi.onActivityPaused 统一收掉。
+     */
+    private static volatile Dialog activeDialog;
     private static final LruCache<String, Bitmap> CACHE = new LruCache<>(48);
 
     private ImagePickerDialog() {
@@ -165,6 +182,7 @@ final class ImagePickerDialog {
         root.addView(actions);
 
         Dialog dialog = new Dialog(activity);
+        activeDialog = dialog;
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
         dialog.setContentView(root);
         Window window = dialog.getWindow();
@@ -219,8 +237,28 @@ final class ImagePickerDialog {
         dialog.setOnDismissListener(d -> {
             // 关掉时清掉这一批缩略图，别把宿主的堆占着
             CACHE.evictAll();
+            // 只注销自己：万一期间又开了一个新 Dialog，别把新的引用清掉
+            if (activeDialog == dialog) {
+                activeDialog = null;
+            }
         });
         dialog.show();
+    }
+
+    /** 收掉当前选图 Dialog（Activity 暂停/模块关闭时调用）。 */
+    static void dismissActive() {
+        Dialog dialog = activeDialog;
+        activeDialog = null;
+        if (dialog == null) {
+            return;
+        }
+        try {
+            if (dialog.isShowing()) {
+                dialog.dismiss();
+            }
+        } catch (RuntimeException ignored) {
+            // Dialog 的 window 可能已经随 Activity 销毁，dismiss 抛 IllegalArgument
+        }
     }
 
     /**

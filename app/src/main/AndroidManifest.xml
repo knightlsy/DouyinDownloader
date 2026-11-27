@@ -59,7 +59,10 @@
                 android:resource="@xml/file_paths" />
         </provider>
         <!--
-          hook 跑在抖音进程里，写不了本应用私有目录，用显式广播投递下载记录。
+            hook 跑在抖音进程里，写不了本应用私有目录，用显式广播投递下载记录。
+            exported 必须为 true（跨应用广播）；不能加 signature permission：hook 从
+            抖音进程发广播，抖音与本应用签名不同，带不上本应用的签名权限，加了
+            反而把合法流量拒掉。发送方校验在代码里做：HistoryReceiver.isTrustedSender。
         -->
         <receiver
             android:name="com.zz.douyin.HistoryReceiver"

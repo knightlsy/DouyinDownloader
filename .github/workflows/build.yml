@@ -39,8 +39,28 @@ jobs:
             echo "$DOUYIN_KEYSTORE_B64" | base64 -d > release-key.jks
             echo "::notice::已恢复固定签名密钥（$(stat -c%s release-key.jks) 字节）"
           else
-            echo "::warning::DOUYIN_KEYSTORE_B64 未配置 —— 本次将使用 debug 签名，产物无法覆盖升级"
+            echo "::error::DOUYIN_KEYSTORE_B64 未配置 —— release 构建将因缺少签名密钥直接失败（build.gradle.kts 已禁止回退 debug 签名）"
           fi
+
+      - name: Verify tag/version consistency
+        # 只在 tag 触发时校验，push 到分支的日常构建不受影响。
+        # 防的是：忘 bump / bump 错 versionName 时 tag 照样发版，出现比线上更低的
+        # versionCode 会触发 INSTALL_FAILED_VERSION_DOWNGRADE，配合强制更新弹窗
+        # 会把用户锁死在旧版进不去、新版装不上。
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          GRADLE_VERSION=$(sed -n 's/^[[:space:]]*versionName[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' app/build.gradle.kts | head -1)
+          GRADLE_CODE=$(sed -n 's/^[[:space:]]*versionCode[[:space:]]*=[[:space:]]*\([0-9][0-9]*\).*/\1/p' app/build.gradle.kts | head -1)
+          if [ -z "$GRADLE_VERSION" ] || [ -z "$GRADLE_CODE" ]; then
+            echo "::error::无法从 app/build.gradle.kts 解析 versionName/versionCode，请检查 defaultConfig 写法"
+            exit 1
+          fi
+          if [ "$TAG_VERSION" != "$GRADLE_VERSION" ]; then
+            echo "::error::tag 版本 ($TAG_VERSION) 与 versionName ($GRADLE_VERSION) 不一致 —— 忘记 bump 还是 bump 错了？低 versionCode 会触发 INSTALL_FAILED_VERSION_DOWNGRADE，禁止发版"
+            exit 1
+          fi
+          echo "::notice::版本一致: tag=$GITHUB_REF_NAME versionName=$GRADLE_VERSION versionCode=$GRADLE_CODE"
 
       - name: Build release APK
         env:

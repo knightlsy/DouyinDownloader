@@ -34,6 +34,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.shadow
@@ -82,8 +83,11 @@ private fun tabRouteOf(screen: String): String =
 
 @Composable
 fun AppNavigation(mainViewModel: MainViewModel) {
-    var currentScreen by remember { mutableStateOf("main") }
-    var pendingReparseUrl by remember { mutableStateOf<String?>(null) }
+    // rememberSaveable 而非 remember：转屏、系统深浅色切换、字号缩放、切主题
+    // 都会重建 Activity，用 remember 的话一律被扔回首页，正在填的输入和
+    // 二级页位置全丢（用户看到的现象是「页面自己跳回首页」）。
+    var currentScreen by rememberSaveable { mutableStateOf("main") }
+    var pendingReparseUrl by rememberSaveable { mutableStateOf<String?>(null) }
     val historyViewModel: HistoryViewModel = viewModel()
     val themeMode by mainViewModel.themeMode.collectAsState()
     val wallpaperMood by mainViewModel.wallpaperMood.collectAsState()

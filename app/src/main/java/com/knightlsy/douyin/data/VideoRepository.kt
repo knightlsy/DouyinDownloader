@@ -444,7 +444,18 @@ class VideoRepository {
         } else {
             val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES), "Douyin").also { it.mkdirs() }
             val file = File(dir, fullFileName)
-            FileOutputStream(file).use { writeWithProgress(inputStream, it, contentLength, onProgress) }
+            // legacy 路径没有 MediaStore 的 IS_PENDING 回滚：写一半失败/取消时半截文件
+            // 会永久留在 Movies/Douyin（重试用新时间戳再写一个）。与 hook 侧
+            // VideoDownloader.publishFile 的清理对齐：未完整写入则删除。
+            var written = false
+            try {
+                FileOutputStream(file).use {
+                    writeWithProgress(inputStream, it, contentLength, onProgress)
+                }
+                written = true
+            } finally {
+                if (!written) file.delete()
+            }
             return file.absolutePath
         }
     }
@@ -596,7 +607,16 @@ class VideoRepository {
             }
         } else {
             val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "Douyin").also { it.mkdirs() }
-            val file = File(dir, fullFileName); FileOutputStream(file).use { inputStream.copyTo(it, BUFFER_SIZE) }; return file.absolutePath
+            val file = File(dir, fullFileName)
+            // 同 saveVideoFile legacy 分支：半截文件不留档，未完整写入则删除
+            var written = false
+            try {
+                FileOutputStream(file).use { inputStream.copyTo(it, BUFFER_SIZE) }
+                written = true
+            } finally {
+                if (!written) file.delete()
+            }
+            return file.absolutePath
         }
     }
 }

@@ -302,6 +302,9 @@ final class ImmersiveUi {
             if (!moduleEnabled) {
                 removeDownloadButton();
                 VideoDownloader.dismissChooser();
+                // 选图 Dialog 之前没人收：它持有 Activity，用户选图时按返回/切后台
+                // 就留下一个 leaked window 和一份吊住的 Activity 引用
+                ImagePickerDialog.dismissActive();
                 Activity activity = activeActivity();
                 restoreAll(activity, activeDecor(activity));
             } else {
@@ -1599,6 +1602,11 @@ final class ImmersiveUi {
 
     private static void reassertHiddenViews() {
         if (!moduleEnabled || !immersiveEnabled) return;
+        // 这是挂在 OnPreDraw 上的监听，60/120Hz 每帧都会进来。
+        // HIDDEN 为空时（绝大多数字段、以及模块关闭后）必须立刻返回：
+        // 原来无论有没有要隐藏的视图，都要拿一次锁 + new 一个 ArrayList
+        // 拷全表 + 逐项 isAttachedToWindow/getAlpha，纯属每帧白烧。
+        if (HIDDEN.isEmpty()) return;
         synchronized (HIDDEN) {
             for (Map.Entry<View, SavedView> entry :
                     new ArrayList<>(HIDDEN.entrySet())) {
@@ -1652,7 +1660,11 @@ final class ImmersiveUi {
             View decor,
             boolean leavingActivity
     ) {
-        if (leavingActivity) {
+        // 原来只有「离开 Activity」（leavingActivity=true）才摘 guard。
+        // 但模块在页面内被关掉（refreshPreferences → 两参 restoreAll，
+        // leavingActivity=false）时不会摘 —— 那个每帧的 OnPreDrawListener
+        // 就一直挂在 decor 上空转下去，直到用户退出播放页。
+        if (leavingActivity || !moduleEnabled || !immersiveEnabled) {
             detachHiddenViewGuard();
         }
         // The feed description is bottom-aligned inside the expanded pager.

@@ -25,6 +25,20 @@ object MotionPhotoMuxer {
      * @return 合成后的动态照片 JPEG 字节(直接以 .jpg 落盘, 相册会识别出动态效果)
      */
     fun mux(jpegBytes: ByteArray, mp4Bytes: ByteArray): ByteArray {
+        // 入口字节校验（移植自 hook 侧 Java 版 MotionPhotoMuxer.mux）：
+        // CDN 返回的 HTML 错误页动辄几十 KB，轻松通过调用方「size > 1024」的门槛；
+        // 不校验就拼进 JPEG 的话，XMP offset 指向 HTML 而非 ftyp，产出损坏的
+        // _live.jpg —— 相册只显示静图且无任何报错。校验失败抛
+        // IllegalArgumentException，调用方 catch 后走「合成失败退静图」兜底。
+        if (jpegBytes.size < 4
+            || (jpegBytes[0].toInt() and 0xFF) != 0xFF
+            || (jpegBytes[1].toInt() and 0xFF) != 0xD8
+        ) {
+            throw IllegalArgumentException("主图不是 JPEG（缺少 FFD8 SOI）")
+        }
+        if (!looksLikeMp4(mp4Bytes)) {
+            throw IllegalArgumentException("动态部分不是 MP4（缺少 ftyp 盒）")
+        }
         // 1. 在 JPEG 的 XMP 段写入 MicroVideo 标记(小米/Google 相册靠它定位视频)
         val jpegWithXmp = injectXmp(jpegBytes, mp4Bytes.size.toLong())
         // 2. 追加 MP4
@@ -33,6 +47,17 @@ object MotionPhotoMuxer {
         out.write(mp4Bytes)
         return out.toByteArray()
     }
+
+    /**
+     * 粗判 MP4：第 4..7 字节是 'ftyp'。
+     * 只靠「文件大于 1KB」不够 —— HTML 错误页通常远超 1KB。
+     */
+    private fun looksLikeMp4(data: ByteArray): Boolean =
+        data.size >= 12
+            && data[4] == 'f'.code.toByte()
+            && data[5] == 't'.code.toByte()
+            && data[6] == 'y'.code.toByte()
+            && data[7] == 'p'.code.toByte()
 
     /**
      * 在 JPEG 里插入/替换 XMP 包(APP1 段)。

@@ -268,9 +268,50 @@ final class VideoDownloader {
             // 不存在的包，接收端静默收不到，历史一条都到不了。
             intent.setPackage(com.knightlsy.douyin.BuildConfig.APPLICATION_ID);
             intent.putExtra("json", record.toString());
+            // API 34+ 必须显式开启身份共享，接收端的 getSentFromPackage()
+            // 才会返回真实发送方包名 —— 不开的话它永远返回 null，
+            // HistoryReceiver.isTrustedSender 就只能落到可伪造的
+            // intent.getPackage() 弱校验，任意应用都能伪造成交记录。
+            //
+            // 用反射而不是直接引用 BroadcastOptions：那个类 API 34 才有，
+            // 直接引用虽然靠 SDK_INT 守卫不会执行到，但反射能彻底避免
+            // 任何编译期/类加载期依赖，低版本设备零风险。
+            if (Build.VERSION.SDK_INT >= 34 && sendWithIdentity(context, intent)) {
+                return;
+            }
             context.sendBroadcast(intent);
         } catch (Throwable error) {
             Log.w(DouyinModule.TAG, "publishHistory failed", error);
+        }
+    }
+
+    /**
+     * API 34+ 带「共享发送方身份」标记发送广播，返回是否发送成功。
+     *
+     * 反射实现的原因：BroadcastOptions 是 API 34 才有的类，直接 import 会让
+     * 低版本设备在解析这个类时承担不必要的风险（虽然 SDK_INT 守卫能挡住执行，
+     * 反射能保证连符号依赖都没有）。
+     *
+     * 失败（厂商裁剪、隐藏 API 限制）时返回 false，调用方退回普通 sendBroadcast ——
+     * 宁可广播能发出去（接收端走弱校验），也不要历史记录直接丢。
+     */
+    private static boolean sendWithIdentity(Context context, Intent intent) {
+        try {
+            Class<?> optionsClass = Class.forName("android.app.BroadcastOptions");
+            Object options = optionsClass.getMethod("makeBasic").invoke(null);
+            if (options == null) {
+                return false;
+            }
+            optionsClass
+                    .getMethod("setShareIdentityEnabled", boolean.class)
+                    .invoke(options, true);
+            java.lang.reflect.Method send = Context.class.getMethod(
+                    "sendBroadcast", Intent.class, String.class, optionsClass);
+            send.invoke(context, intent, null, options);
+            return true;
+        } catch (Throwable error) {
+            Log.w(DouyinModule.TAG, "share broadcast identity unavailable", error);
+            return false;
         }
     }
 
@@ -528,9 +569,14 @@ final class VideoDownloader {
 
     private static byte[] readAllBytes(File file) throws IOException {
         long length = file.length();
-        // 128MB 上限：实况视频正常只有几百 KB 到几 MB，
-        // 超过这个量级必然是异常响应，直接拒掉比 OOM 好。
-        if (length <= 0 || length > 128L * 1024 * 1024) {
+        // 32MB 上限（原 128MB）。实况视频正常只有几百 KB 到几 MB。
+        //
+        // 为什么降到 32MB：buildLivePhoto 是**全内存**合成 ——
+        // readAllBytes(mp4) + readAllBytes(jpeg) + MotionPhotoMuxer.mux 拼出的
+        // 第三份等长数组，瞬时峰值约为单文件大小的 3 倍。128MB 上限意味着
+        // 峰值可能到 384MB，而这占用的是**抖音进程的堆**：抖音自身已接近
+        // 上限时会先被 LMK 杀掉（进程级 OOM），我们这边只捕获到表面的异常。
+        if (length <= 0 || length > 32L * 1024 * 1024) {
             throw new IOException("文件大小异常：" + length);
         }
         byte[] data = new byte[(int) length];

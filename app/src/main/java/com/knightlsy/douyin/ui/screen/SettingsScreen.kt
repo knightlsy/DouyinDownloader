@@ -186,20 +186,41 @@ fun SettingsScreen(
             // 从远程偏好重读全部开关。service 绑定是异步的，
             // 首次进入设置页时可能还没连上，所以连接状态变化也要触发重读。
             fun reloadModulePrefs() {
-                bridgeConnected = XposedServiceBridge.isConnected()
-                bridgeDesc = XposedServiceBridge.describe()
-                val prefs = XposedServiceBridge.prefs() ?: return
-                moduleEnabled = FilterPreferences.readModuleEnabled(prefs)
-                immersiveEnabled = FilterPreferences.readImmersiveEnabled(prefs)
-                val values = FilterPreferences.read(prefs)
-                skipAds = values.skipAds
-                skipImages = values.skipImages
-                skipLives = values.skipLives
-                blockDoubleTap = FilterPreferences.readBlockDoubleTap(prefs)
-                videoKeywordText = values.keywordText
-                showDanmaku = FilterPreferences.readShowDanmaku(prefs)
-                doubleTapComments = FilterPreferences.readDoubleTapComments(prefs)
-                videoQuality = FilterPreferences.readVideoQuality(prefs)
+                // isConnected / describe / prefs 三个都是 binder 跨进程调用，
+                // 原来全在主线程跑（LaunchedEffect 默认 Main dispatcher）——
+                // LSPosed 守护进程响应慢时设置页首帧直接卡顿。
+                // 这里全部下沉到 IO，读成一份快照再回主线程一次性写状态。
+                scope.launch(Dispatchers.IO) {
+                    val conn = XposedServiceBridge.isConnected()
+                    val desc = XposedServiceBridge.describe()
+                    val prefs = XposedServiceBridge.prefs()
+                    val mEnabled = prefs?.let { FilterPreferences.readModuleEnabled(it) }
+                    val iEnabled = prefs?.let { FilterPreferences.readImmersiveEnabled(it) }
+                    val values = prefs?.let { FilterPreferences.read(it) }
+                    val bdt = prefs?.let { FilterPreferences.readBlockDoubleTap(it) }
+                    val sd = prefs?.let { FilterPreferences.readShowDanmaku(it) }
+                    val dtc = prefs?.let { FilterPreferences.readDoubleTapComments(it) }
+                    val vq = prefs?.let { FilterPreferences.readVideoQuality(it) }
+                    withContext(Dispatchers.Main) {
+                        bridgeConnected = conn
+                        bridgeDesc = desc
+                        // prefs 拿不到（服务未连接）时只更新连接状态，保留上一次的值
+                        if (mEnabled != null) {
+                            moduleEnabled = mEnabled
+                            iEnabled?.let { immersiveEnabled = it }
+                            values?.let {
+                                skipAds = it.skipAds
+                                skipImages = it.skipImages
+                                skipLives = it.skipLives
+                                videoKeywordText = it.keywordText
+                            }
+                            bdt?.let { blockDoubleTap = it }
+                            sd?.let { showDanmaku = it }
+                            dtc?.let { doubleTapComments = it }
+                            vq?.let { videoQuality = it }
+                        }
+                    }
+                }
             }
 
             LaunchedEffect(Unit) { reloadModulePrefs() }

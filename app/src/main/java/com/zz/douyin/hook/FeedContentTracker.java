@@ -50,6 +50,22 @@ final class FeedContentTracker {
     private static Class<?> panelClass;
     private static Method getCurrentAweme;
     private static Field viewPagerField;
+
+    /*
+     * readField / invokeNoArg 的按类+名字缓存。
+     *
+     * 为什么必须缓存：Activity.dispatchTouchEvent 的 hook 每次 ACTION_DOWN 都会
+     * 调用 current(decor) 构造一份完整 Snapshot，里面要做约 30 次字段读取和
+     * 无参方法调用。Class.getField / getMethod 每次都是全表线性查找并复制
+     * Field/Method 对象 —— 放在触摸热路径上就是点击卡顿的来源。
+     *
+     * 缓存 null 也是必要的：抖版改了字段名时查找会抛异常，不缓存就等于
+     * 每次都重新抛一遍。用 containsKey 区分「没查过」和「查过但不存在」。
+     */
+    private static final Map<Class<?>, Map<String, Field>> FIELD_CACHE =
+            Collections.synchronizedMap(new WeakHashMap<>());
+    private static final Map<Class<?>, Map<String, Method>> METHOD_CACHE =
+            Collections.synchronizedMap(new WeakHashMap<>());
     private static WeakReference<Object> selectedPanel = new WeakReference<>(null);
     private static WeakReference<Object> lastPanel = new WeakReference<>(null);
     private static volatile FilterPreferences.Values filterSettings =
@@ -75,7 +91,19 @@ final class FeedContentTracker {
                 loader
         );
         getCurrentAweme = panelClass.getDeclaredMethod("getCurrentAweme");
-        viewPagerField = panelClass.getField("f");
+        try {
+            viewPagerField = panelClass.getField("f");
+        } catch (NoSuchFieldException error) {
+            // "f" 是混淆后的 panel ViewPager 字段名，抖音每次大版本都可能改。
+            // 原来这里不包 try —— 一旦改名就抛异常把**整个 install 带崩**：
+            // constructor hook、page-selected hook、Snapshot 全部不装，
+            // 表现为内容过滤/下载按钮/图文识别一起静默失效，而日志里只有一行
+            // installSubsystem 的失败。current() 与 currentPager() 都已判 null
+            // 并退回 view 树查找，所以这里降级是安全的。
+            viewPagerField = null;
+            module.log(Log.WARN, DouyinModule.TAG,
+                    "'f' (panel ViewPager) not found - paging falls back to view-tree lookup");
+        }
 
         for (Constructor<?> constructor : panelClass.getDeclaredConstructors()) {
             module.hook(constructor)
@@ -519,8 +547,27 @@ final class FeedContentTracker {
 
     private static Object readField(Class<?> type, Object instance, String name) {
         try {
-            Field field = type.getField(name);
-            return field.get(instance);
+            Map<String, Field> byName = FIELD_CACHE.get(type);
+            if (byName == null) {
+                byName = new HashMap<>();
+                FIELD_CACHE.put(type, byName);
+            }
+            Field field;
+            synchronized (byName) {
+                if (byName.containsKey(name)) {
+                    field = byName.get(name);
+                } else {
+                    Field resolved;
+                    try {
+                        resolved = type.getField(name);
+                    } catch (NoSuchFieldException missing) {
+                        resolved = null;   // 缓存「不存在」，避免每次都重新抛
+                    }
+                    byName.put(name, resolved);
+                    field = resolved;
+                }
+            }
+            return field == null ? null : field.get(instance);
         } catch (ReflectiveOperationException | RuntimeException ignored) {
             return null;
         }
@@ -1189,8 +1236,27 @@ final class FeedContentTracker {
             String name
     ) {
         try {
-            Method method = type.getMethod(name);
-            return method.invoke(instance);
+            Map<String, Method> byName = METHOD_CACHE.get(type);
+            if (byName == null) {
+                byName = new HashMap<>();
+                METHOD_CACHE.put(type, byName);
+            }
+            Method method;
+            synchronized (byName) {
+                if (byName.containsKey(name)) {
+                    method = byName.get(name);
+                } else {
+                    Method resolved;
+                    try {
+                        resolved = type.getMethod(name);
+                    } catch (NoSuchMethodException missing) {
+                        resolved = null;
+                    }
+                    byName.put(name, resolved);
+                    method = resolved;
+                }
+            }
+            return method == null ? null : method.invoke(instance);
         } catch (ReflectiveOperationException | RuntimeException ignored) {
             return null;
         }

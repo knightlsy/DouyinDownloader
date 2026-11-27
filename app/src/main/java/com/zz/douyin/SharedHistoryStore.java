@@ -13,6 +13,7 @@ import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 
 /**
@@ -98,6 +99,71 @@ public final class SharedHistoryStore {
             return;
         }
         trimIfNeeded(context, target);
+    }
+
+    /**
+     * 删除指定 id 的记录（历史页删除模块记录时的 JSONL 删除通道）。
+     *
+     * 整体重写：先写临时文件再 rename，与 trimIfNeeded 的原子写法一致，
+     * 避免中途失败留下半个文件。解析不出 id 的行原样保留。
+     */
+    public static synchronized void removeAll(Context context, Collection<String> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return;
+        }
+        try {
+            File target = file(context);
+            List<String> all = readAllLines(target);
+            List<String> kept = new ArrayList<>(all.size());
+            boolean removed = false;
+            for (String line : all) {
+                String id = parseId(line);
+                if (id != null && ids.contains(id)) {
+                    removed = true;
+                } else {
+                    kept.add(line);
+                }
+            }
+            if (removed) {
+                rewrite(target, kept);
+            }
+        } catch (Exception error) {
+            Log.w(TAG, "删除共享历史失败", error);
+        }
+    }
+
+    /**
+     * 清空全部记录（历史页「清空全部」时对 JSONL 的删除通道）。
+     * 直接删文件：单次系统调用本身就是原子的，比重写空文件更干净。
+     */
+    public static synchronized void clear(Context context) {
+        File target = file(context);
+        if (target.isFile() && !target.delete()) {
+            Log.w(TAG, "清空共享历史失败: " + target);
+        }
+    }
+
+    private static String parseId(String line) {
+        try {
+            return new JSONObject(line).optString("id");
+        } catch (Exception error) {
+            return null;
+        }
+    }
+
+    /** 整体重写：先写临时文件再 rename，避免中途失败留下半个文件。 */
+    private static void rewrite(File target, List<String> lines) throws Exception {
+        File temp = new File(target.getParentFile(), FILE_NAME + ".tmp");
+        try (OutputStreamWriter writer = new OutputStreamWriter(
+                new FileOutputStream(temp, false), StandardCharsets.UTF_8)) {
+            for (String line : lines) {
+                writer.write(line);
+                writer.write('\n');
+            }
+        }
+        if (!temp.renameTo(target)) {
+            Log.w(TAG, "历史重写后 rename 失败，保留原文件");
+        }
     }
 
     /** 超过上限时砍掉最早的一半，避免无限增长又不用每次都重写整个文件。 */
