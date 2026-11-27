@@ -363,15 +363,28 @@ class MainViewModel @JvmOverloads constructor(
             downloadSemaphore.withPermit {
                 try {
                     updateTaskStatus(taskId, DownloadStatus.DOWNLOADING)
+                    var lastNotifiedPercent = -1
+                    var lastUiPercent = -1
                     val result = repository.downloadContent(getApplication(), contentInfo,
                         onProgress = { p ->
-                            updateTaskProgress(taskId, p)
-                            if (p < 1f) notificationHelper.showProgress(taskId, contentInfo.title, (p * 100).toInt(), 100)
+                            val percent = (p * 100).toInt().coerceIn(0, 100)
+                            // UI 节流：进度条按 1% 粒度刷新。
+                            // onProgress 是按 chunk 回调的，100MB 文件会来回上千次；
+                            // 每次都 copy 整个任务列表 → StateFlow 发射 → Compose 重组，
+                            // 纯属浪费。1% 在屏幕上看不出差别，但能砍掉九成以上重组。
+                            if (percent != lastUiPercent) {
+                                lastUiPercent = percent
+                                updateTaskProgress(taskId, p)
+                            }
+                            // 通知再粗一档：5% 才跨进程 notify 一次（IPC 比重组还贵）
+                            if (p < 1f && percent >= lastNotifiedPercent + 5) {
+                                lastNotifiedPercent = percent
+                                notificationHelper.showProgress(taskId, contentInfo.title, percent, 100)
+                            }
                         }, onFileSaved = { addDownloadedFile(taskId, it) })
                     if (result.success) {
                         updateTaskStatus(taskId, DownloadStatus.COMPLETED, progress = 1f)
                         _stats.value = _stats.value.copy(totalDownloads = _stats.value.totalDownloads + 1, successDownloads = _stats.value.successDownloads + 1)
-                        _uiState.value = _uiState.value.copy(successMessage = "下载完成！已保存到相册")
                         notificationHelper.showCompleted(taskId, contentInfo.title, result.filePaths.size)
                         LogStore.log("dl", "成功: ${contentInfo.title} (${result.filePaths.size}个文件)")
                         val contentType = when (contentInfo) {

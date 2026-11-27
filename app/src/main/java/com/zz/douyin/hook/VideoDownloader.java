@@ -3,6 +3,9 @@ package com.zz.douyin.hook;
 import android.annotation.TargetApi;
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
 import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Context;
@@ -1192,7 +1195,25 @@ final class VideoDownloader {
      */
     private static Toast progressToast;
 
-    /** 更新进度。同一个 Toast 原地换文案。 */
+    /**
+     * 收起进度 Toast 的延时任务。
+     *
+     * Android 的 Toast 只有 LENGTH_SHORT(≈2s) / LENGTH_LONG(≈3.5s) 两档，
+     * 没有「1 秒」这个选项。要精确 1 秒只能自己 show 完再定时 cancel。
+     */
+    private static final Runnable HIDE_PROGRESS = () -> {
+        if (progressToast != null) {
+            progressToast.cancel();
+            progressToast = null;
+        }
+    };
+
+    /**
+     * 更新进度。同一个 Toast 原地换文案，**显示 1 秒后自动收起**。
+     *
+     * 之前用 LENGTH_SHORT（2 秒），用户反馈太突兀、太久。改成 1 秒：
+     * 进度本身是中间态，看得见就够，不需要停留。
+     */
     private static void showProgress(Context context, String message) {
         MAIN.post(() -> {
             if (context == null) {
@@ -1200,30 +1221,67 @@ final class VideoDownloader {
             }
             // 用 Application Context：静态字段持有 Toast，接 Activity 会泄漏
             Context app = context.getApplicationContext();
+            MAIN.removeCallbacks(HIDE_PROGRESS);
             if (progressToast == null) {
                 progressToast = Toast.makeText(app, message, Toast.LENGTH_SHORT);
             } else {
                 progressToast.setText(message);
             }
             progressToast.show();
+            MAIN.postDelayed(HIDE_PROGRESS, 1000);
         });
     }
 
-    /** 结束时把同一个 Toast 换成结果文案，并释放实例。 */
+    /** 下载完成通知的渠道与 id（固定在通知栏，用户点开可清除）。 */
+    private static final String DONE_CHANNEL = "douyin_dl_done";
+    private static final int DONE_NOTIFY_ID = 0x7E01;
+
+    /**
+     * 结束时收掉 Toast、改发通知栏通知。
+     *
+     * 完成是终态，值得留在通知栏让用户回看；Toast 一闪就没，反而看不到
+     * 存到哪了、叫什么名字。
+     */
     private static void finishProgress(Context context, String message) {
+        MAIN.removeCallbacks(HIDE_PROGRESS);
         MAIN.post(() -> {
-            if (context == null) {
+            if (progressToast != null) {
+                progressToast.cancel();
+                progressToast = null;
+            }
+            notifyDone(context, message);
+        });
+    }
+
+    /** 发一条「下载完成」通知。失败则退回 Toast，保证用户至少能看到结果。 */
+    private static void notifyDone(Context context, String message) {
+        if (context == null) {
+            return;
+        }
+        try {
+            Context app = context.getApplicationContext();
+            NotificationManager nm = (NotificationManager) app.getSystemService(Context.NOTIFICATION_SERVICE);
+            if (nm == null) {
+                showToast(context, message);
                 return;
             }
-            Context app = context.getApplicationContext();
-            if (progressToast == null) {
-                progressToast = Toast.makeText(app, message, Toast.LENGTH_SHORT);
-            } else {
-                progressToast.setText(message);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                NotificationChannel channel = new NotificationChannel(
+                        DONE_CHANNEL, "下载完成", NotificationManager.IMPORTANCE_DEFAULT);
+                channel.setShowBadge(true);
+                nm.createNotificationChannel(channel);
             }
-            progressToast.show();
-            progressToast = null;
-        });
+            Notification notification = new Notification.Builder(app, DONE_CHANNEL)
+                    .setSmallIcon(android.R.drawable.stat_sys_download_done)
+                    .setContentTitle("下载完成")
+                    .setContentText(message)
+                    .setAutoCancel(true)
+                    .build();
+            nm.notify(DONE_NOTIFY_ID, notification);
+        } catch (Throwable error) {
+            Log.w(TAG, "发下载完成通知失败，退回 Toast", error);
+            showToast(context, message);
+        }
     }
 
     private enum Kind {

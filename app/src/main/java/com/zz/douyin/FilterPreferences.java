@@ -22,12 +22,6 @@ public final class FilterPreferences {
     public static final String KEY_SHOW_DANMAKU = "show_danmaku";
     public static final String KEY_DOUBLE_TAP_COMMENTS = "double_tap_comments";
     public static final String KEY_VIDEO_QUALITY = "video_quality";
-    /**
-     * 超级岛白名单解锁。默认 false —— 这个开关会让 hook 进 SystemUI 和 XMSF 两个
-     * 系统进程，崩了影响的是整个状态栏而不是单个 App，必须由用户显式打开。
-     * 改完要重启设备（作用域含 XMSF 时进程重启才生效）。
-     */
-    public static final String KEY_FOCUS_UNLOCK = "focus_unlock";
 
     /** 清晰度选项：跟随抖音自动调整。 */
     public static final String QUALITY_AUTO = "auto";
@@ -47,10 +41,6 @@ public final class FilterPreferences {
 
     public static boolean readModuleEnabled(SharedPreferences preferences) {
         return preferences == null || preferences.getBoolean(KEY_MODULE_ENABLED, true);
-    }
-
-    public static boolean readFocusUnlock(SharedPreferences preferences) {
-        return preferences != null && preferences.getBoolean(KEY_FOCUS_UNLOCK, false);
     }
 
     public static boolean readBlockDoubleTap(SharedPreferences preferences) {
