@@ -407,12 +407,21 @@ class MainViewModel @JvmOverloads constructor(
                         notificationHelper.showError(taskId, result.error ?: "下载失败")
                         LogStore.log("dl", "失败: ${contentInfo.title} → ${result.error ?: "未知错误"}")
                     }
+                } catch (e: CancellationException) {
+                    // 用户主动取消不是失败：状态已由 cancelDownload 置为 CANCELLED，
+                    // 这里只管上抛，不要覆盖成 FAILED、也不要计进失败数。
+                    // （原来被下面的 catch(Exception) 吞掉，取消后界面显示"下载失败"）
+                    throw e
                 } catch (e: Exception) {
                     updateTaskStatus(taskId, DownloadStatus.FAILED, error = e.message ?: "下载出错")
                     _stats.value = _stats.value.copy(totalDownloads = _stats.value.totalDownloads + 1, failedDownloads = _stats.value.failedDownloads + 1)
                     notificationHelper.showError(taskId, e.message ?: "下载出错")
                     LogStore.log("dl", "异常: ${contentInfo.title} → ${e.message ?: "未知异常"}")
-                } finally { activeJobs.remove(taskId) }
+                } finally {
+                    // 两参 remove：只删自己这条。单参版会把同 taskId 的新 job 一起摘掉
+                    // （任务极快完成时 finally 先跑、主线程再把旧 job 放回 map，造成残留）
+                    activeJobs.remove(taskId, job)
+                }
             }
         }
         activeJobs[taskId] = job

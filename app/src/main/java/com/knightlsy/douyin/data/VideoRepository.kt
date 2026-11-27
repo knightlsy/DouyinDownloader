@@ -6,6 +6,7 @@ import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import android.util.Log
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -27,6 +28,7 @@ import java.io.InputStream
 import java.io.OutputStream
 import java.util.concurrent.TimeUnit
 import java.util.regex.Pattern
+import java.io.IOException
 
 class VideoRepository {
     companion object {
@@ -492,7 +494,11 @@ class VideoRepository {
                         val r = downloadSingleImage(context, url, "${baseName}_${index + 1}", ttwid, liveUrl)
                         r?.let { synchronized(results) { results.add(it) }; onFileSaved(it) }
                         onProgress((index + 1).toFloat() / imageUrls.size); r
-                    } catch (_: Exception) { null }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                        null
+                    }
                 }
             }
         }.awaitAll(); results.toList()
@@ -517,8 +523,13 @@ class VideoRepository {
                     addHeader("Accept", "image/jpeg,image/*;q=0.9,*/*;q=0.8")
                 }.build()
                 return client.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) return null
-                    val body = response.body ?: return null
+                    // 非 2xx 必须抛异常走重试。原来这里直接 return null 是**非局部返回**，
+                    // 整个函数立刻退出、外层 repeat(MAX_RETRY) 完全没机会重试——
+                    // CDN 限流回 403/429 时那张图会静默消失，上层还报「下载完成」。
+                    if (!response.isSuccessful) {
+                        throw IOException("HTTP ${response.code}: ${url.take(80)}")
+                    }
+                    val body = response.body ?: throw IOException("empty body: ${url.take(80)}")
                     // 扩展名判定兼顾 Content-Type 与 URL 后缀: 实况图合成必须拿到真正的 jpg 主图,
                     // 若这里判成 webp, 合成分支会被跳过而导致"实况变静图"。
                     val ctype = response.header("Content-Type")?.lowercase() ?: ""
@@ -550,7 +561,13 @@ class VideoRepository {
                     }
                     saveImageBytes(context, imageBytes, fileName, ext)
                 }
-            } catch (e: Exception) { lastError = e; if (attempt < MAX_RETRY - 1) delay(RETRY_DELAY) }
+            } catch (e: CancellationException) {
+                // 取消不是失败：直接上抛，让上层维持 CANCELLED 状态
+                throw e
+            } catch (e: Exception) {
+                lastError = e
+                if (attempt < MAX_RETRY - 1) delay(RETRY_DELAY)
+            }
         }
         throw lastError ?: Exception("Image download failed")
     }

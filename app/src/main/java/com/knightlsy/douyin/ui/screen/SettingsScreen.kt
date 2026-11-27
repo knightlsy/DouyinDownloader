@@ -490,14 +490,28 @@ fun SettingsScreen(
                         }
                     },
                     confirmButton = {
-                        TextButton(onClick = {
-                            videoKeywordText = keywordDraft.trim()
-                            writeModulePrefString(
-                                FilterPreferences.KEY_VIDEO_KEYWORDS,
-                                videoKeywordText,
-                            )
-                            keywordDialogOpen = false
-                        }) { Text("保存") }
+                        TextButton(
+                            onClick = {
+                                // 没连上 LSPosed 时写不进远程偏好，静默丢弃会让用户
+                                // 以为已生效（本项目踩过同款坑）。这里显式拦住。
+                                val prefs = XposedServiceBridge.prefs()
+                                if (prefs == null) {
+                                    Toast.makeText(
+                                        context,
+                                        "未连接 LSPosed，未保存",
+                                        Toast.LENGTH_SHORT,
+                                    ).show()
+                                    return@TextButton
+                                }
+                                videoKeywordText = keywordDraft.trim()
+                                writeModulePrefString(
+                                    FilterPreferences.KEY_VIDEO_KEYWORDS,
+                                    videoKeywordText,
+                                )
+                                keywordDialogOpen = false
+                            },
+                            enabled = bridgeConnected,
+                        ) { Text("保存") }
                     },
                     dismissButton = {
                         TextButton(onClick = { keywordDialogOpen = false }) { Text("取消") }

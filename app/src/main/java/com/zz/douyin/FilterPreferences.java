@@ -20,9 +20,16 @@ public final class FilterPreferences {
     public static final String KEY_SKIP_VIDEOS = "skip_videos";
     public static final String KEY_VIDEO_KEYWORDS = "video_keywords";
     /*
-     * 以下三个是**预留键，功能未实现**，因此设置页不暴露 —— 它们没有任何 hook 读取
-     * （已全仓 grep 确认），拨动也不会有任何效果。等真正实现时再接 UI，
-     * 不要为了「配置项看起来全」就先把开关摆出来，那只会让用户以为是开关坏了。
+     * 以下三个**都有完整 hook 链路，但此前一直没有 UI 入口**（现已补上）：
+     *
+     *   show_danmaku        → ImmersiveUi:290 → :729 沉浸式下保留并铺开弹幕层
+     *   double_tap_comments → ImmersiveUi:292 → :147-173 + DoubleTapGuard 双击进评论
+     *   video_quality       → QualityHooks:472 钉死档位；FeedContentTracker:601
+     *                          按档位把目标码率的 play_addr 排到最前（直接影响下载画质）
+     *
+     * 教训：查「配置项有没有被读」要 grep `readXxxKey(prefs)` 这个方法调用，
+     * 而不是 Values 里的字段名（`.showDanmaku`）—— 方法名和字段名不同，
+     * 只搜字段会得出「没人读」的错误结论。
      */
     public static final String KEY_SHOW_DANMAKU = "show_danmaku";
     public static final String KEY_DOUBLE_TAP_COMMENTS = "double_tap_comments";
