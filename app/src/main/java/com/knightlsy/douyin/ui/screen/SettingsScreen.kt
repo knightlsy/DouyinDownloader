@@ -64,6 +64,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import android.widget.Toast
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.ui.text.TextStyle
 
 /**
  * 设置页：主题（三分段直选）、背景（壁纸氛围 / 强调色跟随壁纸）、日志入口、关于入口。
@@ -167,6 +171,12 @@ fun SettingsScreen(
             var skipAds by remember { mutableStateOf(FilterPreferences.DEFAULT_SKIP_ADS) }
             var skipImages by remember { mutableStateOf(FilterPreferences.DEFAULT_SKIP_IMAGES) }
             var skipLives by remember { mutableStateOf(FilterPreferences.DEFAULT_SKIP_LIVES) }
+            // 防误触双击：ImmersiveUi 会读这个值，但之前设置页没暴露
+            var blockDoubleTap by remember { mutableStateOf(false) }
+            // 视频关键词过滤：跳过标题/描述命中关键词的视频（替代已移除的「跳过全部视频」）
+            var videoKeywordText by remember { mutableStateOf("") }
+            var keywordDialogOpen by remember { mutableStateOf(false) }
+            var keywordDraft by remember { mutableStateOf("") }
 
             // 从远程偏好重读全部开关。service 绑定是异步的，
             // 首次进入设置页时可能还没连上，所以连接状态变化也要触发重读。
@@ -180,6 +190,8 @@ fun SettingsScreen(
                 skipAds = values.skipAds
                 skipImages = values.skipImages
                 skipLives = values.skipLives
+                blockDoubleTap = FilterPreferences.readBlockDoubleTap(prefs)
+                videoKeywordText = values.keywordText
             }
 
             LaunchedEffect(Unit) { reloadModulePrefs() }
@@ -192,6 +204,10 @@ fun SettingsScreen(
             // 写不进去（service 断开）就什么都不做，UI 那边已经置灰了
             fun writeModulePref(key: String, value: Boolean) {
                 XposedServiceBridge.prefs()?.edit()?.putBoolean(key, value)?.apply()
+            }
+
+            fun writeModulePrefString(key: String, value: String) {
+                XposedServiceBridge.prefs()?.edit()?.putString(key, value)?.apply()
             }
 
             BgSectionLabel("外观", accent = null)
@@ -396,6 +412,30 @@ fun SettingsScreen(
                          writeModulePref(FilterPreferences.KEY_SKIP_LIVES, enabled)
                      },
                  )
+                 RowDivider()
+                 // 防误触双击：ImmersiveUi 一直在读这个 key，但设置页从来没给过入口
+                 SettingsSwitchRow(
+                     title = "防误触双击",
+                     description = "双击屏幕不再点赞或跳进评论，避免误触",
+                     checked = blockDoubleTap,
+                     enabled = bridgeConnected,
+                     onChange = { enabled ->
+                         blockDoubleTap = enabled
+                         writeModulePref(FilterPreferences.KEY_BLOCK_DOUBLE_TAP, enabled)
+                     },
+                 )
+                 RowDivider()
+                 // 视频关键词过滤：替代已移除的「跳过全部视频」。
+                 // 原开关一旦打开会把整条 feed 全部划走，而且没有 UI 能关掉。
+                 SettingsNavRow(
+                     title = "视频关键词过滤",
+                     value = if (videoKeywordText.isBlank()) "未设置" else
+                         "${videoKeywordText.split(",").count { it.isNotBlank() }} 个",
+                     onClick = {
+                         keywordDraft = videoKeywordText
+                         keywordDialogOpen = true
+                     },
+                 )
             }
 
             Spacer(Modifier.height(22.dp))
@@ -422,6 +462,46 @@ fun SettingsScreen(
                     title = "关于抖音下载器",
                     value = "v${BuildConfig.VERSION_NAME}",
                     onClick = onNavigateToAbout,
+                )
+            }
+
+            if (keywordDialogOpen) {
+                AlertDialog(
+                    onDismissRequest = { keywordDialogOpen = false },
+                    title = { Text("视频关键词过滤", fontWeight = FontWeight.Bold) },
+                    text = {
+                        Column {
+                            Text(
+                                "标题或描述命中任一关键词的视频会被自动划走。" +
+                                    "多个关键词用英文逗号分隔；留空表示不过滤。",
+                                fontSize = 12.sp,
+                                color = c.ink3,
+                            )
+                            Spacer(Modifier.height(10.dp))
+                            BasicTextField(
+                                value = keywordDraft,
+                                onValueChange = { keywordDraft = it },
+                                textStyle = TextStyle(fontSize = 14.sp, color = c.ink),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(c.surface, RoundedCornerShape(8.dp))
+                                    .padding(10.dp),
+                            )
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            videoKeywordText = keywordDraft.trim()
+                            writeModulePrefString(
+                                FilterPreferences.KEY_VIDEO_KEYWORDS,
+                                videoKeywordText,
+                            )
+                            keywordDialogOpen = false
+                        }) { Text("保存") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { keywordDialogOpen = false }) { Text("取消") }
+                    },
                 )
             }
         }

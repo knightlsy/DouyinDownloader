@@ -364,9 +364,20 @@ final class FeedContentTracker {
                     title,
                     description
             );
-            if (activeSettings.skipVideos) {
-                reason = "video type setting";
-            } else if (keyword != null) {
+            /*
+             * 这里原本有一个 `if (activeSettings.skipVideos) reason = "video type setting"`
+             * 分支 —— skipVideos 为 true 时**整条 feed 的视频全部跳过**。
+             *
+             * 两个问题：
+             * 1. 语义上等于「打开抖音但什么都不看」，没有使用场景；
+             * 2. 设置页从来没暴露过这个开关，一旦 prefs 里被写成 true
+             *    （旧版本残留、批量导入配置等），用户完全无法关闭 ——
+             *    表现就是「视频还没播完就自动划走」，只能清数据恢复。
+             *
+             * 已移除。要过滤特定视频请用 videoKeywords（设置页已暴露），
+             * 那是精确匹配，不会误伤整条 feed。
+             */
+            if (keyword != null) {
                 reason = "video keyword: " + keyword;
             }
         }

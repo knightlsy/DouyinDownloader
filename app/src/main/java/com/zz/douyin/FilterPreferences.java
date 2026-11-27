@@ -19,6 +19,11 @@ public final class FilterPreferences {
     public static final String KEY_SKIP_LIVES = "skip_lives";
     public static final String KEY_SKIP_VIDEOS = "skip_videos";
     public static final String KEY_VIDEO_KEYWORDS = "video_keywords";
+    /*
+     * 以下三个是**预留键，功能未实现**，因此设置页不暴露 —— 它们没有任何 hook 读取
+     * （已全仓 grep 确认），拨动也不会有任何效果。等真正实现时再接 UI，
+     * 不要为了「配置项看起来全」就先把开关摆出来，那只会让用户以为是开关坏了。
+     */
     public static final String KEY_SHOW_DANMAKU = "show_danmaku";
     public static final String KEY_DOUBLE_TAP_COMMENTS = "double_tap_comments";
     public static final String KEY_VIDEO_QUALITY = "video_quality";
@@ -115,6 +120,10 @@ public final class FilterPreferences {
         public final boolean skipAds;
         public final boolean skipImages;
         public final boolean skipLives;
+        /**
+         * 已停用：FeedContentTracker 里的「整条 feed 全跳过」分支已移除。
+         * 字段保留只为让 prefs 里可能存在的旧值不报错，读到的值不再产生任何行为。
+         */
         public final boolean skipVideos;
         public final String keywordText;
         private final List<String> keywords;
