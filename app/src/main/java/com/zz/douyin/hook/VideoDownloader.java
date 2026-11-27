@@ -1279,7 +1279,7 @@ final class VideoDownloader {
                     .build();
             nm.notify(DONE_NOTIFY_ID, notification);
         } catch (Throwable error) {
-            Log.w(TAG, "发下载完成通知失败，退回 Toast", error);
+            Log.w(DouyinModule.TAG, "发下载完成通知失败，退回 Toast", error);
             showToast(context, message);
         }
     }
