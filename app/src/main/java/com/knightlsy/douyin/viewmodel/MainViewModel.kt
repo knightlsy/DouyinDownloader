@@ -417,14 +417,14 @@ class MainViewModel @JvmOverloads constructor(
                     _stats.value = _stats.value.copy(totalDownloads = _stats.value.totalDownloads + 1, failedDownloads = _stats.value.failedDownloads + 1)
                     notificationHelper.showError(taskId, e.message ?: "下载出错")
                     LogStore.log("dl", "异常: ${contentInfo.title} → ${e.message ?: "未知异常"}")
-                } finally {
-                    // 两参 remove：只删自己这条。单参版会把同 taskId 的新 job 一起摘掉
-                    // （任务极快完成时 finally 先跑、主线程再把旧 job 放回 map，造成残留）
-                    activeJobs.remove(taskId, job)
                 }
             }
         }
         activeJobs[taskId] = job
+        // 两参 remove：只删自己这条。（不能写在 launch 体内的 finally 里 ——
+        // `val job = launch { ... job ... }` 的 lambda 内看不到正在初始化的 job。
+        // 任务极快完成时单参 remove 会把同 taskId 的**新** job 一起摘掉，留下残留条目）
+        job.invokeOnCompletion { activeJobs.remove(taskId, job) }
     }
 
     fun retryDownload(taskId: String) {

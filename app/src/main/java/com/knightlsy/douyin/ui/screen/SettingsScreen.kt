@@ -177,6 +177,11 @@ fun SettingsScreen(
             var videoKeywordText by remember { mutableStateOf("") }
             var keywordDialogOpen by remember { mutableStateOf(false) }
             var keywordDraft by remember { mutableStateOf("") }
+            // 以下三个键在 hook 侧一直生效，但此前设置页没有任何入口（用户控不了的隐形行为）
+            var showDanmaku by remember { mutableStateOf(FilterPreferences.DEFAULT_SHOW_DANMAKU) }
+            var doubleTapComments by remember { mutableStateOf(false) }
+            var videoQuality by remember { mutableStateOf(FilterPreferences.DEFAULT_VIDEO_QUALITY) }
+            var qualityDialogOpen by remember { mutableStateOf(false) }
 
             // 从远程偏好重读全部开关。service 绑定是异步的，
             // 首次进入设置页时可能还没连上，所以连接状态变化也要触发重读。
@@ -192,6 +197,9 @@ fun SettingsScreen(
                 skipLives = values.skipLives
                 blockDoubleTap = FilterPreferences.readBlockDoubleTap(prefs)
                 videoKeywordText = values.keywordText
+                showDanmaku = FilterPreferences.readShowDanmaku(prefs)
+                doubleTapComments = FilterPreferences.readDoubleTapComments(prefs)
+                videoQuality = FilterPreferences.readVideoQuality(prefs)
             }
 
             LaunchedEffect(Unit) { reloadModulePrefs() }
@@ -425,6 +433,49 @@ fun SettingsScreen(
                      },
                  )
                  RowDivider()
+                 // 沉浸式下保留弹幕：ImmersiveUi:290→:729，之前只有 hook 没有开关
+                 SettingsSwitchRow(
+                     title = "沉浸式保留弹幕",
+                     description = "全屏沉浸时不隐藏弹幕层（关闭时弹幕随其他浮层一起收起）",
+                     checked = showDanmaku,
+                     enabled = bridgeConnected,
+                     onChange = { enabled ->
+                         showDanmaku = enabled
+                         writeModulePref(FilterPreferences.KEY_SHOW_DANMAKU, enabled)
+                     },
+                 )
+                 RowDivider()
+                 // 双击进评论区：ImmersiveUi:292 + DoubleTapGuard。与「防误触双击」互斥 ——
+                 // 一个禁用双击、一个改写双击用途，同开时行为未定义，所以互斥处理。
+                 SettingsSwitchRow(
+                     title = "双击进评论区",
+                     description = "双击屏幕直接打开评论区（替代点赞）。与「防误触双击」互斥",
+                     checked = doubleTapComments,
+                     enabled = bridgeConnected && !blockDoubleTap,
+                     onChange = { enabled ->
+                         doubleTapComments = enabled
+                         writeModulePref(FilterPreferences.KEY_DOUBLE_TAP_COMMENTS, enabled)
+                         if (enabled && blockDoubleTap) {
+                             // 互斥：开了这个就关掉防误触，并明确告知
+                             blockDoubleTap = false
+                             writeModulePref(FilterPreferences.KEY_BLOCK_DOUBLE_TAP, false)
+                         }
+                     },
+                 )
+                 RowDivider()
+                 // 视频画质：QualityHooks:472 会钉死档位，FeedContentTracker:601 还会按档位
+                 // 把对应码率的 play_addr 排到最前 —— 直接影响抖音内下载到的文件。
+                 // 之前完全没有 UI，用户拿到什么画质全看这个隐形默认值。
+                 SettingsNavRow(
+                     title = "下载画质",
+                     value = when (videoQuality) {
+                         "auto" -> "跟随抖音"
+                         "max" -> "最高可用"
+                         else -> "${videoQuality}P"
+                     },
+                     onClick = { qualityDialogOpen = true },
+                 )
+                 RowDivider()
                  // 视频关键词过滤：替代已移除的「跳过全部视频」。
                  // 原开关一旦打开会把整条 feed 全部划走，而且没有 UI 能关掉。
                  SettingsNavRow(
@@ -515,6 +566,82 @@ fun SettingsScreen(
                     },
                     dismissButton = {
                         TextButton(onClick = { keywordDialogOpen = false }) { Text("取消") }
+                    },
+                )
+            }
+
+            // 下载画质选择。这个键在 hook 侧一直生效（QualityHooks 钉档位、
+            // FeedContentTracker 按档位排 play_addr），但从来没有 UI —— 属于
+            // 用户完全看不见、也改不了的隐形行为。
+            if (qualityDialogOpen) {
+                AlertDialog(
+                    onDismissRequest = { qualityDialogOpen = false },
+                    title = { Text("下载画质", fontWeight = FontWeight.Bold) },
+                    text = {
+                        Column {
+                            Text(
+                                "决定抖音内 ↓ 下载拿到的文件清晰度。" +
+                                    "「跟随抖音」即不干预当前播放档位；" +
+                                    "选具体档位时会尽量取该档，取不到则降级。",
+                                fontSize = 12.sp,
+                                color = c.ink3,
+                            )
+                            Spacer(Modifier.height(12.dp))
+                            listOf(
+                                "auto" to "跟随抖音（默认）",
+                                "max" to "最高可用（按视频实际码率）",
+                                "1080" to "1080P",
+                                "720" to "720P",
+                                "540" to "540P",
+                            ).forEach { (key, label) ->
+                                val selected = videoQuality == key
+                                Row(
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .clickable(enabled = bridgeConnected) {
+                                            val prefs = XposedServiceBridge.prefs()
+                                            if (prefs == null) {
+                                                Toast.makeText(
+                                                    context,
+                                                    "未连接 LSPosed，未保存",
+                                                    Toast.LENGTH_SHORT,
+                                                ).show()
+                                                return@clickable
+                                            }
+                                            videoQuality = key
+                                            writeModulePrefString(
+                                                FilterPreferences.KEY_VIDEO_QUALITY,
+                                                key,
+                                            )
+                                            qualityDialogOpen = false
+                                        }
+                                        .padding(vertical = 11.dp, horizontal = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Box(
+                                        Modifier
+                                            .size(18.dp)
+                                            .clip(CircleShape)
+                                            .background(if (selected) c.accent else c.surface)
+                                            .border(
+                                                1.dp,
+                                                if (selected) c.accent else c.ink3.copy(alpha = 0.45f),
+                                                CircleShape,
+                                            ),
+                                    )
+                                    Spacer(Modifier.width(10.dp))
+                                    Text(
+                                        label,
+                                        fontSize = 14.sp,
+                                        color = if (selected) c.ink else c.ink2,
+                                    )
+                                }
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = { qualityDialogOpen = false }) { Text("关闭") }
                     },
                 )
             }
