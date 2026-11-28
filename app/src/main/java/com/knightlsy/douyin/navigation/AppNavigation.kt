@@ -330,22 +330,6 @@ private fun headerSubtitle(screen: String): String = when (screen) {
 }
 
 /**
- * 一级导航 Tab 栏（首页 / 历史 / 设置），固定在内容区顶部。
- *
- * 位置是页面顶部而不是底部：底部悬浮时会压住设置页最后一屏文字。
- * 关键性质是**它不参与页面转场** —— 内容在它下面缩放滑动，它自己静止，
- * 这才是「卡片在 Tab 下方切换」的观感。放进 AnimatedContent 里就会变成
- * 「进入二级菜单」那种整页被替换的效果。
- *
- * 结构：半透明卡片 + 1dp 边线 + 26dp 圆角，高 56dp。选中的表达只有两处：
- * 文字提亮加粗 + 下方 2dp 橙色指示条 —— 不整片染色（motion-spec ③）。
- *
- * 指示条随选中项横向滑动（240ms · cubic-bezier(.34,1.45,.64,1)，
- * 过冲中等），文字 200ms 变色、字重 500→650。宽度按三等分推算，
- * 不依赖每个 Tab 的实测宽度，切换时不会跳变。
- */
-@Composable
-/**
  * Tab 切换的统一动画参数。
  *
  * 原来指示条用的是 CubicBezierEasing(0.34f, 1.45f, 0.64f, 1f) —— 第二个控制点为
@@ -354,13 +338,29 @@ private fun headerSubtitle(screen: String): String = when (screen) {
  * 无回弹曲线变色、指示条用 240ms 带回弹，两个机构各走各的节奏，
  * 视觉上就分成两截 —— 也就是反馈的「割裂感」。
  *
- * 现在统一成 Material 3 的 emphasized-decelerate（0.2, 0, 0, 1）：
+ * 现在统一成 Material standard decelerate（0.2, 0, 0, 1）：
  * 起步快、收尾缓、全程单调递增不过冲，指示条和文字同一个时长同一条曲线。
  */
 private const val TabAnimMs = 260
 
 private val TabAnimEasing = CubicBezierEasing(0.2f, 0f, 0f, 1f)
 
+/**
+ * 一级导航 Tab 栏（首页 / 历史 / 设置），固定在内容区顶部。
+ *
+ * 位置是页面顶部而不是底部：底部悬浮时会压住设置页最后一屏文字。
+ * 关键性质是**它不参与页面转场** —— 内容在它下面切换，它自己静止，
+ * 这才是「卡片在 Tab 下方切换」的观感。放进 AnimatedContent 里就会变成
+ * 「进入二级菜单」那种整页被替换的效果。
+ *
+ * 结构：半透明卡片 + 1dp 边线 + 26dp 圆角，高 56dp。选中的表达只有两处：
+ * 文字提亮 + 下方 2dp 橙色指示条 —— 不整片染色（motion-spec ③）。
+ *
+ * 指示条与文字共用 TabAnimMs · TabAnimEasing，同一节奏、无过冲；
+ * 字重固定不随选中变化（否则文字排版宽度会跳）。
+ * 宽度按三等分推算，不依赖每个 Tab 的实测宽度，切换时不会跳变。
+ */
+@Composable
 internal fun TabBar(
     currentRoute: String,
     onSelect: (String) -> Unit,
