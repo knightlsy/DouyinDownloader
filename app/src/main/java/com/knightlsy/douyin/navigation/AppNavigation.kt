@@ -81,6 +81,22 @@ private val MainTabs = listOf(
 private fun tabRouteOf(screen: String): String =
     if (screen == "main" || screen == "history") screen else "settings"
 
+/**
+ * 页面左右顺序，用来决定切换动画方向。
+ *
+ * 序号变大 = 往右走（新页从右滑入），变小 = 往左走（新页从左滑入）。
+ * 一级页按 Tab 从左到右：main(0) → history(1) → settings(2)；
+ * logs / about 是设置页的子页，排在同一层（3），只跟 settings 互相切换。
+ */
+private fun screenOrder(screen: String): Int = when (screen) {
+    "main" -> 0
+    "history" -> 1
+    "settings" -> 2
+    "logs" -> 3
+    "about" -> 3
+    else -> 0
+}
+
 @Composable
 fun AppNavigation(mainViewModel: MainViewModel) {
     // rememberSaveable 而非 remember：转屏、系统深浅色切换、字号缩放、切主题
@@ -154,23 +170,29 @@ fun AppNavigation(mainViewModel: MainViewModel) {
             targetState = currentScreen,
             transitionSpec = {
                 val duration = 350
-                if (targetState == "main") {
-                    // 返回主界面：主界面从 92% 放大回全屏、从左边滑回原位；
-                    // 二级页面缩到 92% 并向右滑出屏幕。
-                    (scaleIn(initialScale = 0.92f, animationSpec = tween(duration)) +
-                        slideInHorizontally(tween(duration)) { -it / 3 } + fadeIn(tween(duration)))
-                        .togetherWith(
-                            scaleOut(targetScale = 0.92f, animationSpec = tween(duration)) +
-                                slideOutHorizontally(tween(duration)) { it } + fadeOut(tween(duration))
-                        )
-                } else {
-                    // 进入二级页：二级页面从右边滑入，92% 放大到 100% 铺满；
-                    // 主界面缩到 92% 并向左退后一层。
+                // 方向跟随点击方向：目标页序号比当前页大 = 往右走（新页从右滑入），
+                // 比当前页小 = 往左走（新页从左滑入）。
+                //
+                // 原来是 if (targetState == "main") 两分支 —— 只区分「是不是主界面」，
+                // 所以 history ↔ settings 这种同层切换永远走同一侧，从设置点回历史
+                // 时画面还是从右边进来，方向是反的。
+                val forward = screenOrder(targetState) >= screenOrder(initialState)
+                if (forward) {
+                    // 前进：新页从右侧整屏滑入并把前一层顶回去（92% → 100%）
                     (scaleIn(initialScale = 0.92f, animationSpec = tween(duration)) +
                         slideInHorizontally(tween(duration)) { it } + fadeIn(tween(duration)))
                         .togetherWith(
                             scaleOut(targetScale = 0.92f, animationSpec = tween(duration)) +
                                 slideOutHorizontally(tween(duration)) { -it / 3 } + fadeOut(tween(duration))
+                        )
+                } else {
+                    // 返回：新页从左侧回位（只走 1/3，配合放大回全屏的观感），
+                    // 前一层整屏向右滑出
+                    (scaleIn(initialScale = 0.92f, animationSpec = tween(duration)) +
+                        slideInHorizontally(tween(duration)) { -it / 3 } + fadeIn(tween(duration)))
+                        .togetherWith(
+                            scaleOut(targetScale = 0.92f, animationSpec = tween(duration)) +
+                                slideOutHorizontally(tween(duration)) { it } + fadeOut(tween(duration))
                         )
                 }
             },
