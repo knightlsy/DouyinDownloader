@@ -143,7 +143,22 @@ fun ForceUpdateDialog(
                 .padding(horizontal = 24.dp),
             contentAlignment = Alignment.Center,
         ) {
-            Column(Modifier.fillMaxWidth()) {
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    .padding(vertical = 20.dp),
+            ) {
+
+                // 可滚动区：标题 + 版本号 + 更新内容。
+                // 之前只有内层 Text 挂了 verticalScroll，外层 Column 不滚 ——
+                // 同方向嵌套滚动时内层先消费手势，外层永远滚不动，长日志卡在半截；
+                // 而且内容一长整个 Column 会溢出屏幕，把下面的按钮顶出去。
+                // 现在改成「这一段可滚 + 按钮固定」，内容多长都能翻到底、按钮始终可见。
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState()),
+                ) {
 
                 // 标记
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -194,17 +209,18 @@ fun ForceUpdateDialog(
                     color = c.ink3,
                 )
                 Spacer(Modifier.height(8.dp))
+                // 不再单独限高 + 滚动：由外层可滚区统一处理，
+                // 避免同方向嵌套滚动导致外层失效
                 Text(
                     text = releaseNotes.ifBlank { "新版本已发布，请更新后继续使用。" },
                     fontSize = 12.5.sp,
                     lineHeight = 19.sp,
                     color = c.ink2,
-                    modifier = Modifier
-                        .heightIn(max = 200.dp)
-                        .verticalScroll(rememberScrollState()),
                 )
 
-                Spacer(Modifier.height(24.dp))
+                }   // ← 可滚动区结束
+
+                Spacer(Modifier.height(20.dp))
 
                 // 立即更新
                 Box(

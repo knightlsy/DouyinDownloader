@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -273,7 +274,13 @@ fun AboutScreen() {
                 )
             },
             text = {
-                Column {
+                // 发布说明可能很长，这里必须可滚：AlertDialog 的 text 区
+                // 超出屏幕时会被裁掉，用户看不到后面也不用想翻到下一页。
+                Column(
+                    Modifier
+                        .heightIn(max = 420.dp)
+                        .verticalScroll(rememberScrollState()),
+                ) {
                     Text(
                         text = "当前版本: v${BuildConfig.VERSION_NAME}",
                         fontFamily = FontFamily.Monospace,
@@ -311,7 +318,9 @@ fun AboutScreen() {
                         )
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            text = info.releaseNotes.take(600),
+                            // 不再 take(600)：硬截断会让用户永远看不到后半段，
+                            // 而且看不出是被截断的（没有省略提示）。靠上面的滚动区兜住。
+                            text = info.releaseNotes,
                             fontSize = 11.5.sp,
                             lineHeight = 17.sp,
                             color = c.ink2,
