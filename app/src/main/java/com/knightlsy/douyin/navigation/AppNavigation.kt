@@ -345,6 +345,22 @@ private fun headerSubtitle(screen: String): String = when (screen) {
  * 不依赖每个 Tab 的实测宽度，切换时不会跳变。
  */
 @Composable
+/**
+ * Tab 切换的统一动画参数。
+ *
+ * 原来指示条用的是 CubicBezierEasing(0.34f, 1.45f, 0.64f, 1f) —— 第二个控制点为
+ * 1.45，y 值超过 1，属于**过冲曲线**：指示条会先冲过目标位置再弹回来。
+ * 短距离移动时这个回弹看着就是「顿一下、抖一下」；再叠上文字用 200ms
+ * 无回弹曲线变色、指示条用 240ms 带回弹，两个机构各走各的节奏，
+ * 视觉上就分成两截 —— 也就是反馈的「割裂感」。
+ *
+ * 现在统一成 Material 3 的 emphasized-decelerate（0.2, 0, 0, 1）：
+ * 起步快、收尾缓、全程单调递增不过冲，指示条和文字同一个时长同一条曲线。
+ */
+private const val TabAnimMs = 260
+
+private val TabAnimEasing = CubicBezierEasing(0.2f, 0f, 0f, 1f)
+
 internal fun TabBar(
     currentRoute: String,
     onSelect: (String) -> Unit,
@@ -378,7 +394,7 @@ internal fun TabBar(
             // Modifier.blur 是 API 31+ 专属（minSdk 26），此处省略。
             val indicatorX by animateDpAsState(
                 targetValue = tabWidth * selectedIndex + (tabWidth - 26.dp) / 2,
-                animationSpec = tween(240, easing = CubicBezierEasing(0.34f, 1.45f, 0.64f, 1f)),
+                animationSpec = tween(TabAnimMs, easing = TabAnimEasing),
                 label = "tab_indicator_x",
             )
 
@@ -419,7 +435,9 @@ private fun TabItem(
     val c = LocalBgColors.current
     val textColor by animateColorAsState(
         targetValue = if (selected) c.ink else c.ink.copy(alpha = 0.46f),
-        animationSpec = tween(200),
+        // 和指示条用同一条曲线、同一个时长：两者是同一个动作的两个表现，
+        // 节奏不一致时眼睛会看到「指示条先滑、文字后变色」的分裂感。
+        animationSpec = tween(TabAnimMs, easing = TabAnimEasing),
         label = "tab_text_color",
     )
 
@@ -437,7 +455,13 @@ private fun TabItem(
             text = label,
             fontFamily = FontFamily.Monospace,
             fontSize = 11.sp,
-            fontWeight = if (selected) FontWeight(650) else FontWeight.Medium,
+            // 字重固定，不随选中变化。
+            //
+            // 原来是 selected 用 650、未选中用 Medium(500) —— 字重一变，两个字的
+            // 排版宽度就跟着变，切换那一刻文字会「胀一下 / 缩一下」，和指示条
+            // 的位移叠在一起就是第三种割裂感。选中状态已经由指示条 + 颜色
+            // （ink 与 46% 透明）表达得够清楚了，不需要再动字重。
+            fontWeight = FontWeight(600),
             letterSpacing = 0.8.sp,
             color = textColor,
         )
